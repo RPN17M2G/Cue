@@ -13,6 +13,7 @@ object FfmpegProbeParser {
     private const val VIDEO_MARKER = "Video:"
     private const val STREAM_MARKER = "Stream #"
     private const val DURATION_MARKER = "Duration:"
+    private const val ATTACHED_PICTURE_MARKER = "(attached pic)"
 
     fun parse(stderr: String): ProbeResult = parse(stderr.split('\r', '\n'))
 
@@ -44,7 +45,7 @@ object FfmpegProbeParser {
                         .ifEmpty { null }
                 }
             }
-            if (line.contains(VIDEO_MARKER)) hasVideo = true
+            if (line.contains(VIDEO_MARKER) && !line.contains(ATTACHED_PICTURE_MARKER)) hasVideo = true
         }
 
         return ProbeResult(

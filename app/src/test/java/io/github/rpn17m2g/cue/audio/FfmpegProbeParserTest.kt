@@ -120,6 +120,22 @@ class FfmpegProbeParserTest {
     }
 
     @Test
+    fun `ignores attached cover art when detecting video streams`() {
+        val stderr = """
+            Input #0, mp3, from 'song.mp3':
+              Duration: 00:03:20.50, start: 0.025057, bitrate: 256 kb/s
+              Stream #0:0: Audio: mp3, 44100 Hz, stereo, fltp, 256 kb/s
+              Stream #0:1: Video: mjpeg (Baseline) (attached pic), yuvj420p, 600x600, 90k tbr
+        """.trimIndent()
+
+        val result = FfmpegProbeParser.parse(stderr)
+
+        assertTrue(result.hasAudio)
+        assertFalse(result.hasVideo)
+        assertEquals("mp3", result.audioCodec)
+    }
+
+    @Test
     fun `does not mistake metadata mentioning audio for a stream`() {
         val stderr = """
             Input #0, mp4, from 'clip.mp4':
