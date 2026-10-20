@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Build a minimal, LGPL-only FFmpeg command-line executable for Android and
-# stage it as app/src/main/jniLibs/<abi>/libffmpeg.so.
+# Build a minimal, LGPL-only FFmpeg command-line executable plus dynamically
+# linked FFmpeg/LAME/Chromaprint shared libraries for Android, and stage them
+# under app/src/main/jniLibs/<abi>/.
 #
 # Run this from WSL/Linux. The Windows NDK wrappers call clang.exe and cannot
 # consume WSL paths, so a Linux NDK is provisioned automatically.
@@ -16,11 +17,22 @@ WORK_DIR="$CACHE_DIR/work"
 PREFIX_ROOT="$CACHE_DIR/prefix"
 LOG_DIR="$CACHE_DIR/logs"
 OUT_ROOT="$REPO_ROOT/app/src/main/jniLibs"
+LICENSE_DIR="$REPO_ROOT/app/src/main/assets/licenses"
 NDK_DIR="${CUE_NATIVE_NDK:-$CACHE_DIR/android-ndk-r25c}"
 
 MIN_SDK=31
 SUPPORTED_ABIS=(arm64-v8a x86_64)
 JOBS="${JOBS:-8}"
+
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1735689600}"
+export SOURCE_DATE_EPOCH
+export LC_ALL=C
+export TZ=UTC
+REPRO_CFLAGS="-ffile-prefix-map=$REPO_ROOT=. -ffile-prefix-map=$CACHE_DIR=."
+
+FFMPEG_SHARED_LIBS=(libavcodec.so libavformat.so libavfilter.so libavutil.so libswresample.so)
+LGPL_SHARED_LIBS=(libchromaprint.so libmp3lame.so)
+SHARED_LIBS=("${FFMPEG_SHARED_LIBS[@]}" "${LGPL_SHARED_LIBS[@]}")
 
 FFMPEG_VERSION="7.1.5"
 FFMPEG_URL="https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
@@ -35,7 +47,7 @@ LAME_URL="https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/la
 LAME_SHA256="ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
 
 NDK_RELEASE="r25c"
-NDK_VERSION="25.1.8937393"
+NDK_VERSION="25.2.9519653"
 NDK_ZIP="android-ndk-${NDK_RELEASE}-linux.zip"
 NDK_URL="https://dl.google.com/android/repository/${NDK_ZIP}"
 NDK_SHA256="769ee342ea75f80619d985c2da990c48b3d8eaf45f48783a2d48870d04b46108"
@@ -78,7 +90,8 @@ Environment:
   ANDROID_NDK_HOME   Used when CUE_NATIVE_NDK/--ndk is not set
 
 Sources are downloaded into .prebuilt/src. Compiled artifacts go to
-app/src/main/jniLibs/<abi>/libffmpeg.so and are never committed.
+app/src/main/jniLibs/<abi>/*.so and are never committed. License texts are
+written to app/src/main/assets/licenses/ and are committed.
 EOF
 }
 
@@ -207,14 +220,14 @@ extract_ndk() {
     rm -rf "$tmp"
     mkdir -p "$tmp"
 
-    python3 - "$zip" "$tmp" <<'PY'
+    python3 - "$zip" "$tmp" "$NDK_RELEASE" <<'PY'
 import os
 import stat
 import sys
 import zipfile
 
-archive, dest = sys.argv[1], sys.argv[2]
-prefix = "android-ndk-r25c/"
+archive, dest, release = sys.argv[1], sys.argv[2], sys.argv[3]
+prefix = f"android-ndk-{release}/"
 
 with zipfile.ZipFile(archive) as zf:
     for info in zf.infolist():
@@ -289,19 +302,21 @@ common_cmake_flags() {
 build_lame() {
     local prefix="$1"
     local stamp="$prefix/.lame-$LAME_VERSION"
+    local build="$WORK_DIR/$ABI/lame"
     local log_prefix="$LOG_DIR/$ABI-lame"
 
-    if [ -f "$prefix/lib/libmp3lame.a" ] && [ -f "$prefix/include/lame/lame.h" ] && [ -f "$stamp" ]; then
+    if [ -f "$prefix/lib/libmp3lame.so" ] && [ -f "$prefix/include/lame/lame.h" ] && [ -f "$stamp" ]; then
         log "LAME $LAME_VERSION already built for $ABI"
         return 0
     fi
 
     section "Building LAME $LAME_VERSION for $ABI"
+    rm -rf "$build"
+    mkdir -p "$build"
+    tar -xf "$SRC_DIR/lame-${LAME_VERSION}.tar.gz" -C "$build" --strip-components=1
+
     (
-        cd "$LAME_SRC"
-        if [ -f Makefile ]; then
-            make distclean >/dev/null 2>&1 || true
-        fi
+        cd "$build"
         sh ./configure \
             --prefix="$prefix" \
             --host="$TARGET_TRIPLE" \
@@ -312,21 +327,35 @@ build_lame() {
             CC="$CC" \
             AR="$AR" \
             RANLIB="$RANLIB" \
-            CFLAGS="-O2 -fPIC -Wno-implicit-function-declaration -Wno-int-conversion"
+            CFLAGS="-O2 -fPIC $REPRO_CFLAGS -Wno-implicit-function-declaration -Wno-int-conversion"
     ) > "$log_prefix-configure.log" 2>&1 || {
         tail -n 40 "$log_prefix-configure.log" >&2 || true
         die "LAME configure failed (see $log_prefix-configure.log)"
     }
 
-    make -C "$LAME_SRC" -j"$JOBS" > "$log_prefix-build.log" 2>&1 || {
+    make -C "$build" -j"$JOBS" > "$log_prefix-build.log" 2>&1 || {
         tail -n 40 "$log_prefix-build.log" >&2 || true
         die "LAME build failed (see $log_prefix-build.log)"
     }
-    make -C "$LAME_SRC" install > "$log_prefix-install.log" 2>&1 || {
+    make -C "$build" install > "$log_prefix-install.log" 2>&1 || {
         tail -n 40 "$log_prefix-install.log" >&2 || true
         die "LAME install failed (see $log_prefix-install.log)"
     }
 
+    "$CC" -shared -o "$prefix/lib/libmp3lame.so" \
+        -Wl,-soname,libmp3lame.so \
+        -Wl,-z,max-page-size=16384 \
+        -Wl,--no-undefined \
+        -Wl,--whole-archive "$prefix/lib/libmp3lame.a" \
+        -Wl,--no-whole-archive \
+        -lm \
+        > "$log_prefix-link.log" 2>&1 || {
+        tail -n 40 "$log_prefix-link.log" >&2 || true
+        die "LAME shared-library link failed (see $log_prefix-link.log)"
+    }
+
+    rm -f "$prefix/lib/libmp3lame.a" "$prefix/lib/libmp3lame.la"
+    "$STRIP" --strip-unneeded "$prefix/lib/libmp3lame.so"
     : > "$stamp"
 }
 
@@ -342,8 +371,8 @@ includedir=\${prefix}/include
 Name: libchromaprint
 Description: Audio fingerprint library
 Version: $CHROMAPRINT_VERSION
-Libs: -L\${libdir} -lchromaprint -lc++_static -lc++abi
-Libs.private: -lm
+Libs: -L\${libdir} -lchromaprint
+Libs.private: -lc++_static -lc++abi -lm
 Cflags: -I\${includedir}
 EOF
 }
@@ -354,7 +383,7 @@ build_chromaprint() {
     local build="$WORK_DIR/$ABI/chromaprint"
     local log_prefix="$LOG_DIR/$ABI-chromaprint"
 
-    if [ -f "$prefix/lib/libchromaprint.a" ] && [ -f "$stamp" ]; then
+    if [ -f "$prefix/lib/libchromaprint.so" ] && [ -f "$stamp" ]; then
         log "Chromaprint $CHROMAPRINT_VERSION already built for $ABI"
         return 0
     fi
@@ -371,8 +400,9 @@ build_chromaprint() {
         -DKISSFFT_SOURCE_DIR="$CHROMAPRINT_SRC/src/3rdparty/kissfft" \
         -DCMAKE_DISABLE_FIND_PACKAGE_FFmpeg=ON \
         -DCMAKE_DISABLE_FIND_PACKAGE_FFTW3=ON \
-        -DCMAKE_C_FLAGS="-O2 -fPIC" \
-        -DCMAKE_CXX_FLAGS="-O2 -fPIC" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_C_FLAGS="-O2 -fPIC $REPRO_CFLAGS" \
+        -DCMAKE_CXX_FLAGS="-O2 -fPIC $REPRO_CFLAGS" \
         > "$log_prefix-configure.log" 2>&1 || {
         tail -n 40 "$log_prefix-configure.log" >&2 || true
         die "Chromaprint configure failed (see $log_prefix-configure.log)"
@@ -387,12 +417,138 @@ build_chromaprint() {
         die "Chromaprint install failed (see $log_prefix-install.log)"
     }
 
+    "$CXX" -shared -o "$prefix/lib/libchromaprint.so" \
+        -Wl,-soname,libchromaprint.so \
+        -Wl,-z,max-page-size=16384 \
+        -Wl,--no-undefined \
+        -Wl,--whole-archive "$prefix/lib/libchromaprint.a" \
+        -Wl,--no-whole-archive \
+        -nostdlib++ -lc++_static -lc++abi -lm -ldl \
+        > "$log_prefix-link.log" 2>&1 || {
+        tail -n 40 "$log_prefix-link.log" >&2 || true
+        die "Chromaprint shared-library link failed (see $log_prefix-link.log)"
+    }
+
+    rm -f "$prefix/lib/libchromaprint.a"
+    "$STRIP" --strip-unneeded "$prefix/lib/libchromaprint.so"
     write_chromaprint_pc "$prefix"
     : > "$stamp"
 }
 
+is_allowed_needed() {
+    case "$1" in
+        libc.so|libm.so|libdl.so|liblog.so|libandroid.so|libmediandk.so) return 0 ;;
+        libavcodec.so|libavformat.so|libavfilter.so|libavutil.so|libswresample.so) return 0 ;;
+        libchromaprint.so|libmp3lame.so) return 0 ;;
+    esac
+    return 1
+}
+
+needed_of() {
+    "$TOOLCHAIN/bin/llvm-readelf" -d "$1" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'
+}
+
+soname_of() {
+    "$TOOLCHAIN/bin/llvm-readelf" -d "$1" | sed -n 's/.*Library soname: \[\(.*\)\]/\1/p'
+}
+
+load_alignments_of() {
+    "$TOOLCHAIN/bin/llvm-readelf" -lW "$1" | awk '$1 == "LOAD" {print $NF}'
+}
+
+verify_artifact() {
+    local file="$1" label="$2" needed lib align
+    [ -f "$file" ] || die "missing artifact: $file"
+    needed="$(needed_of "$file")"
+    for lib in $needed; do
+        is_allowed_needed "$lib" || die "$label has unexpected NEEDED: $lib"
+    done
+    while read -r align; do
+        [ -n "$align" ] || continue
+        [ $((align)) -ge 16384 ] || die "$label LOAD alignment $align is below 0x4000"
+    done < <(load_alignments_of "$file")
+}
+
+stage_artifacts() {
+    local prefix="$1" outdir="$2"
+    local ffmpeg_bin="$WORK_DIR/$ABI/ffmpeg/ffmpeg"
+    local lib
+
+    [ -x "$ffmpeg_bin" ] || die "FFmpeg build did not produce $ffmpeg_bin"
+    mkdir -p "$outdir"
+    rm -f "$outdir"/*.so
+    cp "$ffmpeg_bin" "$outdir/libffmpeg.so"
+    for lib in "${SHARED_LIBS[@]}"; do
+        [ -f "$prefix/lib/$lib" ] || die "missing built library: $prefix/lib/$lib"
+        cp "$prefix/lib/$lib" "$outdir/$lib"
+    done
+    chmod 0755 "$outdir"/*.so
+    for lib in "$outdir"/*.so; do
+        "$STRIP" --strip-unneeded "$lib"
+    done
+}
+
+verify_abi_artifacts() {
+    local outdir="$1"
+    local ffmpeg="$outdir/libffmpeg.so"
+    local lib needed soname
+
+    verify_artifact "$ffmpeg" "libffmpeg.so"
+    needed="$(needed_of "$ffmpeg")"
+    for lib in "${SHARED_LIBS[@]}"; do
+        grep -Fxq "$lib" <<< "$needed" ||
+            die "libffmpeg.so does not NEED $lib"
+    done
+    if grep -Fxq 'libc++_shared.so' <<< "$needed"; then
+        die "libffmpeg.so depends on libc++_shared.so"
+    fi
+
+    for lib in "${SHARED_LIBS[@]}"; do
+        verify_artifact "$outdir/$lib" "$lib"
+        soname="$(soname_of "$outdir/$lib")"
+        [ "$soname" = "$lib" ] || die "$lib has soname '$soname', expected '$lib'"
+    done
+}
+
+write_build_info() {
+    local abi="$1" configure_line="$2" outdir="$3"
+    local f base size sha needed align ndk_revision
+    mkdir -p "$PREBUILT_DIR/build-info"
+
+    ndk_revision="$(sed -n 's/^Pkg.Revision *= *//p' "$NDK_DIR/source.properties" 2>/dev/null | head -n1)"
+    [ -n "$ndk_revision" ] || ndk_revision="unknown"
+
+    {
+        printf 'abi=%s\n' "$abi"
+        printf 'ffmpeg=%s\n' "$FFMPEG_VERSION"
+        printf 'chromaprint=%s\n' "$CHROMAPRINT_VERSION"
+        printf 'lame=%s\n' "$LAME_VERSION"
+        printf 'ndk=%s\n' "$NDK_VERSION"
+        printf 'ndk_revision=%s\n' "$ndk_revision"
+        printf 'min_sdk=%s\n' "$MIN_SDK"
+        printf 'host_cc=%s\n' "$(gcc --version | head -n1)"
+        printf 'host_make=%s\n' "$(make --version | head -n1)"
+        printf 'host_cmake=%s\n' "$(cmake --version | head -n1)"
+        printf 'host_pkg_config=%s\n' "$(pkg-config --version)"
+        printf 'source_date_epoch=%s\n' "$SOURCE_DATE_EPOCH"
+        printf 'repro_cflags=%s\n' "$REPRO_CFLAGS"
+        printf 'configure=%s\n' "$configure_line"
+        for f in "$outdir"/*.so; do
+            base="$(basename "$f")"
+            size="$(stat -c %s "$f")"
+            sha="$(sha256sum "$f" | cut -d' ' -f1)"
+            needed="$(needed_of "$f" | paste -sd, -)"
+            align="$(load_alignments_of "$f" | paste -sd, -)"
+            printf '%s_size=%s\n' "$base" "$size"
+            printf '%s_sha256=%s\n' "$base" "$sha"
+            printf '%s_needed=%s\n' "$base" "$needed"
+            printf '%s_load_align=%s\n' "$base" "$align"
+        done
+    } > "$PREBUILT_DIR/build-info/$abi.txt"
+}
+
 build_ffmpeg() {
-    local prefix="$1" out="$2"
+    local prefix="$1" outdir="$2"
     local build="$WORK_DIR/$ABI/ffmpeg"
     local config_stamp="$WORK_DIR/$ABI/ffmpeg.configure"
     local log_prefix="$LOG_DIR/$ABI-ffmpeg"
@@ -412,15 +568,15 @@ build_ffmpeg() {
         --pkg-config=pkg-config
         --cc="$CC"
         --cxx="$CXX"
-        --ld="$CXX"
+        --ld="$CC"
         --ar="$AR"
         --ranlib="$RANLIB"
         --strip="$STRIP"
         --nm="$NM"
         --sysroot="$SYSROOT"
         --host-cc=gcc
-        --disable-shared
-        --enable-static
+        --enable-shared
+        --disable-static
         --enable-pic
         --disable-everything
         --enable-ffmpeg
@@ -435,22 +591,29 @@ build_ffmpeg() {
         --disable-postproc
         --disable-swscale
         --enable-protocol=file,pipe
-        --enable-demuxer=mov,mp3
-        --enable-parser=aac,mpegaudio
-        --enable-decoder=aac,mp3
-        --enable-encoder=libmp3lame
+        --enable-demuxer=mov,mp3,matroska,webm,ogg
+        --enable-parser=aac,mpegaudio,opus,vorbis
+        --enable-decoder=aac,mp3,opus,vorbis
+        --enable-encoder=libmp3lame,pcm_s16le
         --enable-muxer=mp3,chromaprint
         --enable-filter=aresample,anull,atrim,asetpts
         --enable-libmp3lame
         --enable-chromaprint
-        --extra-cflags="-O2 -fPIE -I$prefix/include"
-        --extra-ldflags="-pie -L$prefix/lib -static-libstdc++"
+        --extra-cflags="-O2 $REPRO_CFLAGS -I$prefix/include"
+        --extra-ldflags="-L$prefix/lib -Wl,-z,max-page-size=16384"
+        --extra-ldsoflags="-Wl,-z,max-page-size=16384"
+        --extra-ldexeflags="-pie -Wl,-z,origin -Wl,-rpath,'\\\$\\\$ORIGIN' -Wl,-z,max-page-size=16384 -L$prefix/lib -Wl,--no-as-needed -lchromaprint -lmp3lame"
         --extra-libs="-lm"
         "${extra[@]}"
     )
 
     local config_hash
-    config_hash="$(printf '%s\n' "${configure[@]}" | sha256sum | cut -d' ' -f1)"
+    config_hash="$(
+        {
+            printf 'SOURCE_DATE_EPOCH=%s\n' "$SOURCE_DATE_EPOCH"
+            printf '%s\n' "${configure[@]}"
+        } | sha256sum | cut -d' ' -f1
+    )"
 
     section "Building FFmpeg $FFMPEG_VERSION for $ABI"
     if [ -f "$build/ffmpeg" ] && [ -f "$config_stamp" ] && [ "$(cat "$config_stamp")" = "$config_hash" ]; then
@@ -472,73 +635,86 @@ build_ffmpeg() {
         tail -n 60 "$log_prefix-build.log" >&2 || true
         die "FFmpeg build failed (see $log_prefix-build.log)"
     }
+    make -C "$build" install > "$log_prefix-install.log" 2>&1 || {
+        tail -n 60 "$log_prefix-install.log" >&2 || true
+        die "FFmpeg install failed (see $log_prefix-install.log)"
+    }
 
-    [ -x "$build/ffmpeg" ] || die "FFmpeg build did not produce $build/ffmpeg"
-    mkdir -p "$(dirname "$out")"
-    cp "$build/ffmpeg" "$out"
-    "$STRIP" --strip-unneeded "$out"
-    chmod 0755 "$out"
+    stage_artifacts "$prefix" "$outdir"
+    verify_abi_artifacts "$outdir"
+    write_build_info "$ABI" "${configure[*]}" "$outdir"
 
-    local needed lib
-    needed="$("$TOOLCHAIN/bin/llvm-readelf" -d "$out" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p')"
-    for lib in $needed; do
-        case "$lib" in
-            libc.so|libm.so|libdl.so|liblog.so) ;;
-            *) die "$ABI artifact has unexpected shared dependency: $lib" ;;
-        esac
-    done
-
-    local strings_out
-    strings_out="$(strings -a "$out")"
-    case "$strings_out" in
-        *--enable-chromaprint*) ;;
-        *) die "$ABI artifact does not contain the expected chromaprint configuration" ;;
-    esac
-    case "$strings_out" in
-        *--enable-libmp3lame*) ;;
-        *) die "$ABI artifact does not contain the expected libmp3lame configuration" ;;
-    esac
-    if grep -Eq -- '--enable-(gpl|nonfree)' <<< "$strings_out"; then
-        die "$ABI artifact was built with GPL/nonfree code"
-    fi
-
-    local sha256 size
-    sha256="$(sha256sum "$out" | cut -d' ' -f1)"
-    size="$(stat -c %s "$out")"
-
-    mkdir -p "$PREBUILT_DIR/build-info"
-    {
-        printf 'abi=%s\n' "$ABI"
-        printf 'ffmpeg=%s\n' "$FFMPEG_VERSION"
-        printf 'chromaprint=%s\n' "$CHROMAPRINT_VERSION"
-        printf 'lame=%s\n' "$LAME_VERSION"
-        printf 'ndk=%s\n' "$NDK_VERSION"
-        printf 'min_sdk=%s\n' "$MIN_SDK"
-        printf 'configure=%s\n' "${configure[*]}"
-        printf 'size=%s\n' "$size"
-        printf 'sha256=%s\n' "$sha256"
-    } > "$PREBUILT_DIR/build-info/$ABI.txt"
-
-    log "staged $out ($(numfmt --to=iec "$size" 2>/dev/null || echo "$size bytes"), sha256 $sha256)"
+    local total
+    total="$(du -ch "$outdir"/*.so | tail -n1 | cut -f1)"
+    log "staged $outdir/libffmpeg.so and ${#SHARED_LIBS[@]} shared libraries ($total total)"
 }
 
 clean_abi() {
     local abi="$1"
-    rm -rf "$WORK_DIR/$abi" "$PREFIX_ROOT/$abi" "$OUT_ROOT/$abi/libffmpeg.so"
+    rm -rf "$WORK_DIR/$abi" "$PREFIX_ROOT/$abi"
+    rm -f "$OUT_ROOT/$abi"/*.so
     rm -f "$PREBUILT_DIR/build-info/$abi.txt"
     rmdir "$OUT_ROOT/$abi" 2>/dev/null || true
     log "cleaned build outputs for $abi"
 }
 
 copy_licenses() {
-    local chromaprint_license
-    mkdir -p "$PREBUILT_DIR/licenses"
-    cp -f "$FFMPEG_SRC/COPYING.LGPLv2.1" "$PREBUILT_DIR/licenses/FFmpeg-COPYING.LGPLv2.1.txt"
-    cp -f "$FFMPEG_SRC/COPYING.LGPLv3" "$PREBUILT_DIR/licenses/FFmpeg-COPYING.LGPLv3.txt"
-    chromaprint_license="$CHROMAPRINT_SRC/COPYING"
-    [ -f "$chromaprint_license" ] || chromaprint_license="$CHROMAPRINT_SRC/LICENSE.md"
-    cp -f "$chromaprint_license" "$PREBUILT_DIR/licenses/Chromaprint-COPYING.txt"
-    cp -f "$LAME_SRC/COPYING" "$PREBUILT_DIR/licenses/LAME-COPYING.txt"
+    local kissfft_src="$CHROMAPRINT_SRC/src/3rdparty/kissfft"
+    mkdir -p "$LICENSE_DIR"
+
+    cp -f "$FFMPEG_SRC/COPYING.LGPLv2.1" "$LICENSE_DIR/FFmpeg-COPYING.LGPLv2.1.txt"
+    cp -f "$FFMPEG_SRC/LICENSE.md" "$LICENSE_DIR/FFmpeg-LICENSE.md"
+    cp -f "$LAME_SRC/COPYING" "$LICENSE_DIR/LAME-COPYING.txt"
+    cp -f "$CHROMAPRINT_SRC/LICENSE.md" "$LICENSE_DIR/Chromaprint-LICENSE.md"
+    {
+        cat "$kissfft_src/COPYING"
+        printf '\n'
+        cat "$kissfft_src/LICENSES/BSD-3-Clause"
+    } > "$LICENSE_DIR/KissFFT-BSD-3-Clause.txt"
+
+    cat > "$LICENSE_DIR/NOTICE.txt" <<EOF
+Cue third-party notices
+=======================
+
+Cue ships the following LGPL components as separate, replaceable shared
+libraries in app/src/main/jniLibs/<abi>/. The corresponding notices are in
+app/src/main/assets/licenses/:
+
+- FFmpeg $FFMPEG_VERSION (LGPL-2.1-or-later)
+  Copyright (c) 2000-2025 the FFmpeg developers.
+  Source: $FFMPEG_URL
+  License: FFmpeg-COPYING.LGPLv2.1.txt and FFmpeg-LICENSE.md
+
+- LAME $LAME_VERSION (LGPL-2.0-or-later)
+  Copyright (c) 1999-2011 by The LAME Project; copyright (c) 1999, 2000, 2001
+  by Mark Taylor.
+  Source: $LAME_URL
+  License: LAME-COPYING.txt
+
+- Chromaprint $CHROMAPRINT_VERSION (LGPL-2.1-or-later; includes MIT-licensed
+  Chromaprint code and LGPL-licensed FFmpeg code)
+  Copyright (C) 2010-2016 Lukas Lalinsky.
+  Source: $CHROMAPRINT_URL
+  License: Chromaprint-LICENSE.md and FFmpeg-COPYING.LGPLv2.1.txt
+
+- KissFFT, bundled with Chromaprint $CHROMAPRINT_VERSION (BSD-3-Clause)
+  Copyright (c) 2003-2010 Mark Borgerding.
+  Source: $CHROMAPRINT_URL
+  License: KissFFT-BSD-3-Clause.txt
+
+Compliance statement
+--------------------
+The LGPL components are dynamically linked. The executable libffmpeg.so and the
+FFmpeg shared libraries depend at runtime on separate libchromaprint.so and
+libmp3lame.so files shipped in the same APK native library directory. A user can
+replace those shared libraries with a compatible build without relinking
+libffmpeg.so. The complete corresponding source is available from the pinned
+URLs above; the build is reproducible with scripts/native/build-ffmpeg.sh, which
+is part of this repository. No GPL or nonfree FFmpeg components are enabled.
+
+These notices are packaged as app assets. The in-app notices screen is a later
+integration milestone; this file and the license texts must remain in the APK.
+EOF
 }
 
 setup_toolchain() {
@@ -584,11 +760,11 @@ build_abi() {
     setup_toolchain
 
     local prefix="$PREFIX_ROOT/$abi"
-    local out="$OUT_ROOT/$abi/libffmpeg.so"
+    local outdir="$OUT_ROOT/$abi"
 
     build_lame "$prefix"
     build_chromaprint "$prefix"
-    build_ffmpeg "$prefix" "$out"
+    build_ffmpeg "$prefix" "$outdir"
 }
 
 main() {
@@ -601,9 +777,9 @@ main() {
         exit 0
     fi
 
-    require_cmd bash curl tar xz python3 cmake make gcc pkg-config sha256sum file strings
+    require_cmd bash curl tar xz python3 cmake make gcc pkg-config sha256sum file strings du
 
-    mkdir -p "$SRC_DIR" "$CACHE_DIR" "$WORK_DIR" "$PREFIX_ROOT" "$LOG_DIR" "$PREBUILT_DIR"
+    mkdir -p "$SRC_DIR" "$CACHE_DIR" "$WORK_DIR" "$PREFIX_ROOT" "$LOG_DIR" "$PREBUILT_DIR" "$LICENSE_DIR"
 
     section "Fetching pinned sources"
     fetch "$FFMPEG_URL" "$FFMPEG_SHA256" "$SRC_DIR/ffmpeg-${FFMPEG_VERSION}.tar.xz"
@@ -623,11 +799,12 @@ main() {
 
     section "Artifacts"
     for abi in "${ABIS[@]}"; do
-        out="$OUT_ROOT/$abi/libffmpeg.so"
-        [ -f "$out" ] || die "missing artifact: $out"
-        ls -lh "$out"
-        sha256sum "$out"
-        file "$out"
+        for out in "$OUT_ROOT/$abi"/*.so; do
+            [ -f "$out" ] || die "missing artifact: $out"
+            ls -lh "$out"
+            sha256sum "$out"
+            file "$out"
+        done
     done
 }
 

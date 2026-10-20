@@ -1,0 +1,41 @@
+Cue third-party notices
+=======================
+
+Cue ships the following LGPL components as separate, replaceable shared
+libraries in app/src/main/jniLibs/<abi>/. The corresponding notices are in
+app/src/main/assets/licenses/:
+
+- FFmpeg 7.1.5 (LGPL-2.1-or-later)
+  Copyright (c) 2000-2025 the FFmpeg developers.
+  Source: https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz
+  License: FFmpeg-COPYING.LGPLv2.1.txt and FFmpeg-LICENSE.md
+
+- LAME 3.100 (LGPL-2.0-or-later)
+  Copyright (c) 1999-2011 by The LAME Project; copyright (c) 1999, 2000, 2001
+  by Mark Taylor.
+  Source: https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+  License: LAME-COPYING.txt
+
+- Chromaprint 1.5.1 (LGPL-2.1-or-later; includes MIT-licensed
+  Chromaprint code and LGPL-licensed FFmpeg code)
+  Copyright (C) 2010-2016 Lukas Lalinsky.
+  Source: https://github.com/acoustid/chromaprint/releases/download/v1.5.1/chromaprint-1.5.1.tar.gz
+  License: Chromaprint-LICENSE.md and FFmpeg-COPYING.LGPLv2.1.txt
+
+- KissFFT, bundled with Chromaprint 1.5.1 (BSD-3-Clause)
+  Copyright (c) 2003-2010 Mark Borgerding.
+  Source: https://github.com/acoustid/chromaprint/releases/download/v1.5.1/chromaprint-1.5.1.tar.gz
+  License: KissFFT-BSD-3-Clause.txt
+
+Compliance statement
+--------------------
+The LGPL components are dynamically linked. The executable libffmpeg.so and the
+FFmpeg shared libraries depend at runtime on separate libchromaprint.so and
+libmp3lame.so files shipped in the same APK native library directory. A user can
+replace those shared libraries with a compatible build without relinking
+libffmpeg.so. The complete corresponding source is available from the pinned
+URLs above; the build is reproducible with scripts/native/build-ffmpeg.sh, which
+is part of this repository. No GPL or nonfree FFmpeg components are enabled.
+
+These notices are packaged as app assets. The in-app notices screen is a later
+integration milestone; this file and the license texts must remain in the APK.

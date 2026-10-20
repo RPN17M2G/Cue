@@ -1,4 +1,4 @@
-# ADR 0005 — LGPL-only native build (distribution kept open)
+# ADR 0005 - LGPL-only native build (distribution kept open)
 
 Status: accepted
 Date: 2026-10-19
@@ -23,9 +23,39 @@ Key facts:
 ## Decision
 
 Configure the FFmpeg build **LGPL-only**: do not pass `--enable-gpl`; avoid any
-GPL-licensed components; keep only what Cue needs (AAC decode, libmp3lame encode,
-trim, Chromaprint). Preserve license and attribution notices, and document the
-build configuration so a user could rebuild/relink the library.
+GPL-licensed components; keep only what Cue needs (AAC/MP3/Opus/Vorbis decode,
+libmp3lame encode, trim, Chromaprint).
+
+**Revision 2026-10-20:** the original static-link decision was insufficient for
+LGPL-2.1 section 6 because the APK contained no relinkable form of FFmpeg, LAME,
+or Chromaprint. The build now uses dynamic linking for every LGPL component:
+
+- FFmpeg is built with `--enable-shared --disable-static` and installed as
+  `libavcodec.so`, `libavformat.so`, `libavfilter.so`, `libavutil.so`, and
+  `libswresample.so`.
+- LAME 3.100 is shipped as `libmp3lame.so`; Chromaprint 1.5.1 is shipped as
+  `libchromaprint.so`. Chromaprint's bundled KissFFT is inside that shared
+  library.
+- The `libffmpeg.so` executable dynamically depends on all of those libraries.
+  It uses `DT_RUNPATH=$ORIGIN`, so the libraries are resolved from the APK's
+  extracted `nativeLibraryDir`. The app may additionally set
+  `LD_LIBRARY_PATH` to that directory as a fallback.
+- All shared libraries are staged per ABI in `app/src/main/jniLibs/<abi>/` and
+  are not committed. The pinned build script rebuilds them from source.
+- License texts, copyright notices, and this statement are committed under
+  `app/src/main/assets/licenses/` and packaged in the APK. The in-app notices
+  screen is a later integration task.
+
+## Compliance statement
+
+The LGPL components are dynamically linked. `libffmpeg.so` and the FFmpeg
+shared libraries depend at runtime on separate, replaceable `libchromaprint.so`
+and `libmp3lame.so` files shipped in the same APK native library directory. A
+user can replace those shared libraries with a compatible build without
+relinking `libffmpeg.so`. The complete corresponding source is available from
+the pinned upstream URLs in `scripts/native/build-ffmpeg.sh`; the build script
+and notices are part of this repository. No GPL or nonfree FFmpeg components
+are enabled.
 
 ## Consequences
 
@@ -35,7 +65,11 @@ build configuration so a user could rebuild/relink the library.
   fine for audio-only conversion.
 - Contributors must not casually add GPL components; the build script is the
   control point and any change to licensing must go through a new ADR.
-- Attribution/license text must ship with the app.
+- The APK contains several `.so` files instead of one executable. Android's
+  linker must resolve them from `nativeLibraryDir`; this is verified statically
+  with `readelf` and will be exercised by the emulator/device milestone.
+- Attribution/license text must ship with the app; it is now committed under
+  `app/src/main/assets/licenses/` and checked by the probe script.
 - Nothing here is legal advice; if and when publishing, the licensing position
   should be reviewed against the store's current policies.
 
