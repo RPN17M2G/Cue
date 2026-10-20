@@ -2,8 +2,11 @@ package io.github.rpn17m2g.cue.data.metadata
 
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import kotlinx.coroutines.test.runTest
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -14,19 +17,19 @@ import org.junit.Test
 class MusicBrainzClientTest {
 
     private lateinit var server: MockWebServer
+    private lateinit var http: MetadataHttp
     private lateinit var client: MusicBrainzClient
 
     @Before
     fun setUp() {
         server = MockWebServer()
         server.start()
-        val http = MetadataHttp(
+        http = MetadataHttp(
             config = NetworkConfig(retries = 0),
             sleeper = Sleeper.None,
         )
         client = MusicBrainzClient(
             api = http.api(server.url("/").toString(), MusicBrainzApi::class.java),
-            rateLimiter = RateLimiter(minIntervalMs = 0L),
         )
     }
 
@@ -36,7 +39,7 @@ class MusicBrainzClientTest {
     }
 
     @Test
-    fun `maps recordings and leaves artwork empty`() = runTest {
+    fun `maps recordings and leaves artwork empty without cover art`() = runTest {
         server.enqueue(jsonResponse(RESPONSE))
 
         val matches = (client.search(MetadataQuery("Bohemian Rhapsody", "Queen")) as LookupResult.Success).value
@@ -61,6 +64,19 @@ class MusicBrainzClientTest {
             .single()
 
         assertEquals("Queen & David Bowie", match.artist)
+    }
+
+    @Test
+    fun `escapes lucene metacharacters in the query`() = runTest {
+        server.enqueue(jsonResponse("""{"recordings":[]}"""))
+
+        client.search(MetadataQuery("AC/DC: \"Back\" (Live)", "AC/DC"))
+
+        val query = server.takeRequest().requestUrl!!.queryParameter("query")!!
+        assertEquals(
+            "recording:\"AC\\/DC\\: \\\"Back\\\" \\(Live\\)\" AND artist:\"AC\\/DC\"",
+            query,
+        )
     }
 
     @Test
@@ -93,7 +109,6 @@ class MusicBrainzClientTest {
                 config = NetworkConfig(retries = 1),
                 sleeper = Sleeper.None,
             ).api(server.url("/").toString(), MusicBrainzApi::class.java),
-            rateLimiter = RateLimiter(minIntervalMs = 0L),
         )
 
         val result = retrying.search(MetadataQuery("Anything"))
@@ -103,13 +118,100 @@ class MusicBrainzClientTest {
     }
 
     @Test
+    fun `rate limit also applies to retries`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(503))
+        server.enqueue(jsonResponse(RESPONSE))
+        var now = 0L
+        val sleeps = mutableListOf<Long>()
+        val clock = WallClock { now }
+        val sleeper = Sleeper { millis ->
+            sleeps += millis
+            now += millis
+        }
+        val limitedClient = OkHttpClient.Builder()
+            .addInterceptor(
+                RetryInterceptor(maxRetries = 1, backoffBaseMs = 250, sleeper = sleeper),
+            )
+            .addInterceptor(
+                RateLimitInterceptor(
+                    RateLimiter(minIntervalMs = 1_000L, clock = clock, sleeper = sleeper),
+                ),
+            )
+            .build()
+        val limited = MusicBrainzClient(
+            api = http.api(
+                server.url("/").toString(),
+                MusicBrainzApi::class.java,
+                limitedClient,
+            ),
+        )
+
+        val result = limited.search(MetadataQuery("Bohemian Rhapsody", "Queen"))
+
+        assertTrue(result is LookupResult.Success)
+        assertEquals(2, server.requestCount)
+        assertTrue(sleeps.sum() >= 1_000L)
+    }
+
+    @Test
+    fun `adds cover art archive url when a release exists`() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.path.orEmpty().startsWith("/ws/2/recording") -> jsonResponse(RESPONSE)
+                request.path.orEmpty().startsWith("/release/") -> MockResponse()
+                    .setResponseCode(200)
+                    .setBody("cover-bytes")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val coverArt = CoverArtArchiveClient(
+            api = http.api(server.url("/").toString(), CoverArtArchiveApi::class.java),
+        )
+        val enriched = MusicBrainzClient(
+            api = http.api(server.url("/").toString(), MusicBrainzApi::class.java),
+            coverArtArchive = coverArt,
+        )
+
+        val match = (enriched.search(MetadataQuery("Bohemian Rhapsody", "Queen")) as LookupResult.Success)
+            .value
+            .single()
+
+        assertEquals(
+            "https://coverartarchive.org/release/release-1/front-500",
+            match.artworkUrl,
+        )
+    }
+
+    @Test
+    fun `cover art archive 404 leaves artwork null`() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.path.orEmpty().startsWith("/ws/2/recording") -> jsonResponse(RESPONSE)
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val coverArt = CoverArtArchiveClient(
+            api = http.api(server.url("/").toString(), CoverArtArchiveApi::class.java),
+        )
+        val enriched = MusicBrainzClient(
+            api = http.api(server.url("/").toString(), MusicBrainzApi::class.java),
+            coverArtArchive = coverArt,
+        )
+
+        val match = (enriched.search(MetadataQuery("Bohemian Rhapsody", "Queen")) as LookupResult.Success)
+            .value
+            .single()
+
+        assertNull(match.artworkUrl)
+    }
+
+    @Test
     fun `network gate blocks requests entirely`() = runTest {
         val gated = MusicBrainzClient(
             api = MetadataHttp(sleeper = Sleeper.None).api(
                 server.url("/").toString(),
                 MusicBrainzApi::class.java,
             ),
-            rateLimiter = RateLimiter(minIntervalMs = 0L),
             networkGate = NetworkGate.Disabled,
         )
 

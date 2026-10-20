@@ -103,7 +103,7 @@ class CompositeMetadataResolverTest {
     }
 
     @Test
-    fun `deduplicates and sorts merged results by score`() = runTest {
+    fun `deduplicates and sorts primary results by score`() = runTest {
         val primary = FakeProvider(
             IdentificationSource.ITUNES,
             LookupResult.Success(
@@ -162,7 +162,6 @@ class CompositeMetadataResolverTest {
         val primary = ITunesClient(http.api(baseUrl, ITunesApi::class.java))
         val fallback = MusicBrainzClient(
             api = http.api(baseUrl, MusicBrainzApi::class.java),
-            rateLimiter = RateLimiter(minIntervalMs = 0L),
         )
         val resolver = CompositeMetadataResolver(primary, fallback)
 

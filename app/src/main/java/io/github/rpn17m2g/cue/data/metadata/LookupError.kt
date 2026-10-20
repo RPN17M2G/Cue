@@ -11,9 +11,7 @@ sealed interface LookupError {
 
 /** Success or a typed [LookupError]; callers never need to catch provider exceptions. */
 sealed interface LookupResult<out T> {
-    data class Success<T>(val value: T) : LookupResult<T> {
-        val data: T get() = value
-    }
+    data class Success<T>(val value: T) : LookupResult<T>
 
     data class Failure(val error: LookupError) : LookupResult<Nothing>
 }

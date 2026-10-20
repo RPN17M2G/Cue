@@ -4,6 +4,7 @@ object MetadataEndpoints {
     const val ITUNES = "https://itunes.apple.com/"
     const val MUSICBRAINZ = "https://musicbrainz.org/"
     const val ACOUSTID = "https://api.acoustid.org/"
+    const val COVER_ART_ARCHIVE = "https://coverartarchive.org/"
 }
 
 /**
@@ -14,11 +15,22 @@ class MetadataClients(
     policy: LookupPolicy = LookupPolicy(),
     config: NetworkConfig = NetworkConfig.from(policy),
     sleeper: Sleeper = Sleeper.System,
-    delayProvider: DelayProvider = DelayProvider.Default,
-    clock: WallClock = WallClock.System,
+    clock: WallClock = WallClock.Monotonic,
     http: MetadataHttp = MetadataHttp(config, sleeper),
 ) {
     private val gate = policy.networkGate
+
+    private val musicBrainzHttp = http.clientWith(
+        RateLimitInterceptor(RateLimiter(clock = clock, sleeper = sleeper)),
+    )
+
+    private val coverArtArchive = CoverArtArchiveClient(
+        api = http.api(
+            MetadataEndpoints.COVER_ART_ARCHIVE,
+            CoverArtArchiveApi::class.java,
+        ),
+        networkGate = gate,
+    )
 
     val iTunes: ITunesClient = ITunesClient(
         api = http.api(MetadataEndpoints.ITUNES, ITunesApi::class.java),
@@ -26,9 +38,13 @@ class MetadataClients(
     )
 
     val musicBrainz: MusicBrainzClient = MusicBrainzClient(
-        api = http.api(MetadataEndpoints.MUSICBRAINZ, MusicBrainzApi::class.java),
-        rateLimiter = RateLimiter(clock = clock, delay = delayProvider),
+        api = http.api(
+            MetadataEndpoints.MUSICBRAINZ,
+            MusicBrainzApi::class.java,
+            musicBrainzHttp,
+        ),
         networkGate = gate,
+        coverArtArchive = coverArtArchive,
     )
 
     val acoustId: AcoustIdClient = AcoustIdClient(

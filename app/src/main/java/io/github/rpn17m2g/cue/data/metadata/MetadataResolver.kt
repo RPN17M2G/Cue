@@ -7,9 +7,11 @@ interface MetadataResolver {
 }
 
 /**
- * iTunes first; MusicBrainz only when iTunes returns nothing or fails. Providers
- * already return typed failures, so the resolver simply degrades to an empty list
- * unless the caller asks for the typed result via [searchResult].
+ * iTunes first; MusicBrainz only when iTunes returns nothing or fails. Results
+ * from the two providers are never merged: the fallback contributes only when the
+ * primary is empty. Providers already return typed failures, so the resolver
+ * degrades to an empty list unless the caller asks for the typed result via
+ * [searchResult].
  */
 class CompositeMetadataResolver(
     private val primary: MetadataProvider,
@@ -29,13 +31,13 @@ class CompositeMetadataResolver(
         val primaryResult = primary.search(query)
         val primaryMatches = primaryResult.matchesOrEmpty()
         if (primaryMatches.isNotEmpty()) {
-            return LookupResult.Success(primaryMatches.mergeSorted())
+            return LookupResult.Success(primaryMatches.dedupeAndSort())
         }
 
         val fallbackResult = fallback.search(query)
         val fallbackMatches = fallbackResult.matchesOrEmpty()
         if (fallbackMatches.isNotEmpty()) {
-            return LookupResult.Success((primaryMatches + fallbackMatches).mergeSorted())
+            return LookupResult.Success(fallbackMatches.dedupeAndSort())
         }
 
         val error = (fallbackResult as? LookupResult.Failure)?.error
@@ -47,7 +49,7 @@ class CompositeMetadataResolver(
         (this as? LookupResult.Success)?.value.orEmpty()
 }
 
-internal fun List<MetadataMatch>.mergeSorted(): List<MetadataMatch> = groupBy { match ->
+internal fun List<MetadataMatch>.dedupeAndSort(): List<MetadataMatch> = groupBy { match ->
     MetadataScorer.normalize(match.title) to MetadataScorer.normalize(match.artist)
 }.values
     .map { group -> group.maxBy { it.score } }

@@ -22,9 +22,7 @@ data class ArtworkCandidate(
     val album: String? = null,
     val artist: String? = null,
     val title: String? = null,
-) {
-    val artworkUrl: String get() = artworkUrl600
-}
+)
 
 /** Chromaprint output plus the duration it was computed over. */
 data class FingerprintInput(

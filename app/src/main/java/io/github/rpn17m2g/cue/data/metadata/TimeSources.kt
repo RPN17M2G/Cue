@@ -6,20 +6,13 @@ fun interface WallClock {
     fun nowMillis(): Long
 
     companion object {
-        val System = WallClock { java.lang.System.currentTimeMillis() }
+        val Monotonic = WallClock { java.lang.System.nanoTime() / NANOS_PER_MILLI }
     }
 }
 
-fun interface DelayProvider {
-    suspend fun delay(millis: Long)
+private const val NANOS_PER_MILLI = 1_000_000L
 
-    companion object {
-        val Default = DelayProvider { millis -> kotlinx.coroutines.delay(millis) }
-        val None = DelayProvider { }
-    }
-}
-
-/** Blocking sleep used only by the OkHttp retry interceptor. Tests inject a recorder. */
+/** Blocking sleep used by the retry interceptor and the rate limiter. Tests inject a recorder. */
 fun interface Sleeper {
     fun sleep(millis: Long)
 

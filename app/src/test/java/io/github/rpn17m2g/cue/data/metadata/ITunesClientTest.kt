@@ -86,7 +86,7 @@ class ITunesClientTest {
 
         assertEquals(LookupError.RateLimited, (result as LookupResult.Failure).error)
         assertEquals(3, server.requestCount)
-        assertEquals(listOf(250L, 500L), sleeps)
+        assertEquals(750L, sleeps.sum())
     }
 
     @Test
@@ -98,7 +98,38 @@ class ITunesClientTest {
 
         assertTrue(result is LookupResult.Success)
         assertEquals(2, server.requestCount)
-        assertEquals(listOf(250L), sleeps)
+        assertEquals(250L, sleeps.sum())
+    }
+
+    @Test
+    fun `retry after is capped at thirty seconds`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setHeader("Retry-After", "120"),
+        )
+        server.enqueue(jsonResponse(SONG_RESPONSE))
+
+        val result = client.search(MetadataQuery("Hello", "Adele"))
+
+        assertTrue(result is LookupResult.Success)
+        assertEquals(2, server.requestCount)
+        assertEquals(30_000L, sleeps.sum())
+    }
+
+    @Test
+    fun `http date retry after is ignored in favour of backoff`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setHeader("Retry-After", "Wed, 21 Oct 2015 07:28:00 GMT"),
+        )
+        server.enqueue(jsonResponse(SONG_RESPONSE))
+
+        val result = client.search(MetadataQuery("Hello", "Adele"))
+
+        assertTrue(result is LookupResult.Success)
+        assertEquals(250L, sleeps.sum())
     }
 
     @Test

@@ -9,7 +9,7 @@ import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Query
 
-interface ITunesApi {
+internal interface ITunesApi {
     @GET("search")
     suspend fun search(
         @Query("term") term: String,
@@ -19,13 +19,13 @@ interface ITunesApi {
 }
 
 @Serializable
-data class ITunesResponse(
+internal data class ITunesResponse(
     val resultCount: Int = 0,
     val results: List<ITunesItem> = emptyList(),
 )
 
 @Serializable
-data class ITunesItem(
+internal data class ITunesItem(
     @SerialName("trackName") val trackName: String? = null,
     @SerialName("artistName") val artistName: String? = null,
     @SerialName("collectionName") val collectionName: String? = null,
@@ -35,7 +35,7 @@ data class ITunesItem(
     @SerialName("artworkUrl100") val artworkUrl100: String? = null,
 )
 
-class ITunesClient(
+class ITunesClient internal constructor(
     private val api: ITunesApi,
     private val networkGate: NetworkGate = NetworkGate.Enabled,
 ) : MetadataProvider, ArtworkSearch {
