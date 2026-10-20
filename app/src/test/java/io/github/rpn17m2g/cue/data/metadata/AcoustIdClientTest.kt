@@ -1,6 +1,7 @@
 package io.github.rpn17m2g.cue.data.metadata
 
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
+import java.net.URLDecoder
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -74,6 +75,22 @@ class AcoustIdClientTest {
     }
 
     @Test
+    fun `maps all recordings and deduplicates by title and artist`() = runTest {
+        server.enqueue(jsonResponse(ALTERNATIVES_RESPONSE))
+
+        val matches = (
+            client.lookup(
+                input = FingerprintInput("chromaprint", 30),
+                apiKey = "test-key",
+            ) as LookupResult.Success
+            ).value
+
+        assertEquals(2, matches.size)
+        assertEquals(setOf("Imagine", "Imagine (Remastered)"), matches.map { it.title }.toSet())
+        assertEquals(1, matches.count { it.title == "Imagine" })
+    }
+
+    @Test
     fun `posts form fields with the api key and fingerprint`() = runTest {
         server.enqueue(jsonResponse(RESPONSE))
 
@@ -89,7 +106,21 @@ class AcoustIdClientTest {
         assertTrue(body.contains("client=test-key"))
         assertTrue(body.contains("duration=30"))
         assertTrue(body.contains("fingerprint=AQADtEmi"))
-        assertTrue(body.contains("meta=recordings%2Breleasegroups"))
+        assertTrue(body.contains("meta=recordings+releasegroups"))
+    }
+
+    @Test
+    fun `meta field decodes to space separated tokens`() = runTest {
+        server.enqueue(jsonResponse(RESPONSE))
+
+        client.lookup(
+            input = FingerprintInput("chromaprint", 30),
+            apiKey = "test-key",
+        )
+
+        val body = server.takeRequest().body.readUtf8()
+        val rawMeta = body.split("&").first { it.startsWith("meta=") }.substringAfter("meta=")
+        assertEquals("recordings releasegroups", URLDecoder.decode(rawMeta, "UTF-8"))
     }
 
     @Test
@@ -109,6 +140,40 @@ class AcoustIdClientTest {
     }
 
     @Test
+    fun `http 400 invalid key body maps to missing key`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(400)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"status":"error","error":{"code":4,"message":"invalid API key"}}"""),
+        )
+
+        val result = client.lookup(
+            input = FingerprintInput("chromaprint", 30),
+            apiKey = "bad-key",
+        )
+
+        assertEquals(LookupError.MissingKey, (result as LookupResult.Failure).error)
+    }
+
+    @Test
+    fun `http 429 error body with rate limit code maps to rate limited`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"status":"error","error":{"code":13,"message":"rate limited"}}"""),
+        )
+
+        val result = client.lookup(
+            input = FingerprintInput("chromaprint", 30),
+            apiKey = "test-key",
+        )
+
+        assertEquals(LookupError.RateLimited, (result as LookupResult.Failure).error)
+    }
+
+    @Test
     fun `malformed json becomes a parse error`() = runTest {
         server.enqueue(jsonResponse("<html>nope</html>"))
 
@@ -121,7 +186,7 @@ class AcoustIdClientTest {
     }
 
     @Test
-    fun `http 429 becomes rate limited`() = runTest {
+    fun `http 429 without a body becomes rate limited`() = runTest {
         server.enqueue(MockResponse().setResponseCode(429))
 
         val result = client.lookup(
@@ -130,6 +195,27 @@ class AcoustIdClientTest {
         )
 
         assertEquals(LookupError.RateLimited, (result as LookupResult.Failure).error)
+    }
+
+    @Test
+    fun `post is not replayed even when retries are configured`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(429))
+        val sleeps = mutableListOf<Long>()
+        val retrying = AcoustIdClient(
+            api = MetadataHttp(
+                config = NetworkConfig(retries = 2),
+                sleeper = Sleeper { millis -> sleeps += millis },
+            ).api(server.url("/").toString(), AcoustIdApi::class.java),
+        )
+
+        val result = retrying.lookup(
+            input = FingerprintInput("chromaprint", 30),
+            apiKey = "test-key",
+        )
+
+        assertEquals(LookupError.RateLimited, (result as LookupResult.Failure).error)
+        assertEquals(1, server.requestCount)
+        assertTrue(sleeps.isEmpty())
     }
 
     @Test
@@ -163,6 +249,42 @@ class AcoustIdClientTest {
                       "title": "Imagine",
                       "artists": [{"id": "artist-1", "name": "John Lennon"}],
                       "releasegroups": [{"id": "rg-1", "title": "Imagine"}]
+                    }
+                  ]
+                }
+              ]
+            }
+        """
+
+        const val ALTERNATIVES_RESPONSE = """
+            {
+              "status": "ok",
+              "results": [
+                {
+                  "id": "result-1",
+                  "score": 0.9,
+                  "recordings": [
+                    {
+                      "id": "recording-1",
+                      "title": "Imagine",
+                      "artists": [{"id": "artist-1", "name": "John Lennon"}],
+                      "releasegroups": [{"id": "rg-1", "title": "Imagine"}]
+                    },
+                    {
+                      "id": "recording-2",
+                      "title": "Imagine (Remastered)",
+                      "artists": [{"id": "artist-1", "name": "John Lennon"}]
+                    }
+                  ]
+                },
+                {
+                  "id": "result-2",
+                  "score": 0.8,
+                  "recordings": [
+                    {
+                      "id": "recording-3",
+                      "title": "Imagine",
+                      "artists": [{"id": "artist-1", "name": "John Lennon"}]
                     }
                   ]
                 }

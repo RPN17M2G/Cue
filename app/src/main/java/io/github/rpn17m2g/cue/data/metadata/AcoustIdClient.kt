@@ -8,39 +8,39 @@ import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.POST
 
-interface AcoustIdApi {
+internal interface AcoustIdApi {
     @FormUrlEncoded
     @POST("v2/lookup")
     suspend fun lookup(
         @Field("client") client: String,
         @Field("duration") durationSeconds: Int,
         @Field("fingerprint") fingerprint: String,
-        @Field("meta") meta: String,
+        @Field("meta", encoded = true) meta: String,
     ): Response<AcoustIdResponse>
 }
 
 @Serializable
-data class AcoustIdResponse(
+internal data class AcoustIdResponse(
     val status: String = "",
     val error: AcoustIdError? = null,
     val results: List<AcoustIdResult> = emptyList(),
 )
 
 @Serializable
-data class AcoustIdError(
+internal data class AcoustIdError(
     val code: Int? = null,
     val message: String? = null,
 )
 
 @Serializable
-data class AcoustIdResult(
+internal data class AcoustIdResult(
     val id: String? = null,
     val score: Double? = null,
     val recordings: List<AcoustIdRecording> = emptyList(),
 )
 
 @Serializable
-data class AcoustIdRecording(
+internal data class AcoustIdRecording(
     val id: String? = null,
     val title: String? = null,
     val artists: List<AcoustIdArtist> = emptyList(),
@@ -48,18 +48,18 @@ data class AcoustIdRecording(
 )
 
 @Serializable
-data class AcoustIdArtist(
+internal data class AcoustIdArtist(
     val id: String? = null,
     val name: String? = null,
 )
 
 @Serializable
-data class AcoustIdReleaseGroup(
+internal data class AcoustIdReleaseGroup(
     val id: String? = null,
     val title: String? = null,
 )
 
-class AcoustIdClient(
+class AcoustIdClient internal constructor(
     private val api: AcoustIdApi,
     private val defaultApiKey: String = "",
     private val networkGate: NetworkGate = NetworkGate.Enabled,
@@ -79,49 +79,72 @@ class AcoustIdClient(
                 client = apiKey,
                 durationSeconds = input.durationSeconds,
                 fingerprint = input.fingerprint,
-                meta = META,
+                meta = META_FORM_ENCODED,
             )
-            if (!response.isSuccessful) return@safeLookup httpFailure(response.code())
+            if (!response.isSuccessful) {
+                return@safeLookup LookupResult.Failure(
+                    parseErrorBody(response).toLookupError(response.code()),
+                )
+            }
             val body = response.body() ?: return@safeLookup LookupResult.Failure(LookupError.Parse())
             if (!body.status.equals(STATUS_OK, ignoreCase = true)) {
-                return@safeLookup LookupResult.Failure(body.error.toLookupError())
+                return@safeLookup LookupResult.Failure(body.error.toLookupError(httpCode = null))
             }
             LookupResult.Success(body.toMatches())
         }
     }
 
+    private fun parseErrorBody(response: Response<AcoustIdResponse>): AcoustIdError? {
+        val raw = response.errorBody()?.string() ?: return null
+        return try {
+            MetadataJson.decodeFromString(AcoustIdResponse.serializer(), raw).error
+        } catch (ignored: Exception) {
+            null
+        }
+    }
+
     private fun AcoustIdResponse.toMatches(): List<MetadataMatch> = results
         .sortedByDescending { it.score ?: 0.0 }
-        .mapNotNull { result ->
-            val recording = result.recordings.firstOrNull() ?: return@mapNotNull null
-            val resolvedTitle = recording.title?.trim()?.takeIf { it.isNotEmpty() }
-                ?: return@mapNotNull null
-            val resolvedArtist = recording.artists
-                .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotEmpty() } }
-                .joinToString(", ")
-            MetadataMatch(
-                title = resolvedTitle,
-                artist = resolvedArtist,
-                album = recording.releasegroups.firstOrNull()
-                    ?.title
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() },
-                source = IdentificationSource.FINGERPRINT,
-                score = (result.score ?: 0.0).coerceIn(0.0, 1.0),
-            )
+        .flatMap { result ->
+            result.recordings.mapNotNull { recording -> recording.toMatch(result.score) }
         }
-        .distinctBy { match -> MetadataScorer.normalize(match.title) to MetadataScorer.normalize(match.artist) }
+        .distinctBy { match ->
+            MetadataScorer.normalize(match.title) to MetadataScorer.normalize(match.artist)
+        }
 
-    private fun AcoustIdError?.toLookupError(): LookupError {
-        if (this == null) return LookupError.Parse()
-        val keyProblem = code == INVALID_API_KEY ||
-            message?.contains("key", ignoreCase = true) == true
-        return if (keyProblem) LookupError.MissingKey else LookupError.Parse()
+    private fun AcoustIdRecording.toMatch(score: Double?): MetadataMatch? {
+        val resolvedTitle = title?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val resolvedArtist = artists
+            .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotEmpty() } }
+            .joinToString(", ")
+        return MetadataMatch(
+            title = resolvedTitle,
+            artist = resolvedArtist,
+            album = releasegroups.firstOrNull()?.title?.trim()?.takeIf { it.isNotEmpty() },
+            source = IdentificationSource.FINGERPRINT,
+            score = (score ?: 0.0).coerceIn(0.0, 1.0),
+        )
+    }
+
+    private fun AcoustIdError?.toLookupError(httpCode: Int?): LookupError = when (this?.code) {
+        INVALID_API_KEY, INVALID_API_KEY_ALT -> LookupError.MissingKey
+        RATE_LIMITED -> LookupError.RateLimited
+        UNKNOWN_ERROR -> LookupError.Network()
+        else -> when {
+            httpCode == null -> LookupError.Parse()
+            httpCode == 429 -> LookupError.RateLimited
+            else -> LookupError.Http(httpCode)
+        }
     }
 
     private companion object {
-        const val META = "recordings+releasegroups"
+        // AcoustID splits meta on whitespace; send the form encoding explicitly
+        // because OkHttp encodes a space as %20, which some proxies mangle.
+        const val META_FORM_ENCODED = "recordings+releasegroups"
         const val STATUS_OK = "ok"
         const val INVALID_API_KEY = 4
+        const val INVALID_API_KEY_ALT = 17
+        const val RATE_LIMITED = 13
+        const val UNKNOWN_ERROR = 14
     }
 }
