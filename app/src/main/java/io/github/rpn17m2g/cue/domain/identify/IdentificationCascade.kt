@@ -8,19 +8,17 @@ import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.ocr.OcrCandidate
 
-data class MetadataQuery(
+data class LookupSeed(
     val title: String,
     val artist: String? = null,
-    val album: String? = null,
+    val durationMs: Long? = null,
 )
 
-interface MetadataResolver {
-    suspend fun resolve(query: MetadataQuery): List<MetadataMatch>
-}
-
-interface FingerprintResolver {
-    suspend fun identify(): List<MetadataMatch>
-}
+data class FingerprintSeed(
+    val title: String,
+    val artist: String? = null,
+    val durationMs: Long? = null,
+)
 
 data class IdentificationOutcome(
     val tag: TagDraft,
@@ -33,12 +31,15 @@ data class IdentificationOutcome(
 
 /**
  * Pure orchestration of the identification stages. Embedded core tags stop the
- * cascade; otherwise OCR seeds the online resolver, then the fingerprint, and
- * the best available draft is always returned for manual correction.
+ * cascade; otherwise OCR seeds the online lookup, then the fingerprint, and the
+ * best available draft is always returned for manual correction.
+ *
+ * Resolver failures are treated as empty results so the cascade degrades to the
+ * next stage instead of aborting the flow.
  */
 class IdentificationCascade(
-    private val metadataResolver: MetadataResolver,
-    private val fingerprintResolver: FingerprintResolver,
+    private val lookup: suspend (LookupSeed) -> List<MetadataMatch>,
+    private val fingerprintLookup: suspend (FingerprintSeed) -> List<MetadataMatch>,
 ) {
 
     suspend fun identify(
@@ -48,6 +49,7 @@ class IdentificationCascade(
         fingerprintEnabled: Boolean,
         acoustIdConfigured: Boolean,
         rawOcrLines: List<String> = emptyList(),
+        durationMs: Long? = null,
     ): IdentificationOutcome {
         if (embeddedTags != null && embeddedTags.hasCoreTags) {
             return IdentificationOutcome(
@@ -60,22 +62,29 @@ class IdentificationCascade(
             )
         }
 
-        val seed = seed(embeddedTags, ocrCandidates.firstOrNull { it.title.isNotBlank() })
-        val query = MetadataQuery(
-            title = seed.tag.title,
-            artist = seed.tag.artist.takeIf { it.isNotBlank() },
-            album = seed.tag.album.takeIf { it.isNotBlank() },
-        )
+        val seed = seed(embeddedTags, ocrCandidates.maxByOrNull { it.score })
 
-        if (networkEnabled && query.title.isNotBlank()) {
-            val ranked = MetadataMatcher.rank(seed.tag, metadataResolver.resolve(query))
+        if (networkEnabled && seed.tag.title.isNotBlank()) {
+            val lookupSeed = LookupSeed(
+                title = seed.tag.title,
+                artist = seed.tag.artist.takeIf { it.isNotBlank() },
+                durationMs = durationMs,
+            )
+            val matches = runCatching { lookup(lookupSeed) }.getOrDefault(emptyList())
+            val ranked = MetadataMatcher.rank(seed.tag, matches)
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = false)
             }
         }
 
         if (networkEnabled && fingerprintEnabled && acoustIdConfigured) {
-            val ranked = MetadataMatcher.rank(seed.tag, fingerprintResolver.identify())
+            val fingerprintSeed = FingerprintSeed(
+                title = seed.tag.title,
+                artist = seed.tag.artist.takeIf { it.isNotBlank() },
+                durationMs = durationMs,
+            )
+            val matches = runCatching { fingerprintLookup(fingerprintSeed) }.getOrDefault(emptyList())
+            val ranked = MetadataMatcher.rank(seed.tag, matches)
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = true)
             }

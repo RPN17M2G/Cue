@@ -23,16 +23,20 @@ object OcrCandidateExtractor {
         "Search",
         "Explore",
         "Sign in",
+        "Add to playlist",
+        "Share",
+        "Download",
+        "Like",
+        "More",
+        "Play next",
+        "Save to library",
     )
 
     private val WHITESPACE = Regex("[\\s\\u00A0]+")
-    private val CLOCK = Regex("^\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s?[ap]m)?$", RegexOption.IGNORE_CASE)
-    private val PERCENT = Regex("^\\d{1,3}\\s*%$")
-    private val BATTERY = Regex(".*\\b(?:battery|charging)\\b.*\\d{1,3}\\s*%.*", RegexOption.IGNORE_CASE)
-    private val URL = Regex(
-        "(?i)\\b(?:https?://|www\\.)\\S+|^(?:[\\w-]+\\.)+[a-z]{2,}(?:/\\S*)?$",
-    )
-    private val NUMERIC = Regex("^[\\p{Nd}][\\p{Nd}\\s.,]*$")
+    private val CLOCK = Regex("^\\d{1,2}:\\d{2}(:\\d{2})?$")
+    private val BATTERY = Regex(".*\\b(?:battery|charging)\\b.*\\d{1,3}%", RegexOption.IGNORE_CASE)
+    private val URL = Regex("(?i)^(?:https?://|www\\.)\\S+$")
+    private val HAS_LETTER_OR_DIGIT = Regex("[\\p{L}\\p{Nd}]")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
 
@@ -105,13 +109,12 @@ object OcrCandidateExtractor {
     private fun isNoise(line: String, noiseKeys: Set<String>, hebrewAware: Boolean): Boolean {
         if (line.length > MAX_LINE_LENGTH) return true
         if (line.length == 1) return true
+        if (!HAS_LETTER_OR_DIGIT.containsMatchIn(line)) return true
         if (!hebrewAware && HEBREW.containsMatchIn(line)) return true
         if (normalize(line) in noiseKeys) return true
         if (CLOCK.matches(line)) return true
-        if (PERCENT.matches(line)) return true
         if (BATTERY.matches(line)) return true
-        if (URL.containsMatchIn(line)) return true
-        if (NUMERIC.matches(line)) return true
+        if (URL.matches(line)) return true
         return false
     }
 

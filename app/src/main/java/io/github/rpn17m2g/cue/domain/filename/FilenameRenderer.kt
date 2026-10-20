@@ -40,8 +40,13 @@ object FilenameRenderer {
     fun sanitize(value: String): String {
         val replaced = ILLEGAL.replace(value, " ")
         val collapsed = replaced.replace(WHITESPACE, " ").trim { it == ' ' || it == '.' || it == '\u00A0' }
-        val capped = collapsed.take(MAX_LENGTH).trim { it == ' ' || it == '.' || it == '\u00A0' }
+        val capped = takeCodePoints(collapsed, MAX_LENGTH).trim { it == ' ' || it == '.' || it == '\u00A0' }
         return capped.ifBlank { FALLBACK_NAME }
+    }
+
+    private fun takeCodePoints(value: String, max: Int): String {
+        if (value.codePointCount(0, value.length) <= max) return value
+        return value.substring(0, value.offsetByCodePoints(0, max))
     }
 
     private fun valueOf(token: String, draft: TagDraft): String = when (token.lowercase(Locale.ROOT)) {

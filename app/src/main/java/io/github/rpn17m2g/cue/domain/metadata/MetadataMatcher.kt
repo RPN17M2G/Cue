@@ -12,21 +12,19 @@ import io.github.rpn17m2g.cue.domain.model.TagDraft
  */
 object MetadataMatcher {
 
+    fun score(query: TagDraft, match: MetadataMatch): Double {
+        if (query.title.isBlank()) return match.score
+        val titleScore = Similarity.textSimilarity(query.title, match.title)
+        return if (query.artist.isNotBlank()) {
+            0.75 * titleScore + 0.25 * Similarity.textSimilarity(query.artist, match.artist)
+        } else {
+            titleScore
+        }
+    }
+
     fun rank(query: TagDraft, matches: List<MetadataMatch>): List<MetadataMatch> {
         if (matches.isEmpty()) return emptyList()
-        if (query.title.isBlank()) return sort(matches)
-
-        return sort(
-            matches.map { match ->
-                val titleScore = Similarity.textSimilarity(query.title, match.title)
-                val combined = if (query.artist.isNotBlank()) {
-                    0.75 * titleScore + 0.25 * Similarity.textSimilarity(query.artist, match.artist)
-                } else {
-                    titleScore
-                }
-                match.copy(score = combined)
-            },
-        )
+        return sort(matches.map { it.copy(score = score(query, it)) })
     }
 
     private fun sort(matches: List<MetadataMatch>): List<MetadataMatch> = matches.sortedWith(
