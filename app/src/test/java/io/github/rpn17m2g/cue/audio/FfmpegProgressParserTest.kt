@@ -1,5 +1,6 @@
 package io.github.rpn17m2g.cue.audio
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -186,6 +187,29 @@ class FfmpegProgressParserTest {
 
         assertNull(state.fatalError)
         assertEquals(listOf(line), state.lastErrorLines)
+    }
+
+    @Test
+    fun `error while decoding with a zero exit code is not fatal`() = runBlocking {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
+        val runner = FakeFfmpegRunner(exitCode = 0, lines = listOf("Error while decoding stream #0:0"))
+
+        val exitCode = runner.run(emptyList()) { parser.update(it) }
+
+        assertEquals(0, exitCode)
+        assertNull(parser.state.fatalError)
+        assertEquals(1, parser.state.lastErrorLines.size)
+    }
+
+    @Test
+    fun `conversion failed with a non-zero exit code is fatal`() = runBlocking {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
+        val runner = FakeFfmpegRunner(exitCode = 1, lines = listOf("Conversion failed!"))
+
+        val exitCode = runner.run(emptyList()) { parser.update(it) }
+
+        assertEquals(1, exitCode)
+        assertEquals("Conversion failed!", parser.state.fatalError)
     }
 
     @Test
