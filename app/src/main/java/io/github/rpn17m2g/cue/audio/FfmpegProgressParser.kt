@@ -1,5 +1,11 @@
 package io.github.rpn17m2g.cue.audio
 
+/**
+ * Incremental parser for FFmpeg stderr. Progress is monotonic, but failure is
+ * authoritative from the process exit code: FFmpeg can print error-looking lines
+ * during a successful conversion, so [State.fatalError] only latches a small set
+ * of unambiguous messages while [State.lastErrorLines] keeps diagnostics.
+ */
 class FfmpegProgressParser(
     private val totalDurationMs: Long? = null,
 ) {
@@ -9,6 +15,7 @@ class FfmpegProgressParser(
         val progress: Float = 0f,
         val isComplete: Boolean = false,
         val fatalError: String? = null,
+        val lastErrorLines: List<String> = emptyList(),
     )
 
     var state: State = State()
@@ -27,6 +34,9 @@ class FfmpegProgressParser(
     fun progress(totalDurationMs: Long?): Float = fraction(state.positionMs, totalDurationMs)
 
     private fun consume(line: String) {
+        if (isDiagnostic(line)) {
+            state = state.copy(lastErrorLines = (state.lastErrorLines + line).takeLast(MAX_DIAGNOSTICS))
+        }
         if (state.fatalError == null && isFatal(line)) {
             state = state.copy(fatalError = line)
         }
@@ -53,16 +63,24 @@ class FfmpegProgressParser(
 
     private fun parsePosition(line: String): Long? {
         timePattern.find(line)?.let { match ->
-            FfmpegTime.parseClock(match.groupValues[1])?.let { return it }
+            val clock = match.groupValues[1]
+            if (!clock.startsWith("-")) {
+                FfmpegTime.parseClock(clock)?.let { return it }
+            }
         }
         outTimeMsPattern.find(line)?.let { match ->
-            match.groupValues[1].toLongOrNull()?.let { return it }
+            match.groupValues[1].toLongOrNull()?.let { return nonNegativeMicrosToMillis(it) }
         }
         outTimeUsPattern.find(line)?.let { match ->
-            match.groupValues[1].toLongOrNull()?.let { return it / 1_000 }
+            match.groupValues[1].toLongOrNull()?.let { return nonNegativeMicrosToMillis(it) }
         }
         return null
     }
+
+    private fun nonNegativeMicrosToMillis(microseconds: Long): Long? =
+        if (microseconds < 0) null else microseconds / 1_000
+
+    private fun isDiagnostic(line: String): Boolean = diagnosticPrefixes.any { line.startsWith(it) }
 
     private fun isFatal(line: String): Boolean = fatalPrefixes.any { line.startsWith(it) }
 
@@ -72,10 +90,19 @@ class FfmpegProgressParser(
     }
 
     private companion object {
-        val timePattern = Regex("""(?:^|[\s;])time=(\d+:\d{1,2}:\d{1,2}(?:\.\d+)?)""")
+        const val MAX_DIAGNOSTICS = 20
+
+        val timePattern = Regex("""(?:^|[\s;])time=(-?\d+:\d{1,2}:\d{1,2}(?:\.\d+)?)""")
         val outTimeMsPattern = Regex("""(?:^|[\s;])out_time_ms=(-?\d+)""")
         val outTimeUsPattern = Regex("""(?:^|[\s;])out_time_us=(-?\d+)""")
         val endPattern = Regex("""(?:^|[\s;])progress=end(?:$|[\s;])""")
-        val fatalPrefixes = listOf("Error", "Invalid data", "No such file", "Could not", "Conversion failed")
+
+        val diagnosticPrefixes = listOf("Error", "Invalid data", "No such file", "Could not", "Conversion failed")
+        val fatalPrefixes = listOf(
+            "Conversion failed!",
+            "Error opening input",
+            "Invalid data found when processing input",
+            "No such file or directory",
+        )
     }
 }

@@ -18,13 +18,14 @@ class FfmpegProgressParserTest {
         assertEquals(0.5f, state.progress, 0.0001f)
         assertFalse(state.isComplete)
         assertNull(state.fatalError)
+        assertTrue(state.lastErrorLines.isEmpty())
     }
 
     @Test
-    fun `parses out_time_ms and treats it as milliseconds`() {
+    fun `parses out_time_ms as microseconds like real ffmpeg progress output`() {
         val parser = FfmpegProgressParser(totalDurationMs = 10_000)
 
-        val state = parser.update("out_time_ms=2500")
+        val state = parser.update("out_time_ms=2500000")
 
         assertEquals(2_500L, state.positionMs)
         assertEquals(0.25f, state.progress, 0.0001f)
@@ -43,7 +44,7 @@ class FfmpegProgressParserTest {
     fun `prefers the clock form when a line carries several timestamps`() {
         val parser = FfmpegProgressParser(totalDurationMs = 10_000)
 
-        val state = parser.update("out_time_ms=9000 time=00:00:02.00")
+        val state = parser.update("out_time_ms=9000000 time=00:00:02.00")
 
         assertEquals(2_000L, state.positionMs)
     }
@@ -105,6 +106,7 @@ class FfmpegProgressParserTest {
 
         parser.update("time=not-a-clock")
         parser.update("Duration: 00:00:42.00")
+        parser.update("Duration: N/A, start: 0.000000, bitrate: N/A")
         parser.update("size=N/A time=N/A bitrate=N/A")
         parser.update("")
         val state = parser.update("frame= 7 fps=0.0 q=0.0")
@@ -121,6 +123,22 @@ class FfmpegProgressParserTest {
         assertEquals(500L, parser.update("time=00:00:00.5").positionMs)
         assertEquals(1_230L, parser.update("time=00:00:01.23").positionMs)
         assertEquals(2_456L, parser.update("time=00:00:02.456").positionMs)
+    }
+
+    @Test
+    fun `ignores negative timestamps that ffmpeg reports before the stream starts`() {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
+
+        val negative = parser.update(
+            "frame= 120 fps= 30 q=-1.0 size= 512kB time=-577014:32:22.77 bitrate=N/A speed=N/A",
+        )
+
+        assertNull(negative.positionMs)
+        assertEquals(0.0f, negative.progress, 0.0001f)
+
+        val recovered = parser.update("time=00:00:02.00")
+        assertEquals(2_000L, recovered.positionMs)
+        assertEquals(0.2f, recovered.progress, 0.0001f)
     }
 
     @Test
@@ -146,18 +164,47 @@ class FfmpegProgressParserTest {
     }
 
     @Test
-    fun `detects every fatal error prefix`() {
+    fun `latches only authoritative fatal lines`() {
         listOf(
+            "Conversion failed!",
             "Error opening input: No such file or directory",
             "Invalid data found when processing input",
             "No such file or directory",
-            "Could not find codec parameters",
-            "Conversion failed!",
         ).forEach { line ->
             val state = FfmpegProgressParser(totalDurationMs = 10_000).update(line)
 
             assertEquals(line, state.fatalError)
         }
+    }
+
+    @Test
+    fun `error while decoding is a diagnostic only because the exit code decides failure`() {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
+        val line = "Error while decoding stream #0:0: Invalid data found when processing input"
+
+        val state = parser.update(line)
+
+        assertNull(state.fatalError)
+        assertEquals(listOf(line), state.lastErrorLines)
+    }
+
+    @Test
+    fun `could not find codec parameters is a diagnostic rather than a fatal line`() {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
+
+        val state = parser.update("Could not find codec parameters for stream 0")
+
+        assertNull(state.fatalError)
+        assertEquals(1, state.lastErrorLines.size)
+    }
+
+    @Test
+    fun `does not treat ordinary error words as fatal`() {
+        val state = FfmpegProgressParser(totalDurationMs = 10_000)
+            .update("frame=10 error concealment applied while decoding")
+
+        assertNull(state.fatalError)
+        assertTrue(state.lastErrorLines.isEmpty())
     }
 
     @Test
@@ -171,11 +218,15 @@ class FfmpegProgressParserTest {
     }
 
     @Test
-    fun `does not treat ordinary error words as fatal`() {
-        val state = FfmpegProgressParser(totalDurationMs = 10_000)
-            .update("frame=10 error concealment applied while decoding")
+    fun `keeps only the most recent diagnostics`() {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
 
-        assertNull(state.fatalError)
+        repeat(25) { parser.update("Error number $it while decoding") }
+
+        val errors = parser.state.lastErrorLines
+        assertEquals(20, errors.size)
+        assertEquals("Error number 5 while decoding", errors.first())
+        assertEquals("Error number 24 while decoding", errors.last())
     }
 
     @Test
