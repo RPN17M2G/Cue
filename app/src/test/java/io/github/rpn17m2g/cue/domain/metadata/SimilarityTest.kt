@@ -15,6 +15,11 @@ class SimilarityTest {
     }
 
     @Test
+    fun `normalize keeps hebrew letters and removes niqqud`() {
+        assertEquals("שלום עולם", Similarity.normalize("שָׁלוֹם עוֹלָם"))
+    }
+
+    @Test
     fun `levenshtein distance counts edits`() {
         assertEquals(3, Similarity.levenshteinDistance("kitten", "sitting"))
     }

@@ -78,6 +78,13 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `domain urls and formatted numbers are filtered`() {
+        val frames = listOf(listOf("music.youtube.com", "1,234"))
+
+        assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
+    }
+
+    @Test
     fun `custom noise phrases are filtered`() {
         val frames = listOf(listOf("My Custom Junk", "Real Song"))
 

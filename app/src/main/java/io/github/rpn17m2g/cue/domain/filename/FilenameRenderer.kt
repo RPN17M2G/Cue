@@ -31,6 +31,12 @@ object FilenameRenderer {
         return sanitize(deduplicated.trim(::isSeparator))
     }
 
+    /**
+     * Makes [value] safe for FAT, exFAT, and Android storage: illegal and
+     * control characters become spaces, whitespace is collapsed, edge dots and
+     * spaces are removed, and the result is capped at [MAX_LENGTH]. An empty
+     * result becomes [FALLBACK_NAME].
+     */
     fun sanitize(value: String): String {
         val replaced = ILLEGAL.replace(value, " ")
         val collapsed = replaced.replace(WHITESPACE, " ").trim { it == ' ' || it == '.' || it == '\u00A0' }

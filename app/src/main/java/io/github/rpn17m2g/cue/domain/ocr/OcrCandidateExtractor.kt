@@ -29,8 +29,10 @@ object OcrCandidateExtractor {
     private val CLOCK = Regex("^\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s?[ap]m)?$", RegexOption.IGNORE_CASE)
     private val PERCENT = Regex("^\\d{1,3}\\s*%$")
     private val BATTERY = Regex(".*\\b(?:battery|charging)\\b.*\\d{1,3}\\s*%.*", RegexOption.IGNORE_CASE)
-    private val URL = Regex("(?i)\\b(?:https?://|www\\.)\\S+")
-    private val NUMERIC = Regex("^\\p{Nd}+$")
+    private val URL = Regex(
+        "(?i)\\b(?:https?://|www\\.)\\S+|^(?:[\\w-]+\\.)+[a-z]{2,}(?:/\\S*)?$",
+    )
+    private val NUMERIC = Regex("^[\\p{Nd}][\\p{Nd}\\s.,]*$")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
 
