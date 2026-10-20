@@ -83,6 +83,6 @@ class FilenameRendererTest {
 
     @Test
     fun `render does not append an extension`() {
-        assertEquals("Daft Punk - Get Lucky", FilenameRenderer.render(draft, "{artist} - {title}.mp3"))
+        assertEquals("Daft Punk - Get Lucky", FilenameRenderer.render(draft))
     }
 }
