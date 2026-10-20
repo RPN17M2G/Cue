@@ -37,6 +37,95 @@ class MetadataMergerTest {
     }
 
     @Test
+    fun `high confidence match overrides ocr fields`() {
+        val base = TagDraft(title = "Get Lucky", artist = "Daft Punkk")
+        val match = MetadataMatch(
+            title = "Get Lucky!",
+            artist = "Daft Punk",
+            album = "Random Access Memories",
+            source = IdentificationSource.ITUNES,
+            score = 0.9,
+        )
+
+        val result = MetadataMerger.merge(base, listOf(match), baseSource = IdentificationSource.OCR_LATIN)
+
+        assertEquals("Get Lucky!", result.tag.title)
+        assertEquals("Daft Punk", result.tag.artist)
+        assertEquals(IdentificationSource.ITUNES, result.sources[TagField.TITLE])
+        assertEquals(IdentificationSource.ITUNES, result.sources[TagField.ARTIST])
+    }
+
+    @Test
+    fun `high confidence match never overrides manual fields`() {
+        val base = TagDraft(title = "Get Lucky", artist = "Daft Punk")
+        val match = MetadataMatch(
+            title = "Get Lucky!",
+            artist = "Daft Punk!",
+            source = IdentificationSource.ITUNES,
+            score = 1.0,
+        )
+
+        val result = MetadataMerger.merge(
+            base = base,
+            matches = listOf(match),
+            baseSource = IdentificationSource.OCR_LATIN,
+            baseFieldSources = mapOf(
+                TagField.TITLE to IdentificationSource.MANUAL,
+                TagField.ARTIST to IdentificationSource.MANUAL,
+            ),
+        )
+
+        assertEquals("Get Lucky", result.tag.title)
+        assertEquals("Daft Punk", result.tag.artist)
+        assertEquals(IdentificationSource.MANUAL, result.sources[TagField.TITLE])
+        assertEquals(IdentificationSource.MANUAL, result.sources[TagField.ARTIST])
+    }
+
+    @Test
+    fun `high confidence match overrides ocr fields but not embedded ones`() {
+        val base = TagDraft(title = "Get Lucky", artist = "Daft Punk")
+        val match = MetadataMatch(
+            title = "Get Lucky!",
+            artist = "Daft Punk!",
+            source = IdentificationSource.ITUNES,
+            score = 1.0,
+        )
+
+        val result = MetadataMerger.merge(
+            base = base,
+            matches = listOf(match),
+            baseSource = IdentificationSource.OCR_LATIN,
+            baseFieldSources = mapOf(TagField.TITLE to IdentificationSource.EMBEDDED_TAGS),
+        )
+
+        assertEquals("Get Lucky", result.tag.title)
+        assertEquals("Daft Punk!", result.tag.artist)
+        assertEquals(IdentificationSource.EMBEDDED_TAGS, result.sources[TagField.TITLE])
+        assertEquals(IdentificationSource.ITUNES, result.sources[TagField.ARTIST])
+    }
+
+    @Test
+    fun `low confidence match keeps ocr values and still fills blanks`() {
+        val base = TagDraft(title = "Get Lucky", artist = "Daft Punk")
+        val match = MetadataMatch(
+            title = "Completely Different",
+            artist = "Nobody Unknown",
+            album = "Random Access Memories",
+            source = IdentificationSource.ITUNES,
+            score = 0.9,
+        )
+
+        val result = MetadataMerger.merge(base, listOf(match), baseSource = IdentificationSource.OCR_LATIN)
+
+        assertEquals("Get Lucky", result.tag.title)
+        assertEquals("Daft Punk", result.tag.artist)
+        assertEquals("Random Access Memories", result.tag.album)
+        assertEquals(IdentificationSource.OCR_LATIN, result.sources[TagField.TITLE])
+        assertEquals(IdentificationSource.OCR_LATIN, result.sources[TagField.ARTIST])
+        assertEquals(IdentificationSource.ITUNES, result.sources[TagField.ALBUM])
+    }
+
+    @Test
     fun `highest scoring match fills blanks`() {
         val base = TagDraft(title = "Get Lucky")
         val matches = listOf(

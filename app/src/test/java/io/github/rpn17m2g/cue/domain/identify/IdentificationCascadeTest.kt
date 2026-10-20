@@ -40,10 +40,19 @@ class IdentificationCascadeTest {
             year = "2013",
             artwork = artwork,
         )
-        val metadata = RecordingMetadataResolver(listOf(cachedMatch))
-        val fingerprint = RecordingFingerprintResolver(listOf(cachedMatch))
+        var lookupCalls = 0
+        var fingerprintCalls = 0
 
-        val outcome = cascade(metadata, fingerprint).identify(
+        val outcome = cascade(
+            lookup = {
+                lookupCalls += 1
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                fingerprintCalls += 1
+                listOf(cachedMatch)
+            },
+        ).identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = embedded,
             networkEnabled = true,
@@ -57,34 +66,66 @@ class IdentificationCascadeTest {
         assertFalse(outcome.usedFingerprint)
         assertEquals(listOf("raw line"), outcome.rawOcrLines)
         assertEquals(IdentificationSource.EMBEDDED_TAGS, outcome.sources[TagField.ARTWORK])
-        assertEquals(0, metadata.calls)
-        assertEquals(0, fingerprint.calls)
+        assertEquals(0, lookupCalls)
+        assertEquals(0, fingerprintCalls)
     }
 
     @Test
-    fun `ocr seeds the resolver and blanks are filled from the best match`() = runTest {
-        val metadata = RecordingMetadataResolver(listOf(cachedMatch))
-        val fingerprint = RecordingFingerprintResolver(listOf(cachedMatch))
+    fun `ocr seeds the lookup and the high confidence match fills the gaps`() = runTest {
+        var lastSeed: LookupSeed? = null
+        var fingerprintCalls = 0
 
-        val outcome = cascade(metadata, fingerprint).identify(
+        val outcome = cascade(
+            lookup = { seed ->
+                lastSeed = seed
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                fingerprintCalls += 1
+                listOf(cachedMatch)
+            },
+        ).identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = null,
             networkEnabled = true,
             fingerprintEnabled = true,
             acoustIdConfigured = true,
+            durationMs = 12_345,
         )
 
         assertEquals("Get Lucky", outcome.tag.title)
         assertEquals("Daft Punk", outcome.tag.artist)
         assertEquals("Random Access Memories", outcome.tag.album)
-        assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.TITLE])
-        assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.ARTIST])
+        assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.TITLE])
+        assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.ARTIST])
         assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.ALBUM])
         assertFalse(outcome.usedFingerprint)
         assertFalse(outcome.usedEmbeddedTags)
-        assertEquals("Get Lucky", metadata.lastQuery?.title)
-        assertEquals("Daft Punk", metadata.lastQuery?.artist)
-        assertEquals(0, fingerprint.calls)
+        assertEquals("Get Lucky", lastSeed?.title)
+        assertEquals("Daft Punk", lastSeed?.artist)
+        assertEquals(12_345L, lastSeed?.durationMs)
+        assertEquals(0, fingerprintCalls)
+    }
+
+    @Test
+    fun `the highest scoring ocr candidate seeds the lookup`() = runTest {
+        var lastSeed: LookupSeed? = null
+        val candidates = listOf(
+            OcrCandidate(title = "Wrong Title", artist = "Wrong Artist", score = 0.2),
+            OcrCandidate(title = "Get Lucky", artist = "Daft Punk", score = 0.9),
+        )
+
+        val outcome = cascade(lookup = { seed -> lastSeed = seed; emptyList() }).identify(
+            ocrCandidates = candidates,
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+        )
+
+        assertEquals("Get Lucky", lastSeed?.title)
+        assertEquals("Daft Punk", lastSeed?.artist)
+        assertEquals("Get Lucky", outcome.tag.title)
     }
 
     @Test
@@ -93,9 +134,8 @@ class IdentificationCascadeTest {
             title = "Get Lucky (Remix)",
             source = IdentificationSource.MUSICBRAINZ,
         )
-        val metadata = RecordingMetadataResolver(listOf(cachedMatch, alternative))
 
-        val outcome = cascade(metadata, RecordingFingerprintResolver()).identify(
+        val outcome = cascade(lookup = { listOf(cachedMatch, alternative) }).identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = null,
             networkEnabled = true,
@@ -107,11 +147,20 @@ class IdentificationCascadeTest {
     }
 
     @Test
-    fun `network disabled keeps ocr tags without calling resolvers`() = runTest {
-        val metadata = RecordingMetadataResolver(listOf(cachedMatch))
-        val fingerprint = RecordingFingerprintResolver(listOf(cachedMatch))
+    fun `network disabled keeps ocr tags without calling lookups`() = runTest {
+        var lookupCalls = 0
+        var fingerprintCalls = 0
 
-        val outcome = cascade(metadata, fingerprint).identify(
+        val outcome = cascade(
+            lookup = {
+                lookupCalls += 1
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                fingerprintCalls += 1
+                listOf(cachedMatch)
+            },
+        ).identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = null,
             networkEnabled = false,
@@ -123,34 +172,45 @@ class IdentificationCascadeTest {
         assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.TITLE])
         assertTrue(outcome.alternatives.isEmpty())
         assertFalse(outcome.usedFingerprint)
-        assertEquals(0, metadata.calls)
-        assertEquals(0, fingerprint.calls)
+        assertEquals(0, lookupCalls)
+        assertEquals(0, fingerprintCalls)
     }
 
     @Test
     fun `fingerprint fills the gaps when the resolver has no match`() = runTest {
-        val fingerprint = RecordingFingerprintResolver(
-            listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT)),
-        )
+        var fingerprintSeed: FingerprintSeed? = null
 
-        val outcome = cascade(RecordingMetadataResolver(), fingerprint).identify(
+        val outcome = cascade(
+            fingerprintLookup = { seed ->
+                fingerprintSeed = seed
+                listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT))
+            },
+        ).identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = null,
             networkEnabled = true,
             fingerprintEnabled = true,
             acoustIdConfigured = true,
+            durationMs = 45_000,
         )
 
         assertTrue(outcome.usedFingerprint)
         assertEquals("Random Access Memories", outcome.tag.album)
         assertEquals(IdentificationSource.FINGERPRINT, outcome.sources[TagField.ALBUM])
-        assertEquals(1, fingerprint.calls)
+        assertEquals("Get Lucky", fingerprintSeed?.title)
+        assertEquals("Daft Punk", fingerprintSeed?.artist)
+        assertEquals(45_000L, fingerprintSeed?.durationMs)
     }
 
     @Test
     fun `fingerprint is skipped when disabled or unconfigured`() = runTest {
-        val fingerprint = RecordingFingerprintResolver(listOf(cachedMatch))
-        val cascade = cascade(RecordingMetadataResolver(), fingerprint)
+        var fingerprintCalls = 0
+        val cascade = cascade(
+            fingerprintLookup = {
+                fingerprintCalls += 1
+                listOf(cachedMatch)
+            },
+        )
 
         val disabled = cascade.identify(
             ocrCandidates = listOf(getLucky),
@@ -169,12 +229,64 @@ class IdentificationCascadeTest {
 
         assertFalse(disabled.usedFingerprint)
         assertFalse(unconfigured.usedFingerprint)
-        assertEquals(0, fingerprint.calls)
+        assertEquals(0, fingerprintCalls)
+    }
+
+    @Test
+    fun `resolver failure falls through to the fingerprint`() = runTest {
+        val outcome = cascade(
+            lookup = { throw IllegalStateException("network down") },
+            fingerprintLookup = { listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT)) },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+        )
+
+        assertTrue(outcome.usedFingerprint)
+        assertEquals("Random Access Memories", outcome.tag.album)
+    }
+
+    @Test
+    fun `resolver failure returns the manual fallback`() = runTest {
+        val outcome = cascade(
+            lookup = { throw IllegalStateException("network down") },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+        )
+
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Daft Punk", outcome.tag.artist)
+        assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.TITLE])
+        assertFalse(outcome.usedFingerprint)
+    }
+
+    @Test
+    fun `fingerprint failure returns the manual fallback`() = runTest {
+        val outcome = cascade(
+            fingerprintLookup = { throw IllegalStateException("fingerprint service down") },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+        )
+
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Daft Punk", outcome.tag.artist)
+        assertFalse(outcome.usedFingerprint)
     }
 
     @Test
     fun `manual fallback returns the best available data`() = runTest {
-        val outcome = cascade(RecordingMetadataResolver(), RecordingFingerprintResolver()).identify(
+        val outcome = cascade().identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = null,
             networkEnabled = true,
@@ -192,9 +304,14 @@ class IdentificationCascadeTest {
     @Test
     fun `partial embedded tags seed the lookup`() = runTest {
         val embedded = TagDraft(title = "Get Lucky")
-        val metadata = RecordingMetadataResolver(listOf(cachedMatch))
+        var lastSeed: LookupSeed? = null
 
-        val outcome = cascade(metadata, RecordingFingerprintResolver()).identify(
+        val outcome = cascade(
+            lookup = { seed ->
+                lastSeed = seed
+                listOf(cachedMatch)
+            },
+        ).identify(
             ocrCandidates = listOf(OcrCandidate(title = "Wrong", artist = "Wrong Artist", score = 1.0)),
             embeddedTags = embedded,
             networkEnabled = true,
@@ -207,12 +324,12 @@ class IdentificationCascadeTest {
         assertEquals(IdentificationSource.EMBEDDED_TAGS, outcome.sources[TagField.TITLE])
         assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.ARTIST])
         assertTrue(outcome.usedEmbeddedTags)
-        assertEquals("Get Lucky", metadata.lastQuery?.title)
+        assertEquals("Get Lucky", lastSeed?.title)
     }
 
     @Test
     fun `hebrew ocr is tagged as hebrew source`() = runTest {
-        val outcome = cascade(RecordingMetadataResolver(), RecordingFingerprintResolver()).identify(
+        val outcome = cascade().identify(
             ocrCandidates = listOf(OcrCandidate(title = "עולם", artist = "שלום", score = 1.0)),
             embeddedTags = null,
             networkEnabled = false,
@@ -225,11 +342,18 @@ class IdentificationCascadeTest {
     }
 
     @Test
-    fun `empty input still produces a manual fallback`() = runTest {
-        val outcome = cascade(RecordingMetadataResolver(), RecordingFingerprintResolver()).identify(
+    fun `empty input still produces a manual fallback and skips an empty lookup`() = runTest {
+        var lookupCalls = 0
+
+        val outcome = cascade(
+            lookup = {
+                lookupCalls += 1
+                listOf(cachedMatch)
+            },
+        ).identify(
             ocrCandidates = emptyList(),
             embeddedTags = null,
-            networkEnabled = false,
+            networkEnabled = true,
             fingerprintEnabled = false,
             acoustIdConfigured = false,
         )
@@ -237,34 +361,11 @@ class IdentificationCascadeTest {
         assertEquals(TagDraft(), outcome.tag)
         assertTrue(outcome.sources.isEmpty())
         assertNull(outcome.sources[TagField.TITLE])
+        assertEquals(0, lookupCalls)
     }
 
     private fun cascade(
-        metadata: MetadataResolver,
-        fingerprint: FingerprintResolver,
-    ): IdentificationCascade = IdentificationCascade(metadata, fingerprint)
-
-    private class RecordingMetadataResolver(
-        private val results: List<MetadataMatch> = emptyList(),
-    ) : MetadataResolver {
-        var calls: Int = 0
-        var lastQuery: MetadataQuery? = null
-
-        override suspend fun resolve(query: MetadataQuery): List<MetadataMatch> {
-            calls += 1
-            lastQuery = query
-            return results
-        }
-    }
-
-    private class RecordingFingerprintResolver(
-        private val results: List<MetadataMatch> = emptyList(),
-    ) : FingerprintResolver {
-        var calls: Int = 0
-
-        override suspend fun identify(): List<MetadataMatch> {
-            calls += 1
-            return results
-        }
-    }
+        lookup: suspend (LookupSeed) -> List<MetadataMatch> = { emptyList() },
+        fingerprintLookup: suspend (FingerprintSeed) -> List<MetadataMatch> = { emptyList() },
+    ): IdentificationCascade = IdentificationCascade(lookup, fingerprintLookup)
 }

@@ -58,7 +58,6 @@ class OcrCandidateExtractorTest {
         val frames = listOf(
             listOf(
                 "12:34",
-                "85%",
                 "Battery 85%",
                 "Up next",
                 "Shuffle",
@@ -67,8 +66,15 @@ class OcrCandidateExtractorTest {
                 "Search",
                 "Explore",
                 "Sign in",
+                "Add to playlist",
+                "Share",
+                "Download",
+                "Like",
+                "More",
+                "Play next",
+                "Save to library",
                 "https://example.com/watch?v=1",
-                "123456",
+                "www.example.com",
                 "A",
                 "x".repeat(121),
             ),
@@ -78,8 +84,17 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
-    fun `domain urls and formatted numbers are filtered`() {
-        val frames = listOf(listOf("music.youtube.com", "1,234"))
+    fun `numeric and dotted titles are not mistaken for noise`() {
+        val titles = listOf("1999", "100%", "Mr.Kitty", "A.B.C.")
+
+        val candidates = OcrCandidateExtractor.extract(listOf(titles))
+
+        assertEquals(titles.toSet(), candidates.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `symbol only lines are filtered out`() {
+        val frames = listOf(listOf("…", "▸", "—", "… …", "▸ ▸", "——"))
 
         assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
     }

@@ -71,6 +71,14 @@ class FilenameRendererTest {
     }
 
     @Test
+    fun `sanitize truncates by code point without splitting an emoji`() {
+        val sanitized = FilenameRenderer.sanitize("😀".repeat(130))
+
+        assertEquals(120, sanitized.codePointCount(0, sanitized.length))
+        assertEquals("😀".repeat(120), sanitized)
+    }
+
+    @Test
     fun `sanitize never returns an empty name`() {
         assertEquals("Unknown track", FilenameRenderer.sanitize("<>:\"/\\|?*"))
         assertEquals("Unknown track", FilenameRenderer.sanitize("   "))
