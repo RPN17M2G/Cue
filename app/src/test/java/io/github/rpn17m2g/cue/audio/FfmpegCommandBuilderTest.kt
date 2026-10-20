@@ -4,6 +4,7 @@ import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TrimRange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,7 +19,7 @@ class FfmpegCommandBuilderTest {
 
         assertEquals(
             listOf(
-                "-hide_banner", "-nostdin", "-y",
+                "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:2",
                 "-i", input,
                 "-vn", "-map", "0:a:0", "-ac", "2", "-ar", "44100",
                 "-c:a", "libmp3lame", "-q:a", "0",
@@ -38,7 +39,7 @@ class FfmpegCommandBuilderTest {
 
         assertEquals(
             listOf(
-                "-hide_banner", "-nostdin", "-y",
+                "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:2",
                 "-ss", "12.345",
                 "-i", input,
                 "-t", "30.000",
@@ -49,6 +50,14 @@ class FfmpegCommandBuilderTest {
             args,
         )
         assertTrue(args.indexOf("-ss") < args.indexOf("-i"))
+    }
+
+    @Test
+    fun `convertToMp3 emits live progress on stderr`() {
+        val args = FfmpegCommandBuilder.convertToMp3(input, output, trim = null, QualityPreset.V0)
+
+        assertEquals(listOf("-nostats", "-progress", "pipe:2"), args.subList(3, 6))
+        assertFalse(args.contains("-stats"))
     }
 
     @Test
@@ -84,17 +93,10 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
-    fun `convertToMp3 does not pass cover art because tags are written later`() {
-        val withoutCover = FfmpegCommandBuilder.convertToMp3(input, output, null, QualityPreset.V0)
-        val withCover = FfmpegCommandBuilder.convertToMp3(
-            input,
-            output,
-            null,
-            QualityPreset.V0,
-            embedCoverPath = "C:\\covers\\cover.jpg",
-        )
-
-        assertEquals(withoutCover, withCover)
+    fun `convertToMp3 refuses to overwrite the input`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FfmpegCommandBuilder.convertToMp3(input, input, trim = null, QualityPreset.V0)
+        }
     }
 
     @Test
@@ -109,13 +111,13 @@ class FfmpegCommandBuilderTest {
 
     @Test
     fun `fingerprintCommand uses a twenty second slice thirty seconds long`() {
-        val args = FfmpegCommandBuilder.fingerprintCommand(input)
+        val args = FfmpegCommandBuilder.fingerprintCommand(input, outputPath = "fingerprint.tmp")
 
         assertEquals(
             listOf(
                 "-ss", "20.000", "-t", "30.000",
                 "-i", input,
-                "-vn", "-f", "chromaprint", "-",
+                "-vn", "-f", "chromaprint", "fingerprint.tmp",
             ),
             args,
         )
@@ -123,13 +125,17 @@ class FfmpegCommandBuilderTest {
 
     @Test
     fun `fingerprintCommand samples from the start without a duration for clips shorter than fifty seconds`() {
-        val args = FfmpegCommandBuilder.fingerprintCommand(input, clipDurationMs = 49_999)
+        val args = FfmpegCommandBuilder.fingerprintCommand(
+            input,
+            outputPath = "fingerprint.tmp",
+            clipDurationMs = 49_999,
+        )
 
         assertEquals(
             listOf(
                 "-ss", "0.000",
                 "-i", input,
-                "-vn", "-f", "chromaprint", "-",
+                "-vn", "-f", "chromaprint", "fingerprint.tmp",
             ),
             args,
         )
@@ -137,7 +143,11 @@ class FfmpegCommandBuilderTest {
 
     @Test
     fun `fingerprintCommand treats a fifty second clip as long enough for the standard slice`() {
-        val args = FfmpegCommandBuilder.fingerprintCommand(input, clipDurationMs = 50_000)
+        val args = FfmpegCommandBuilder.fingerprintCommand(
+            input,
+            outputPath = "fingerprint.tmp",
+            clipDurationMs = 50_000,
+        )
 
         assertTrue(args.containsAll(listOf("-ss", "20.000", "-t", "30.000")))
     }
@@ -146,7 +156,7 @@ class FfmpegCommandBuilderTest {
     fun `fingerprintCommand honours explicit slice bounds and output path`() {
         val args = FfmpegCommandBuilder.fingerprintCommand(
             inputPath = input,
-            outputPath = "fingerprint.txt",
+            outputPath = "fingerprint.tmp",
             clipDurationMs = 120_000,
             sliceStartMs = 5_000,
             sliceDurationMs = 10_500,
@@ -156,10 +166,27 @@ class FfmpegCommandBuilderTest {
             listOf(
                 "-ss", "5.000", "-t", "10.500",
                 "-i", input,
-                "-vn", "-f", "chromaprint", "fingerprint.txt",
+                "-vn", "-f", "chromaprint", "fingerprint.tmp",
             ),
             args,
         )
+    }
+
+    @Test
+    fun `fingerprintCommand requires a real output file rather than stdout`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FfmpegCommandBuilder.fingerprintCommand(input, outputPath = "-")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FfmpegCommandBuilder.fingerprintCommand(input, outputPath = " ")
+        }
+    }
+
+    @Test
+    fun `fingerprintCommand refuses to overwrite the input`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FfmpegCommandBuilder.fingerprintCommand(input, outputPath = input)
+        }
     }
 
     @Test
@@ -168,5 +195,16 @@ class FfmpegCommandBuilderTest {
             listOf("-hide_banner", "-nostdin", "-i", input),
             FfmpegCommandBuilder.probeCommand(input),
         )
+    }
+
+    @Test
+    fun `probe success expects exit code one because ffmpeg requires an output`() {
+        val valid = ProbeResult(durationMs = 10_000, hasAudio = true, hasVideo = true, audioCodec = "aac")
+        val empty = ProbeResult(durationMs = null, hasAudio = false, hasVideo = false, audioCodec = null)
+
+        assertEquals(1, FfmpegCommandBuilder.PROBE_EXPECTED_EXIT)
+        assertTrue(FfmpegCommandBuilder.isProbeSuccess(FfmpegCommandBuilder.PROBE_EXPECTED_EXIT, valid))
+        assertFalse(FfmpegCommandBuilder.isProbeSuccess(0, valid))
+        assertFalse(FfmpegCommandBuilder.isProbeSuccess(FfmpegCommandBuilder.PROBE_EXPECTED_EXIT, empty))
     }
 }
