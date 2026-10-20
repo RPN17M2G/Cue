@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cue</string>
+
+    <string name="home_title">Cue</string>
+    <string name="home_subtitle">הפיכת הקלטת מסך לקובץ MP3 עם תגיות</string>
+    <string name="home_add_file">הוספת קובץ</string>
+    <string name="home_settings">הגדרות</string>
+
+    <string name="review_title">בדיקת הרצועה</string>
+    <string name="review_save">עיבוד</string>
+    <string name="review_field_title">כותרת</string>
+    <string name="review_field_artist">אמן</string>
+    <string name="review_field_album">אלבום</string>
+    <string name="review_field_album_artist">אמן האלבום</string>
+    <string name="review_field_year">שנה</string>
+    <string name="review_field_genre">ז׳אנר</string>
+    <string name="review_field_track">מספר רצועה</string>
+    <string name="review_field_artwork">עטיפה</string>
+    <string name="review_search_online">חיפוש מקוון</string>
+    <string name="review_other_matches">התאמות נוספות</string>
+    <string name="review_quality">איכות</string>
+    <string name="review_estimated_size">גודל משוער</string>
+
+    <string name="processing_title">מעבד</string>
+    <string name="processing_stage_convert">המרה</string>
+    <string name="processing_stage_tag">כתיבת תגיות</string>
+    <string name="processing_stage_save">שמירה</string>
+    <string name="processing_cancel">ביטול</string>
+
+    <string name="result_title">נשמר</string>
+    <string name="result_play">נגינה</string>
+    <string name="result_share">שיתוף</string>
+    <string name="result_open_with">פתיחה באמצעות</string>
+    <string name="result_show_folder">הצגה בתיקייה</string>
+    <string name="result_edit_tags">עריכת תגיות</string>
+    <string name="result_process_another">עיבוד קובץ נוסף</string>
+
+    <string name="error_title">משהו השתבש</string>
+    <string name="error_retry">ניסיון חוזר</string>
+    <string name="error_back">חזרה</string>
+    <string name="error_details">פרטים טכניים</string>
+
+    <string name="settings_title">הגדרות</string>
+    <string name="settings_language">שפה</string>
+    <string name="settings_theme">ערכת נושא</string>
+    <string name="settings_scan_window">חלון סריקת OCR (שניות)</string>
+    <string name="settings_quality">איכות ברירת מחדל</string>
+    <string name="settings_output_folder">תיקיית פלט</string>
+    <string name="settings_network">חיפושים מקוונים</string>
+    <string name="settings_fingerprint">זיהוי לפי טביעת אצבע</string>
+    <string name="settings_acoustid_key">מפתח API של AcoustID</string>
+    <string name="settings_advanced">מתקדם</string>
+    <string name="settings_filename_template">תבנית שם קובץ</string>
+    <string name="settings_ocr_interval">מרווח פריימים ל־OCR (מילישניות)</string>
+    <string name="settings_http_timeout">פסק זמן HTTP (מילישניות)</string>
+    <string name="settings_http_retries">ניסיונות חוזרים ב־HTTP</string>
+
+    <string name="quality_v0">V0 (גבוהה)</string>
+    <string name="quality_v2">V2 (רגילה)</string>
+    <string name="quality_cbr256">CBR 256</string>
+    <string name="quality_cbr192">CBR 192</string>
+</resources>

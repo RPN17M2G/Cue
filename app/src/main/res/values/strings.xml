@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cue</string>
+
+    <string name="home_title">Cue</string>
+    <string name="home_subtitle">Turn a screen recording into a tagged MP3</string>
+    <string name="home_add_file">Add file</string>
+    <string name="home_settings">Settings</string>
+
+    <string name="review_title">Review track</string>
+    <string name="review_save">Process</string>
+    <string name="review_field_title">Title</string>
+    <string name="review_field_artist">Artist</string>
+    <string name="review_field_album">Album</string>
+    <string name="review_field_album_artist">Album artist</string>
+    <string name="review_field_year">Year</string>
+    <string name="review_field_genre">Genre</string>
+    <string name="review_field_track">Track number</string>
+    <string name="review_field_artwork">Artwork</string>
+    <string name="review_search_online">Look up online</string>
+    <string name="review_other_matches">Other matches</string>
+    <string name="review_quality">Quality</string>
+    <string name="review_estimated_size">Estimated size</string>
+
+    <string name="processing_title">Processing</string>
+    <string name="processing_stage_convert">Convert</string>
+    <string name="processing_stage_tag">Tag</string>
+    <string name="processing_stage_save">Save</string>
+    <string name="processing_cancel">Cancel</string>
+
+    <string name="result_title">Saved</string>
+    <string name="result_play">Play</string>
+    <string name="result_share">Share</string>
+    <string name="result_open_with">Open with</string>
+    <string name="result_show_folder">Show in folder</string>
+    <string name="result_edit_tags">Edit tags</string>
+    <string name="result_process_another">Process another</string>
+
+    <string name="error_title">Something went wrong</string>
+    <string name="error_retry">Retry</string>
+    <string name="error_back">Back</string>
+    <string name="error_details">Technical details</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_scan_window">OCR scan window (seconds)</string>
+    <string name="settings_quality">Default quality</string>
+    <string name="settings_output_folder">Output folder</string>
+    <string name="settings_network">Online lookups</string>
+    <string name="settings_fingerprint">Fingerprint matching</string>
+    <string name="settings_acoustid_key">AcoustID API key</string>
+    <string name="settings_advanced">Advanced</string>
+    <string name="settings_filename_template">Filename template</string>
+    <string name="settings_ocr_interval">OCR frame interval (ms)</string>
+    <string name="settings_http_timeout">HTTP timeout (ms)</string>
+    <string name="settings_http_retries">HTTP retries</string>
+
+    <string name="quality_v0">V0 (high)</string>
+    <string name="quality_v2">V2 (standard)</string>
+    <string name="quality_cbr256">CBR 256</string>
+    <string name="quality_cbr192">CBR 192</string>
+</resources>
