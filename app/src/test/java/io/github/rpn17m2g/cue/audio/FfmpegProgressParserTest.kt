@@ -190,26 +190,53 @@ class FfmpegProgressParserTest {
     }
 
     @Test
-    fun `error while decoding with a zero exit code is not fatal`() = runBlocking {
+    fun `outcome is successful when the exit code is zero despite decoding diagnostics`() = runBlocking {
         val parser = FfmpegProgressParser(totalDurationMs = 10_000)
-        val runner = FakeFfmpegRunner(exitCode = 0, lines = listOf("Error while decoding stream #0:0"))
+        val runner = FakeFfmpegRunner(
+            exitCode = 0,
+            lines = listOf("time=00:00:02.00", "Error while decoding stream #0:0"),
+        )
 
         val exitCode = runner.run(emptyList()) { parser.update(it) }
+        val outcome = parser.state.toOutcome(exitCode)
 
-        assertEquals(0, exitCode)
+        assertFalse(outcome.failed)
+        assertEquals(0, outcome.exitCode)
+        assertEquals(0.2f, outcome.progress, 0.0001f)
+        assertEquals(listOf("Error while decoding stream #0:0"), outcome.diagnostics)
         assertNull(parser.state.fatalError)
-        assertEquals(1, parser.state.lastErrorLines.size)
     }
 
     @Test
-    fun `conversion failed with a non-zero exit code is fatal`() = runBlocking {
+    fun `outcome fails when the exit code is non-zero`() = runBlocking {
         val parser = FfmpegProgressParser(totalDurationMs = 10_000)
         val runner = FakeFfmpegRunner(exitCode = 1, lines = listOf("Conversion failed!"))
 
         val exitCode = runner.run(emptyList()) { parser.update(it) }
+        val outcome = parser.state.toOutcome(exitCode)
 
-        assertEquals(1, exitCode)
+        assertTrue(outcome.failed)
+        assertEquals(1, outcome.exitCode)
+        assertEquals(listOf("Conversion failed!"), outcome.diagnostics)
         assertEquals("Conversion failed!", parser.state.fatalError)
+    }
+
+    @Test
+    fun `strips ffmpeg log prefixes before classifying errors`() {
+        val parser = FfmpegProgressParser(totalDurationMs = 10_000)
+
+        val diagnostic = parser.update("[ffmpeg @ 0x55d0] Error while decoding stream #0:0")
+
+        assertNull(diagnostic.fatalError)
+        assertEquals(listOf("Error while decoding stream #0:0"), diagnostic.lastErrorLines)
+
+        val fatal = parser.update("[in#0 @ 0x55d0] Conversion failed!")
+
+        assertEquals("Conversion failed!", fatal.fatalError)
+        assertEquals(
+            listOf("Error while decoding stream #0:0", "Conversion failed!"),
+            fatal.lastErrorLines,
+        )
     }
 
     @Test

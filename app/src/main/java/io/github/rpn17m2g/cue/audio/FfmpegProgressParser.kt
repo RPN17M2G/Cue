@@ -34,20 +34,22 @@ class FfmpegProgressParser(
     fun progress(totalDurationMs: Long?): Float = fraction(state.positionMs, totalDurationMs)
 
     private fun consume(line: String) {
-        if (isDiagnostic(line)) {
-            state = state.copy(lastErrorLines = (state.lastErrorLines + line).takeLast(MAX_DIAGNOSTICS))
+        val message = stripLogPrefix(line)
+
+        if (isDiagnostic(message)) {
+            state = state.copy(lastErrorLines = (state.lastErrorLines + message).takeLast(MAX_DIAGNOSTICS))
         }
-        if (state.fatalError == null && isFatal(line)) {
-            state = state.copy(fatalError = line)
+        if (state.fatalError == null && isFatal(message)) {
+            state = state.copy(fatalError = message)
         }
 
-        val reported = parsePosition(line)
+        val reported = parsePosition(message)
         if (reported != null) {
             val position = maxOf(state.positionMs ?: reported, reported).coerceAtLeast(0)
             state = state.copy(positionMs = position, progress = fraction(position, totalDurationMs))
         }
 
-        if (endPattern.containsMatchIn(line)) {
+        if (endPattern.containsMatchIn(message)) {
             val completedPosition = if (totalDurationMs != null && totalDurationMs > 0) {
                 maxOf(state.positionMs ?: 0, totalDurationMs)
             } else {
@@ -80,6 +82,8 @@ class FfmpegProgressParser(
     private fun nonNegativeMicrosToMillis(microseconds: Long): Long? =
         if (microseconds < 0) null else microseconds / 1_000
 
+    private fun stripLogPrefix(line: String): String = line.replaceFirst(logPrefixPattern, "")
+
     private fun isDiagnostic(line: String): Boolean = diagnosticPrefixes.any { line.startsWith(it) }
 
     private fun isFatal(line: String): Boolean = fatalPrefixes.any { line.startsWith(it) }
@@ -92,6 +96,7 @@ class FfmpegProgressParser(
     private companion object {
         const val MAX_DIAGNOSTICS = 20
 
+        val logPrefixPattern = Regex("""^\[[^\]]*]\s*""")
         val timePattern = Regex("""(?:^|[\s;])time=(-?\d+:\d{1,2}:\d{1,2}(?:\.\d+)?)""")
         val outTimeMsPattern = Regex("""(?:^|[\s;])out_time_ms=(-?\d+)""")
         val outTimeUsPattern = Regex("""(?:^|[\s;])out_time_us=(-?\d+)""")
