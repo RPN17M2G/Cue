@@ -24,18 +24,20 @@ object OcrCandidateExtractor {
         "Explore",
         "Sign in",
         "Add to playlist",
-        "Share",
-        "Download",
-        "Like",
-        "More",
         "Play next",
         "Save to library",
     )
 
     private val WHITESPACE = Regex("[\\s\\u00A0]+")
-    private val CLOCK = Regex("^\\d{1,2}:\\d{2}(:\\d{2})?$")
+    private val MERIDIEM = Regex("\\d{1,2}:\\d{2}(:\\d{2})?\\s*[AaPp][Mm]")
+    private val DURATION = Regex("^\\d{1,2}:\\d{2}:\\d{2}$")
+    private val BARE_CLOCK = Regex("^\\d{1,2}:\\d{2}$")
+    private val PERCENT = Regex("^\\d{1,3}%$")
     private val BATTERY = Regex(".*\\b(?:battery|charging)\\b.*\\d{1,3}%", RegexOption.IGNORE_CASE)
-    private val URL = Regex("(?i)^(?:https?://|www\\.)\\S+$")
+    private val URL = Regex("(?i)(?:https?://|www\\.)\\S+")
+    private val BARE_DOMAIN = Regex(
+        "(?i)^(?:[a-z0-9-]+\\.){2,}(?:com|net|org|io|il|co|uk|de|fr|ru|tv|me|app|dev|info|biz|edu|gov)$",
+    )
     private val HAS_LETTER_OR_DIGIT = Regex("[\\p{L}\\p{Nd}]")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
@@ -52,7 +54,9 @@ object OcrCandidateExtractor {
         val stats = linkedMapOf<CandidateKey, CandidateStat>()
 
         frames.forEach { frame ->
-            val lines = frame.mapNotNull(::clean).filterNot { isNoise(it, noiseKeys, hebrewAware) }
+            val cleaned = frame.mapNotNull(::clean)
+            val statusContext = cleaned.any(::isStatusIndicator)
+            val lines = cleaned.filterNot { isNoise(it, noiseKeys, hebrewAware, statusContext) }
             val seenInFrame = HashSet<CandidateKey>()
 
             fun record(title: String, artist: String?) {
@@ -106,17 +110,32 @@ object OcrCandidateExtractor {
     private fun normalize(value: String): String =
         value.replace(WHITESPACE, " ").trim().lowercase(Locale.ROOT)
 
-    private fun isNoise(line: String, noiseKeys: Set<String>, hebrewAware: Boolean): Boolean {
+    private fun isNoise(
+        line: String,
+        noiseKeys: Set<String>,
+        hebrewAware: Boolean,
+        statusContext: Boolean,
+    ): Boolean {
         if (line.length > MAX_LINE_LENGTH) return true
         if (line.length == 1) return true
         if (!HAS_LETTER_OR_DIGIT.containsMatchIn(line)) return true
         if (!hebrewAware && HEBREW.containsMatchIn(line)) return true
         if (normalize(line) in noiseKeys) return true
-        if (CLOCK.matches(line)) return true
+        if (MERIDIEM.containsMatchIn(line)) return true
+        if (DURATION.matches(line)) return true
+        if (BARE_CLOCK.matches(line) && statusContext) return true
+        if (PERCENT.matches(line)) return true
         if (BATTERY.matches(line)) return true
-        if (URL.matches(line)) return true
+        if (URL.containsMatchIn(line)) return true
+        if (BARE_DOMAIN.matches(line)) return true
         return false
     }
+
+    private fun isStatusIndicator(line: String): Boolean =
+        MERIDIEM.containsMatchIn(line) ||
+            DURATION.matches(line) ||
+            PERCENT.matches(line) ||
+            BATTERY.matches(line)
 
     private fun parseArtistTitle(line: String): ParsedLine? {
         val match = SEPARATOR.find(line) ?: return null

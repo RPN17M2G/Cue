@@ -13,14 +13,18 @@ data class TagMergeResult(
  * Fills blank draft fields from the highest-scoring match while never
  * overwriting a value the user or an earlier stage already supplied.
  *
- * A provider match scoring at least [HIGH_CONFIDENCE_SIMILARITY] against the
- * draft may also replace fields currently sourced from OCR, because the online
- * result is more trustworthy than a noisy reading. Manual and embedded-tag
- * values are never replaced.
+ * A provider match is high confidence when its title similarity is at least
+ * [HIGH_CONFIDENCE_SIMILARITY]. If both artists are present, a near-exact title
+ * is enough on its own; otherwise the artists must also reach
+ * [MIN_ARTIST_SIMILARITY]. A high-confidence match may replace fields currently
+ * sourced from OCR, because the online result is more trustworthy than a noisy
+ * reading. Manual and embedded-tag values are never replaced.
  */
 object MetadataMerger {
 
     const val HIGH_CONFIDENCE_SIMILARITY = 0.85
+    private const val NEAR_EXACT_TITLE_SIMILARITY = 0.95
+    private const val MIN_ARTIST_SIMILARITY = 0.5
 
     fun merge(
         base: TagDraft,
@@ -30,8 +34,7 @@ object MetadataMerger {
     ): TagMergeResult {
         val best = matches.maxByOrNull { it.score }
         val sources = linkedMapOf<TagField, IdentificationSource>()
-        val highConfidence = best != null &&
-            MetadataMatcher.score(base, best) >= HIGH_CONFIDENCE_SIMILARITY
+        val highConfidence = best != null && isHighConfidence(base, best)
 
         fun baseSourceOf(field: TagField): IdentificationSource = baseFieldSources[field] ?: baseSource
         fun matchSource(): IdentificationSource = best?.source ?: baseSource
@@ -87,5 +90,13 @@ object MetadataMerger {
             ),
             sources = sources,
         )
+    }
+
+    private fun isHighConfidence(base: TagDraft, match: MetadataMatch): Boolean {
+        val titleSimilarity = Similarity.textSimilarity(base.title, match.title)
+        if (titleSimilarity < HIGH_CONFIDENCE_SIMILARITY) return false
+        if (base.artist.isBlank() || match.artist.isBlank()) return true
+        if (titleSimilarity >= NEAR_EXACT_TITLE_SIMILARITY) return true
+        return Similarity.textSimilarity(base.artist, match.artist) >= MIN_ARTIST_SIMILARITY
     }
 }

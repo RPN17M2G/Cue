@@ -7,10 +7,12 @@ import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.ocr.OcrCandidate
+import kotlinx.coroutines.CancellationException
 
 data class LookupSeed(
     val title: String,
     val artist: String? = null,
+    val album: String? = null,
     val durationMs: Long? = null,
 )
 
@@ -35,7 +37,7 @@ data class IdentificationOutcome(
  * best available draft is always returned for manual correction.
  *
  * Resolver failures are treated as empty results so the cascade degrades to the
- * next stage instead of aborting the flow.
+ * next stage instead of aborting the flow. Cancellation always propagates.
  */
 class IdentificationCascade(
     private val lookup: suspend (LookupSeed) -> List<MetadataMatch>,
@@ -68,9 +70,10 @@ class IdentificationCascade(
             val lookupSeed = LookupSeed(
                 title = seed.tag.title,
                 artist = seed.tag.artist.takeIf { it.isNotBlank() },
+                album = seed.tag.album.takeIf { it.isNotBlank() },
                 durationMs = durationMs,
             )
-            val matches = runCatching { lookup(lookupSeed) }.getOrDefault(emptyList())
+            val matches = lookupSafely { lookup(lookupSeed) }
             val ranked = MetadataMatcher.rank(seed.tag, matches)
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = false)
@@ -83,7 +86,7 @@ class IdentificationCascade(
                 artist = seed.tag.artist.takeIf { it.isNotBlank() },
                 durationMs = durationMs,
             )
-            val matches = runCatching { fingerprintLookup(fingerprintSeed) }.getOrDefault(emptyList())
+            val matches = lookupSafely { fingerprintLookup(fingerprintSeed) }
             val ranked = MetadataMatcher.rank(seed.tag, matches)
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = true)
@@ -99,6 +102,15 @@ class IdentificationCascade(
             usedEmbeddedTags = seed.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
         )
     }
+
+    private suspend fun lookupSafely(block: suspend () -> List<MetadataMatch>): List<MetadataMatch> =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
 
     private fun outcome(
         seed: Seed,

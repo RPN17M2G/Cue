@@ -13,7 +13,7 @@ import io.github.rpn17m2g.cue.domain.model.TagDraft
 object MetadataMatcher {
 
     fun score(query: TagDraft, match: MetadataMatch): Double {
-        if (query.title.isBlank()) return match.score
+        if (query.title.isBlank()) return 0.0
         val titleScore = Similarity.textSimilarity(query.title, match.title)
         return if (query.artist.isNotBlank()) {
             0.75 * titleScore + 0.25 * Similarity.textSimilarity(query.artist, match.artist)
