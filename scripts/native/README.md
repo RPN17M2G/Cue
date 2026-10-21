@@ -194,18 +194,23 @@ gate until then.
 The build exports `LC_ALL=C`, `TZ=UTC`, and a fixed `SOURCE_DATE_EPOCH`
 (default `1735689600`, overrideable). Compilation uses
 `-ffile-prefix-map=$REPO_ROOT=.` and
-`-ffile-prefix-map=$CUE_NATIVE_CACHE=.` so build paths do not leak into
-objects.
+`-ffile-prefix-map=$CUE_NATIVE_CACHE=.` to keep those paths out of debug/source
+references, but this does **not** sanitize `FFMPEG_CONFIGURATION`:
+`libffmpeg.so` embeds the absolute configure string, including the checkout,
+cache, and NDK paths (visible with `strings libffmpeg.so`). No current flag
+removes that literal, so it is documented rather than hidden.
 
 `.prebuilt/build-info/<abi>.txt` records the host `gcc`, `make`, `cmake`, and
 `pkg-config` versions, the NDK revision, the source date epoch, the exact
 configure line, and per-artifact size/SHA-256/NEEDED/alignment.
 
-Bit-for-bit reproducibility is scoped to the **same host and toolchain**
-(same WSL distribution, host GCC/CMake/make/pkg-config, and NDK r25c). A clean
-arm64 rebuild was verified byte-identical on this host. A different host or
-toolchain may produce different bytes; the pinned sources and configuration
-still reproduce functionally equivalent binaries.
+Bit-for-bit reproducibility is scoped to **the same checkout path, cache path,
+host, and toolchain** (same WSL distribution, host GCC/CMake/make/pkg-config,
+and NDK r25c). A clean arm64 rebuild from the same path was verified
+byte-identical on this host. Building from a different checkout/cache path, or
+with a different host/toolchain, may produce different bytes because of the
+embedded configure string; the pinned sources and configuration still reproduce
+functionally equivalent binaries.
 
 ## How the app loads and executes it
 
@@ -232,9 +237,9 @@ val process = ProcessBuilder(
     outputFile.absolutePath,
 ).redirectErrorStream(false)
 
-// DT_RUNPATH=$ORIGIN is the primary lookup path. Keep this fallback for
-// devices/linker versions that do not honor $ORIGIN for executables.
-process.environment()["LD_LIBRARY_PATH"] = nativeDir
+// bionic has supported DT_RUNPATH/$ORIGIN since API 24, and minSdk is 31,
+// so $ORIGIN is the supported lookup mechanism. No LD_LIBRARY_PATH is
+// required; set it only temporarily when debugging a loader issue.
 process.start()
 ```
 
@@ -302,9 +307,9 @@ shared-link step is wrong and `--clean` is required.
 
 **`dlopen failed: library "libchromaprint.so" not found` on device**
 All eight `.so` files must be staged for the same ABI and extracted by
-`useLegacyPackaging`. Check `readelf -d libffmpeg.so` for `$ORIGIN` and set
-`LD_LIBRARY_PATH` to `nativeLibraryDir` as a fallback. This runtime path is
-exercised by the emulator milestone.
+`useLegacyPackaging`. Check `readelf -d libffmpeg.so` for `$ORIGIN`; set
+`LD_LIBRARY_PATH` to `nativeLibraryDir` only as a temporary debugging fallback.
+This runtime path is exercised by the emulator milestone.
 
 **Build fails after a version or configure change**
 Use `scripts/native/build-ffmpeg.sh --clean --abi <abi>` and rerun. Configure
