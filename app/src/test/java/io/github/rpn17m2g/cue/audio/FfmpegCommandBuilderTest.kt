@@ -2,6 +2,7 @@ package io.github.rpn17m2g.cue.audio
 
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TrimRange
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -115,12 +116,20 @@ class FfmpegCommandBuilderTest {
 
         assertEquals(
             listOf(
+                "-hide_banner", "-nostdin", "-y",
                 "-ss", "20.000", "-t", "30.000",
                 "-i", input,
                 "-vn", "-f", "chromaprint", "fingerprint.tmp",
             ),
             args,
         )
+    }
+
+    @Test
+    fun `fingerprintCommand overwrites an existing output file`() {
+        val args = FfmpegCommandBuilder.fingerprintCommand(input, outputPath = "fingerprint.tmp")
+
+        assertEquals(listOf("-hide_banner", "-nostdin", "-y"), args.take(3))
     }
 
     @Test
@@ -133,6 +142,7 @@ class FfmpegCommandBuilderTest {
 
         assertEquals(
             listOf(
+                "-hide_banner", "-nostdin", "-y",
                 "-ss", "0.000",
                 "-i", input,
                 "-vn", "-f", "chromaprint", "fingerprint.tmp",
@@ -164,6 +174,7 @@ class FfmpegCommandBuilderTest {
 
         assertEquals(
             listOf(
+                "-hide_banner", "-nostdin", "-y",
                 "-ss", "5.000", "-t", "10.500",
                 "-i", input,
                 "-vn", "-f", "chromaprint", "fingerprint.tmp",
@@ -173,12 +184,14 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
-    fun `fingerprintCommand requires a real output file rather than stdout`() {
-        assertThrows(IllegalArgumentException::class.java) {
-            FfmpegCommandBuilder.fingerprintCommand(input, outputPath = "-")
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            FfmpegCommandBuilder.fingerprintCommand(input, outputPath = " ")
+    fun `both output commands reject non-file outputs`() {
+        listOf("-", " ", "pipe:1", "fd:1", "/dev/stdout", "/dev/stderr").forEach { outputPath ->
+            assertThrows("convertToMp3 accepted '$outputPath'", IllegalArgumentException::class.java) {
+                FfmpegCommandBuilder.convertToMp3(input, outputPath, trim = null, QualityPreset.V0)
+            }
+            assertThrows("fingerprintCommand accepted '$outputPath'", IllegalArgumentException::class.java) {
+                FfmpegCommandBuilder.fingerprintCommand(input, outputPath = outputPath)
+            }
         }
     }
 
@@ -186,6 +199,22 @@ class FfmpegCommandBuilderTest {
     fun `fingerprintCommand refuses to overwrite the input`() {
         assertThrows(IllegalArgumentException::class.java) {
             FfmpegCommandBuilder.fingerprintCommand(input, outputPath = input)
+        }
+    }
+
+    @Test
+    fun `overwrite guard compares canonical paths`() {
+        val directory = File("build/tmp/canonical-guard").apply { mkdirs() }
+        val nested = File(directory, "nested").apply { mkdirs() }
+        val inputFile = File(directory, "song.mp4").apply { writeText("audio") }
+        val dotAlias = File(directory, "./song.mp4")
+        val dotDotAlias = File(nested, "../song.mp4")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            FfmpegCommandBuilder.convertToMp3(inputFile.path, dotAlias.path, trim = null, QualityPreset.V0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FfmpegCommandBuilder.fingerprintCommand(inputFile.path, outputPath = dotDotAlias.path)
         }
     }
 

@@ -2,6 +2,8 @@ package io.github.rpn17m2g.cue.audio
 
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TrimRange
+import java.io.File
+import java.io.IOException
 
 object FfmpegCommandBuilder {
 
@@ -10,12 +12,19 @@ object FfmpegCommandBuilder {
     const val SHORT_CLIP_THRESHOLD_MS = 50_000L
     const val PROBE_EXPECTED_EXIT = 1
 
-    private val commonPrefix = listOf(
-        "-hide_banner",
-        "-nostdin",
-        "-y",
-        "-nostats",
-        "-progress", "pipe:2",
+    private val basePrefix = listOf("-hide_banner", "-nostdin", "-y")
+    private val progressPrefix = basePrefix + listOf("-nostats", "-progress", "pipe:2")
+
+    private val nonFileOutputs = setOf(
+        "-",
+        "pipe:1",
+        "pipe:2",
+        "fd:1",
+        "fd:2",
+        "/dev/stdout",
+        "/dev/stderr",
+        "/dev/fd/1",
+        "/dev/fd/2",
     )
 
     /**
@@ -29,9 +38,10 @@ object FfmpegCommandBuilder {
         trim: TrimRange?,
         quality: QualityPreset,
     ): List<String> {
+        requireFileOutput(outputPath)
         requireNeverOverwritesInput(inputPath, outputPath)
 
-        val args = commonPrefix.toMutableList()
+        val args = progressPrefix.toMutableList()
         if (trim != null) {
             args += listOf("-ss", FfmpegTime.formatSeconds(trim.startMs))
         }
@@ -63,8 +73,8 @@ object FfmpegCommandBuilder {
      * seconds in, past intros and UI sounds. Clips shorter than 50 seconds use the
      * whole clip instead, because a 20 second offset would leave too little audio.
      *
-     * [outputPath] must be a real file: the process runner drains stdout, so
-     * writing the fingerprint to `-` would discard it.
+     * [outputPath] must be a real file: the process runner drains stdout, and
+     * overwriting a stale temporary file is expected.
      */
     fun fingerprintCommand(
         inputPath: String,
@@ -73,14 +83,12 @@ object FfmpegCommandBuilder {
         sliceStartMs: Long = DEFAULT_FINGERPRINT_START_MS,
         sliceDurationMs: Long = DEFAULT_FINGERPRINT_DURATION_MS,
     ): List<String> {
-        require(outputPath.isNotBlank() && outputPath != "-") {
-            "fingerprint output must be a file path, not stdout"
-        }
+        requireFileOutput(outputPath)
         requireNeverOverwritesInput(inputPath, outputPath)
         require(sliceStartMs >= 0) { "sliceStartMs must be non-negative" }
         require(sliceDurationMs > 0) { "sliceDurationMs must be positive" }
 
-        val args = mutableListOf<String>()
+        val args = basePrefix.toMutableList()
         val shortClip = clipDurationMs != null && clipDurationMs < SHORT_CLIP_THRESHOLD_MS
         if (shortClip) {
             args += listOf("-ss", FfmpegTime.formatSeconds(0))
@@ -106,7 +114,19 @@ object FfmpegCommandBuilder {
         return exitCode == PROBE_EXPECTED_EXIT && parsedInput
     }
 
+    private fun requireFileOutput(outputPath: String) {
+        require(outputPath.isNotBlank()) { "output must be a file path" }
+        require(outputPath.trim().lowercase() !in nonFileOutputs) { "output must be a file path, not a stream" }
+    }
+
     private fun requireNeverOverwritesInput(inputPath: String, outputPath: String) {
-        require(inputPath != outputPath) { "output must not overwrite the input" }
+        val input = File(inputPath)
+        val output = File(outputPath)
+        val sameFile = try {
+            input.canonicalFile == output.canonicalFile
+        } catch (_: IOException) {
+            input.absoluteFile == output.absoluteFile
+        }
+        require(!sameFile) { "output must not overwrite the input" }
     }
 }
