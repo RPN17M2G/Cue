@@ -1,0 +1,60 @@
+package io.github.rpn17m2g.cue.domain.filename
+
+import io.github.rpn17m2g.cue.domain.model.TagDraft
+import java.util.Locale
+
+/**
+ * Renders a safe output filename from an editable tag draft.
+ *
+ * The result has no extension and no path separators; callers add the container
+ * extension once the file is written.
+ */
+object FilenameRenderer {
+
+    const val DEFAULT_TEMPLATE = "{artist} - {title}"
+    const val FALLBACK_NAME = "Unknown track"
+    const val MAX_LENGTH = 120
+
+    private val TOKEN = Regex("\\{([^{}]*)\\}")
+    private val WHITESPACE = Regex("[\\s\\u00A0]+")
+    private val ILLEGAL = Regex("[<>:\"/\\\\|?*\\p{Cntrl}]")
+    private val DUPLICATE_SEPARATOR = Regex("(?:\\s*[-\\u2013\\u2014|\\u2022]+\\s*){2,}")
+
+    private fun isSeparator(char: Char): Boolean =
+        char.isWhitespace() || char == '-' || char == '\u2013' || char == '\u2014' ||
+            char == '|' || char == '\u2022'
+
+    fun render(draft: TagDraft, template: String = DEFAULT_TEMPLATE): String {
+        val substituted = TOKEN.replace(template) { match -> valueOf(match.groupValues[1], draft) }
+        val collapsed = substituted.replace(WHITESPACE, " ").trim()
+        val deduplicated = DUPLICATE_SEPARATOR.replace(collapsed, " - ")
+        return sanitize(deduplicated.trim(::isSeparator))
+    }
+
+    /**
+     * Makes [value] safe for FAT, exFAT, and Android storage: illegal and
+     * control characters become spaces, whitespace is collapsed, edge dots and
+     * spaces are removed, and the result is capped at [MAX_LENGTH]. An empty
+     * result becomes [FALLBACK_NAME].
+     */
+    fun sanitize(value: String): String {
+        val replaced = ILLEGAL.replace(value, " ")
+        val collapsed = replaced.replace(WHITESPACE, " ").trim { it == ' ' || it == '.' || it == '\u00A0' }
+        val capped = takeCodePoints(collapsed, MAX_LENGTH).trim { it == ' ' || it == '.' || it == '\u00A0' }
+        return capped.ifBlank { FALLBACK_NAME }
+    }
+
+    private fun takeCodePoints(value: String, max: Int): String {
+        if (value.codePointCount(0, value.length) <= max) return value
+        return value.substring(0, value.offsetByCodePoints(0, max))
+    }
+
+    private fun valueOf(token: String, draft: TagDraft): String = when (token.lowercase(Locale.ROOT)) {
+        "artist" -> draft.artist
+        "title" -> draft.title
+        "album" -> draft.album
+        "track" -> draft.trackNumber?.toString().orEmpty()
+        "year" -> draft.year.orEmpty()
+        else -> ""
+    }
+}

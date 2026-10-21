@@ -21,6 +21,7 @@ data class MetadataMatch(
     val genre: String? = null,
     val trackNumber: Int? = null,
     val artworkUrl: String? = null,
+    val artwork: Artwork? = null,
     val source: IdentificationSource,
     val score: Double = 0.0,
 )
