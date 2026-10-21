@@ -3,10 +3,10 @@ package io.github.rpn17m2g.cue.data.metadata
 import java.io.IOException
 
 /**
- * Serializes callers and enforces a minimum interval between requests. Production
- * defaults to a monotonic clock; tests inject both the clock and the sleeper.
- * Sleeping polls the caller's cancellation flag so a canceled call does not hold
- * the lock for the rest of the interval.
+ * Serializes callers and enforces a minimum interval between requests. A caller
+ * reserves its slot under the lock and then sleeps after releasing it, so other
+ * waiters can observe cancellation immediately. Production defaults to a
+ * monotonic clock; tests inject both the clock and the sleeper.
  */
 class RateLimiter(
     private val minIntervalMs: Long = 1_000L,
@@ -18,21 +18,31 @@ class RateLimiter(
     }
 
     private val lock = Any()
-    private var lastRequestAtMillis: Long? = null
+    private var nextAvailableAtMillis: Long? = null
 
     fun acquire(isCanceled: () -> Boolean = { false }) {
-        synchronized(lock) {
-            val last = lastRequestAtMillis
-            if (last != null) {
-                var remaining = minIntervalMs - (clock.nowMillis() - last)
-                while (remaining > 0L) {
-                    if (isCanceled()) throw IOException("Canceled")
-                    val step = minOf(remaining, CANCEL_POLL_MS)
-                    sleeper.sleep(step)
-                    remaining -= step
-                }
-            }
-            lastRequestAtMillis = clock.nowMillis()
+        if (isCanceled()) throw IOException("Canceled")
+
+        val waitMillis = synchronized(lock) {
+            val now = clock.nowMillis()
+            val earliest = nextAvailableAtMillis ?: now
+            val wait = (earliest - now).coerceAtLeast(0L)
+            nextAvailableAtMillis = maxOf(now, earliest) + minIntervalMs
+            wait
+        }
+
+        sleepCancellable(waitMillis, isCanceled)
+
+        if (isCanceled()) throw IOException("Canceled")
+    }
+
+    private fun sleepCancellable(totalMillis: Long, isCanceled: () -> Boolean) {
+        var remaining = totalMillis
+        while (remaining > 0L) {
+            if (isCanceled()) throw IOException("Canceled")
+            val step = minOf(remaining, CANCEL_POLL_MS)
+            sleeper.sleep(step)
+            remaining -= step
         }
     }
 

@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -206,6 +207,37 @@ class MusicBrainzClientTest {
     }
 
     @Test
+    fun `enriches only the top three results and survives hanging cover art`() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.path.orEmpty().startsWith("/ws/2/recording") -> jsonResponse(FIVE_RECORDINGS)
+                else -> MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
+            }
+        }
+        val shortHttp = MetadataHttp(
+            config = NetworkConfig(timeoutMs = 150L, retries = 0),
+            sleeper = Sleeper.None,
+        )
+        val coverArt = CoverArtArchiveClient(
+            api = shortHttp.api(server.url("/").toString(), CoverArtArchiveApi::class.java),
+        )
+        val enriched = MusicBrainzClient(
+            api = http.api(server.url("/").toString(), MusicBrainzApi::class.java),
+            coverArtArchive = coverArt,
+        )
+
+        val startedAt = System.nanoTime()
+        val result = enriched.search(MetadataQuery("Song 1", "Artist"))
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
+
+        val matches = (result as LookupResult.Success).value
+        assertEquals(5, matches.size)
+        assertTrue(matches.all { it.artworkUrl == null })
+        assertEquals(4, server.requestCount)
+        assertTrue("search took ${elapsedMs}ms", elapsedMs < 5_000L)
+    }
+
+    @Test
     fun `network gate blocks requests entirely`() = runTest {
         val gated = MusicBrainzClient(
             api = MetadataHttp(sleeper = Sleeper.None).api(
@@ -244,6 +276,43 @@ class MusicBrainzClientTest {
                   "releases": [
                     {"id": "release-1", "title": "A Night at the Opera", "date": "1975-11-21"}
                   ]
+                }
+              ]
+            }
+        """
+
+        const val FIVE_RECORDINGS = """
+            {
+              "recordings": [
+                {
+                  "id": "rec-1", "title": "Song 1", "score": 100,
+                  "first-release-date": "2001-01-01",
+                  "artist-credit": [{"name": "Artist"}],
+                  "releases": [{"id": "release-1", "title": "Album 1", "date": "2001-01-01"}]
+                },
+                {
+                  "id": "rec-2", "title": "Song 2", "score": 90,
+                  "first-release-date": "2002-01-01",
+                  "artist-credit": [{"name": "Artist"}],
+                  "releases": [{"id": "release-2", "title": "Album 2", "date": "2002-01-01"}]
+                },
+                {
+                  "id": "rec-3", "title": "Song 3", "score": 80,
+                  "first-release-date": "2003-01-01",
+                  "artist-credit": [{"name": "Artist"}],
+                  "releases": [{"id": "release-3", "title": "Album 3", "date": "2003-01-01"}]
+                },
+                {
+                  "id": "rec-4", "title": "Song 4", "score": 70,
+                  "first-release-date": "2004-01-01",
+                  "artist-credit": [{"name": "Artist"}],
+                  "releases": [{"id": "release-4", "title": "Album 4", "date": "2004-01-01"}]
+                },
+                {
+                  "id": "rec-5", "title": "Song 5", "score": 60,
+                  "first-release-date": "2005-01-01",
+                  "artist-credit": [{"name": "Artist"}],
+                  "releases": [{"id": "release-5", "title": "Album 5", "date": "2005-01-01"}]
                 }
               ]
             }

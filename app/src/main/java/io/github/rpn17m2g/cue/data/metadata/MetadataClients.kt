@@ -7,6 +7,8 @@ object MetadataEndpoints {
     const val COVER_ART_ARCHIVE = "https://coverartarchive.org/"
 }
 
+private const val COVER_ART_TIMEOUT_MS = 3_000L
+
 /**
  * Production wiring for the metadata layer. Tests construct the clients directly
  * against MockWebServer instead of using this factory.
@@ -24,8 +26,18 @@ class MetadataClients(
         RateLimitInterceptor(RateLimiter(clock = clock, sleeper = sleeper)),
     )
 
+    private val coverArtHttp = MetadataHttp(
+        config = NetworkConfig(
+            timeoutMs = COVER_ART_TIMEOUT_MS,
+            retries = 0,
+            backoffBaseMs = 0L,
+            userAgent = config.userAgent,
+        ),
+        sleeper = sleeper,
+    )
+
     private val coverArtArchive = CoverArtArchiveClient(
-        api = http.api(
+        api = coverArtHttp.api(
             MetadataEndpoints.COVER_ART_ARCHIVE,
             CoverArtArchiveApi::class.java,
         ),

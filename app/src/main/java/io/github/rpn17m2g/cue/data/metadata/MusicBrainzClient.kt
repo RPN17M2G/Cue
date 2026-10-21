@@ -77,28 +77,28 @@ class MusicBrainzClient internal constructor(
             val body = response.body() ?: return@safeLookup LookupResult.Failure(LookupError.Parse())
             val matches = body.recordings
                 .mapNotNull { recording -> recording.toMappedMatch(query) }
-            LookupResult.Success(
-                enrichArtwork(matches).sortedByDescending { it.score },
-            )
+            LookupResult.Success(enrichArtwork(matches))
         }
     }
 
     private suspend fun enrichArtwork(mapped: List<MappedMatch>): List<MetadataMatch> {
-        val archive = coverArtArchive ?: return mapped.map { it.match }
+        val sorted = mapped.sortedByDescending { it.match.score }
+        val archive = coverArtArchive ?: return sorted.map { it.match }
         val cache = mutableMapOf<String, String?>()
-        return mapped.map { candidate ->
-            val releaseMbid = candidate.releaseMbid
-            if (releaseMbid.isNullOrBlank()) {
-                candidate.match
-            } else {
-                val artwork = if (cache.containsKey(releaseMbid)) {
-                    cache[releaseMbid]
+        return sorted
+            .mapIndexed { index, candidate ->
+                val releaseMbid = candidate.releaseMbid
+                if (index >= MAX_ARTWORK_ENRICHED || releaseMbid.isNullOrBlank()) {
+                    candidate.match
                 } else {
-                    archive.front500(releaseMbid).also { cache[releaseMbid] = it }
+                    val artwork = if (cache.containsKey(releaseMbid)) {
+                        cache[releaseMbid]
+                    } else {
+                        archive.front500(releaseMbid).also { cache[releaseMbid] = it }
+                    }
+                    candidate.match.copy(artworkUrl = artwork)
                 }
-                candidate.match.copy(artworkUrl = artwork)
             }
-        }
     }
 
     private fun MusicBrainzRecording.toMappedMatch(query: MetadataQuery): MappedMatch? {
@@ -132,6 +132,7 @@ class MusicBrainzClient internal constructor(
     private companion object {
         const val JSON_FORMAT = "json"
         const val SEARCH_LIMIT = 10
+        const val MAX_ARTWORK_ENRICHED = 3
     }
 }
 
