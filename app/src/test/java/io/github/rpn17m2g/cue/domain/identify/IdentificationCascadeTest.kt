@@ -178,6 +178,38 @@ class IdentificationCascadeTest {
     }
 
     @Test
+    fun `fingerprint with no readable title picks the provider top match`() = runTest {
+        val lowScore = MetadataMatch(
+            title = "Alpha",
+            artist = "Low",
+            album = "Low Album",
+            source = IdentificationSource.FINGERPRINT,
+            score = 0.2,
+        )
+        val highScore = MetadataMatch(
+            title = "Zulu",
+            artist = "High",
+            album = "High Album",
+            source = IdentificationSource.FINGERPRINT,
+            score = 0.9,
+        )
+
+        val outcome = cascade(
+            fingerprintLookup = { listOf(lowScore, highScore) },
+        ).identify(
+            ocrCandidates = emptyList(),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+        )
+
+        assertEquals("Zulu", outcome.tag.title)
+        assertEquals("High Album", outcome.tag.album)
+        assertEquals(listOf("Alpha"), outcome.alternatives.map { it.title })
+    }
+
+    @Test
     fun `fingerprint fills the gaps when the resolver has no match`() = runTest {
         var fingerprintSeed: FingerprintSeed? = null
 

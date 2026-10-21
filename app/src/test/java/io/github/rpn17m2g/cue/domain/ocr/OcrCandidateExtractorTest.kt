@@ -60,6 +60,7 @@ class OcrCandidateExtractorTest {
                 "12:34",
                 "Battery 85%",
                 "100%",
+                "85 %",
                 "9:41 AM",
                 "12:34:56 PM",
                 "01:02:03",
@@ -108,6 +109,20 @@ class OcrCandidateExtractorTest {
                 "music.youtube.com",
                 "Watch on https://youtu.be/abc",
                 "www.example.com",
+            ),
+        )
+
+        assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
+    }
+
+    @Test
+    fun `known tld domains are filtered anywhere`() {
+        val frames = listOf(
+            listOf(
+                "example.com",
+                "youtu.be",
+                "youtube.com/watch?v=abc",
+                "open.spotify.com/track/xyz",
             ),
         )
 

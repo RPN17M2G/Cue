@@ -38,6 +38,28 @@ class SimilarityTest {
     }
 
     @Test
+    fun `blank title query preserves provider score ordering`() {
+        val query = TagDraft()
+        val lowScore = MetadataMatch(
+            title = "Alpha",
+            artist = "Low",
+            source = IdentificationSource.FINGERPRINT,
+            score = 0.2,
+        )
+        val highScore = MetadataMatch(
+            title = "Zulu",
+            artist = "High",
+            source = IdentificationSource.FINGERPRINT,
+            score = 0.9,
+        )
+
+        val ranked = MetadataMatcher.rank(query, listOf(lowScore, highScore))
+
+        assertEquals(listOf("Zulu", "Alpha"), ranked.map { it.title })
+        assertEquals(0.9, ranked.first().score, 0.0)
+    }
+
+    @Test
     fun `matcher ranks the closest match first and ignores incoming score`() {
         val query = TagDraft(title = "Get Lucky", artist = "Daft Punk")
         val matches = listOf(
