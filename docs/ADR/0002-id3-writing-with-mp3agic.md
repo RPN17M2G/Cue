@@ -34,8 +34,9 @@ correctly and are only rewritten when their field is edited.
 Cover art is fetched at 600×600, downscaled to at most 1000 px JPEG, and embedded
 as a front-cover APIC frame. The stored MIME type is detected from the actual bytes,
 so PNG data is never labelled `image/jpeg`. Replacing artwork replaces the front
-cover and keeps other APIC pictures (for example a back cover). Text-only edits
-never touch APIC frames.
+cover and keeps other APIC pictures (for example a back cover). Clearing artwork
+removes only the front cover and keeps those other APIC pictures too. Text-only
+edits never touch APIC frames.
 
 ID3v1 values are used as a fallback when the v2 tag leaves a core field blank. On
 the first write, those values are copied into the v2 tag and the ID3v1 tag is
@@ -47,18 +48,33 @@ A tag write never edits the audio in place. The implementation:
 
 1. Hashes the existing MPEG frames (excluding ID3 tags and pre-audio junk).
 2. Writes the new tag and copied audio to a hidden same-directory
-   `.cue-tag-<name>-*.tmp` file, then fsyncs it.
+   `.cue-tag-<name>-*.tmp` file, then fsyncs the file and, on POSIX, its parent
+   directory.
 3. Verifies that the temp file's audio hash matches the original.
 4. Copies the original to `.cue-tag-<name>.bak` and verifies that backup.
 5. Replaces the target with `ATOMIC_MOVE` plus `REPLACE_EXISTING` **only**. If the
    filesystem does not support an atomic move, the write fails; there is no
-   silent non-atomic fallback.
+   silent non-atomic fallback. On POSIX, the parent directory is fsynced again
+   after the rename.
 6. Verifies the target's audio hash again before deleting the backup.
 
 Temporary files are removed on every failure. If post-swap verification fails, the
-backup is restored atomically. If that restore also fails, the backup is kept and
-the exception names it. Stale temp files for the same target are removed before a
-new write. A single writer per target is assumed.
+backup is restored through the same atomic mover. If that restore also fails, the
+backup is kept only when it still exists, and the exception says so; a backup that
+was moved away is reported as unavailable rather than kept. Stale temp files for
+the same target are removed before a new write.
+
+A leftover `.cue-tag-<name>.bak` is never overwritten silently. If the target is
+missing, the backup is validated and recovered into place; if the target exists,
+the write is refused and the exception names the backup so it can be cleaned up
+explicitly. A single writer per target is assumed.
+
+ID3v2.4 frame lengths are synchsafe, so v2.4 text and APIC frames are built with
+`ID3v24Frame`; v2.3 frames use the base `ID3v2Frame`. Re-wrapped preserved APIC
+frames follow the same version rule.
+
+Windows does not allow a directory to be opened as a file for `FileChannel`
+fsync; that platform limitation is ignored while file fsyncs still apply.
 
 `Mp3TagStore` accepts a local `File` only; `TagStore` does not pretend to support
 SAF. An Android SAF adapter must copy the document into the app cache, edit and
