@@ -1,6 +1,5 @@
 package io.github.rpn17m2g.cue.tags
 
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -8,62 +7,74 @@ import org.junit.Test
 
 class ArtworkEncoderTest {
 
+    private val encoder = ImageIoArtworkEncoder()
+
     @Test
-    fun `image within bounds is returned unchanged`() {
-        val original = TestImages.png(width = 320, height = 200)
+    fun `image within bounds is still encoded as jpeg`() {
+        val result = encoder.downscaleToJpeg(TestImages.png(width = 320, height = 200))
 
-        val result = ArtworkEncoder.downscaleToJpeg(original)
+        val (width, height) = TestImages.size(result.bytes)
+        assertEquals(320, width)
+        assertEquals(200, height)
+        assertEquals("image/jpeg", result.mimeType)
+        assertJpeg(result.bytes)
+    }
 
-        assertArrayEquals(original, result)
+    @Test
+    fun `small png becomes jpeg rather than a png labelled as jpeg`() {
+        val result = encoder.downscaleToJpeg(TestImages.png(width = 24, height = 16))
+
+        assertEquals("image/jpeg", result.mimeType)
+        assertJpeg(result.bytes)
     }
 
     @Test
     fun `landscape image is scaled to the maximum width`() {
-        val result = ArtworkEncoder.downscaleToJpeg(TestImages.png(width = 2000, height = 1000))
+        val result = encoder.downscaleToJpeg(TestImages.png(width = 2000, height = 1000))
 
-        val (width, height) = TestImages.size(result)
+        val (width, height) = TestImages.size(result.bytes)
         assertEquals(1000, width)
         assertEquals(500, height)
-        assertJpeg(result)
+        assertJpeg(result.bytes)
     }
 
     @Test
     fun `portrait image is scaled to the maximum height`() {
-        val result = ArtworkEncoder.downscaleToJpeg(TestImages.png(width = 900, height = 1800))
+        val result = encoder.downscaleToJpeg(TestImages.png(width = 900, height = 1800))
 
-        val (width, height) = TestImages.size(result)
+        val (width, height) = TestImages.size(result.bytes)
         assertEquals(500, width)
         assertEquals(1000, height)
-        assertJpeg(result)
+        assertJpeg(result.bytes)
     }
 
     @Test
     fun `square image keeps a one to one ratio`() {
-        val result = ArtworkEncoder.downscaleToJpeg(TestImages.jpeg(width = 3000, height = 3000))
+        val result = encoder.downscaleToJpeg(TestImages.jpeg(width = 3000, height = 3000))
 
-        val (width, height) = TestImages.size(result)
+        val (width, height) = TestImages.size(result.bytes)
         assertEquals(1000, width)
         assertEquals(1000, height)
-        assertJpeg(result)
+        assertJpeg(result.bytes)
     }
 
     @Test
     fun `custom maximum dimension is honoured`() {
-        val result = ArtworkEncoder.downscaleToJpeg(
+        val result = encoder.downscaleToJpeg(
             TestImages.png(width = 600, height = 300),
             maxDimension = 300,
         )
 
-        val (width, height) = TestImages.size(result)
+        val (width, height) = TestImages.size(result.bytes)
         assertEquals(300, width)
         assertEquals(150, height)
-        assertJpeg(result)
+        assertJpeg(result.bytes)
     }
 
     @Test
     fun `invalid image bytes are rejected`() {
         assertThrows(IllegalArgumentException::class.java) {
-            ArtworkEncoder.downscaleToJpeg(byteArrayOf(1, 2, 3, 4))
+            encoder.downscaleToJpeg(byteArrayOf(1, 2, 3, 4))
         }
     }
 
