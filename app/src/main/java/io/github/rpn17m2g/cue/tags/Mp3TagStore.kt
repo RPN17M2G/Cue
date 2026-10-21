@@ -8,58 +8,94 @@ import com.mpatric.mp3agic.ID3v23Tag
 import com.mpatric.mp3agic.ID3v2Frame
 import com.mpatric.mp3agic.ID3v2FrameSet
 import com.mpatric.mp3agic.ID3v2PictureFrameData
-import com.mpatric.mp3agic.ID3v2TextFrameData
 import com.mpatric.mp3agic.Mp3File
 import io.github.rpn17m2g.cue.domain.model.Artwork
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import java.io.File
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.security.MessageDigest
 
 /**
- * Reads and rewrites ID3 tags with mp3agic. The audio stream is never re-encoded; a
- * write copies the file once because mp3agic cannot save over its input.
+ * Reads and rewrites ID3 tags with mp3agic. Audio frames are copied byte-for-byte and
+ * the replacement is verified before the hidden backup is removed.
  */
-class Mp3TagStore {
+class Mp3TagStore internal constructor(
+    private val mover: AtomicMover = DefaultAtomicMover,
+    private val saver: Mp3Saver = DefaultMp3Saver,
+) : TagStore {
 
-    fun read(file: File): TagDraft? {
+    constructor() : this(DefaultAtomicMover, DefaultMp3Saver)
+
+    override fun read(file: File): TagDraft? {
         val mp3 = load(file)
-        mp3.id3v2Tag?.let { return readV2(it) }
-        mp3.id3v1Tag?.let { return readV1(it) }
-        return null
+        val fromV2 = mp3.id3v2Tag?.let(::readV2)
+        val fromV1 = mp3.id3v1Tag?.let(::readV1)
+        return when {
+            fromV2 != null && fromV1 != null -> merge(fromV2, fromV1)
+            fromV2 != null -> fromV2
+            else -> fromV1
+        }
     }
 
-    fun writeInPlace(file: File, tag: TagDraft, fields: Set<TagField>? = null) {
-        val targets = fields ?: TagField.entries.toSet()
-        try {
-            val mp3 = load(file)
-            val id3 = ensureV23(mp3)
+    override fun writeInPlace(file: File, tag: TagDraft, fields: Set<TagField>) {
+        if (fields.isEmpty()) return
+        val year = if (TagField.YEAR in fields) normalizeYear(tag.year) else null
+        val artworkMime = if (TagField.ARTWORK in fields && tag.artwork != null) {
+            detectMime(tag.artwork.bytes)
+                ?: throw IllegalArgumentException("Unsupported artwork format")
+        } else {
+            null
+        }
+        if (tag.trackNumber != null) {
+            require(tag.trackNumber > 0) { "trackNumber must be positive" }
+        }
+        if (tag.trackTotal != null) {
+            require(tag.trackTotal > 0) { "trackTotal must be positive" }
+        }
 
-            if (TagField.TITLE in targets) {
+        val target = file.absoluteFile
+        val directory = target.parentFile
+            ?: throw TagWriteException("No parent directory for ${target.name}")
+        if (Files.isSymbolicLink(target.toPath()) || !Files.isRegularFile(target.toPath())) {
+            throw TagWriteException("Refusing to replace non-regular file: ${target.name}")
+        }
+
+        try {
+            val mp3 = load(target)
+            val originalAudio = digest(mp3, target)
+            val id3 = ensureWritableTag(mp3)
+            adoptV1Fallback(mp3.id3v1Tag, id3, fields)
+
+            if (TagField.TITLE in fields) {
                 writeText(id3, AbstractID3v2Tag.ID_TITLE, tag.title)
             }
-            if (TagField.ARTIST in targets) {
+            if (TagField.ARTIST in fields) {
                 writeText(id3, AbstractID3v2Tag.ID_ARTIST, tag.artist)
             }
-            if (TagField.ALBUM in targets) {
+            if (TagField.ALBUM in fields) {
                 writeText(id3, AbstractID3v2Tag.ID_ALBUM, tag.album)
             }
-            if (TagField.ALBUM_ARTIST in targets) {
+            if (TagField.ALBUM_ARTIST in fields) {
                 writeText(id3, AbstractID3v2Tag.ID_ALBUM_ARTIST, tag.albumArtist)
             }
-            if (TagField.YEAR in targets) {
-                writeText(id3, AbstractID3v2Tag.ID_YEAR, tag.year)
+            if (TagField.YEAR in fields) {
+                writeYear(id3, year)
             }
-            if (TagField.GENRE in targets) {
+            if (TagField.GENRE in fields) {
                 writeText(id3, AbstractID3v2Tag.ID_GENRE, tag.genre)
             }
-            if (TagField.TRACK_NUMBER in targets) {
-                writeText(id3, AbstractID3v2Tag.ID_TRACK, tag.trackNumber?.toString())
+            if (TagField.TRACK_NUMBER in fields) {
+                writeTrack(id3, tag)
             }
-            if (TagField.ARTWORK in targets) {
-                writeArtwork(id3, tag.artwork)
+            if (TagField.ARTWORK in fields) {
+                writeArtwork(id3, tag.artwork, artworkMime)
             }
 
             if (id3.frameSets.isEmpty()) {
@@ -68,10 +104,14 @@ class Mp3TagStore {
             invalidateCachedLength(id3)
 
             mp3.id3v2Tag = id3
-            saveAtomically(mp3, file)
+            mp3.removeId3v1Tag()
+            saveAndVerify(mp3, target, directory, originalAudio)
+        } catch (e: TagReadException) {
+            throw e
+        } catch (e: TagWriteException) {
+            throw e
         } catch (e: Exception) {
-            if (e is TagWriteException) throw e
-            throw TagWriteException("Could not write ID3 tags to ${file.name}", e)
+            throw TagWriteException("Could not write ID3 tags to ${target.name}", e)
         }
     }
 
@@ -81,27 +121,94 @@ class Mp3TagStore {
         throw TagReadException("Not a readable MP3: ${file.name}", e)
     }
 
-    private fun readV2(tag: ID3v2): TagDraft = TagDraft(
-        title = safeText { tag.title }.orEmpty(),
-        artist = safeText { tag.artist }.orEmpty(),
-        album = safeText { tag.album }.orEmpty(),
-        albumArtist = safeText { tag.albumArtist }.orEmpty(),
-        year = safeText { tag.year }?.takeIf { it.isNotBlank() }
-            ?: rawText(tag, TYER_IN_V24)?.take(4),
-        genre = safeText { tag.genreDescription }?.takeIf { it.isNotBlank() }
-            ?: rawText(tag, AbstractID3v2Tag.ID_GENRE),
-        trackNumber = parseTrack(safeText { tag.track }),
-        artwork = readArtwork(tag),
+    private fun readV2(tag: ID3v2): TagDraft {
+        val track = parseTrack(safeText { tag.track }.orEmpty())
+        return TagDraft(
+            title = safeText { tag.title }.orEmpty(),
+            artist = safeText { tag.artist }.orEmpty(),
+            album = safeText { tag.album }.orEmpty(),
+            albumArtist = safeText { tag.albumArtist }.orEmpty(),
+            year = normalizeReadYear(
+                safeText { tag.year }?.takeIf { it.isNotBlank() }
+                    ?: rawText(tag, TYER_IN_V24),
+            ),
+            genre = safeText { tag.genreDescription }?.takeIf { it.isNotBlank() }
+                ?: rawText(tag, AbstractID3v2Tag.ID_GENRE),
+            trackNumber = track.first,
+            trackTotal = track.second,
+            artwork = readArtwork(tag),
+        )
+    }
+
+    private fun readV1(tag: ID3v1): TagDraft {
+        val track = parseTrack(safeText { tag.track }.orEmpty())
+        return TagDraft(
+            title = safeText { tag.title }.orEmpty(),
+            artist = safeText { tag.artist }.orEmpty(),
+            album = safeText { tag.album }.orEmpty(),
+            year = normalizeReadYear(safeText { tag.year }),
+            genre = safeText { tag.genreDescription }?.takeIf { it.isNotBlank() },
+            trackNumber = track.first,
+            trackTotal = track.second,
+        )
+    }
+
+    /** ID3v1 is a fallback only for values the v2 tag does not provide. */
+    private fun merge(v2: TagDraft, v1: TagDraft): TagDraft = v2.copy(
+        title = v2.title.ifBlank { v1.title },
+        artist = v2.artist.ifBlank { v1.artist },
+        album = v2.album.ifBlank { v1.album },
+        year = v2.year ?: v1.year,
+        genre = v2.genre ?: v1.genre,
+        trackNumber = v2.trackNumber ?: v1.trackNumber,
+        trackTotal = v2.trackTotal ?: v1.trackTotal,
     )
 
-    private fun readV1(tag: ID3v1): TagDraft = TagDraft(
-        title = safeText { tag.title }.orEmpty(),
-        artist = safeText { tag.artist }.orEmpty(),
-        album = safeText { tag.album }.orEmpty(),
-        year = safeText { tag.year }?.takeIf { it.isNotBlank() },
-        genre = safeText { tag.genreDescription }?.takeIf { it.isNotBlank() },
-        trackNumber = parseTrack(safeText { tag.track }),
-    )
+    /**
+     * Copies ID3v1 values that are about to be discarded into blank v2 fields. Values
+     * selected for an update are never taken from v1: a selected blank means clear.
+     */
+    private fun adoptV1Fallback(v1: ID3v1?, id3: ID3v2, fields: Set<TagField>) {
+        if (v1 == null) return
+        val fallback = readV1(v1)
+        if (TagField.TITLE !in fields &&
+            safeText { id3.title }.isNullOrBlank() &&
+            fallback.title.isNotBlank()
+        ) {
+            writeText(id3, AbstractID3v2Tag.ID_TITLE, fallback.title)
+        }
+        if (TagField.ARTIST !in fields &&
+            safeText { id3.artist }.isNullOrBlank() &&
+            fallback.artist.isNotBlank()
+        ) {
+            writeText(id3, AbstractID3v2Tag.ID_ARTIST, fallback.artist)
+        }
+        if (TagField.ALBUM !in fields &&
+            safeText { id3.album }.isNullOrBlank() &&
+            fallback.album.isNotBlank()
+        ) {
+            writeText(id3, AbstractID3v2Tag.ID_ALBUM, fallback.album)
+        }
+        if (TagField.YEAR !in fields) {
+            val currentYear = normalizeReadYear(rawText(id3, AbstractID3v2Tag.ID_YEAR))
+                ?: normalizeReadYear(rawText(id3, TYER_IN_V24))
+            if (currentYear == null && fallback.year != null) {
+                writeYear(id3, fallback.year)
+            }
+        }
+        if (TagField.GENRE !in fields &&
+            safeText { id3.genreDescription }.isNullOrBlank() &&
+            fallback.genre != null
+        ) {
+            writeText(id3, AbstractID3v2Tag.ID_GENRE, fallback.genre)
+        }
+        if (TagField.TRACK_NUMBER !in fields &&
+            parseTrack(safeText { id3.track }.orEmpty()).first == null &&
+            fallback.trackNumber != null
+        ) {
+            writeText(id3, AbstractID3v2Tag.ID_TRACK, fallback.trackNumber.toString())
+        }
+    }
 
     private fun readArtwork(tag: ID3v2): Artwork? {
         val pictures = tag.frameSets[AbstractID3v2Tag.ID_IMAGE]
@@ -110,61 +217,33 @@ class Mp3TagStore {
             .mapNotNull { frame ->
                 runCatching { ID3v2PictureFrameData(false, frame.data) }.getOrNull()
             }
+            .filter { it.imageData.isNotEmpty() }
         val picture = pictures.firstOrNull {
             it.pictureType == AbstractID3v2Tag.PICTURETYPE_FRONTCOVER
         } ?: pictures.firstOrNull()
-        picture?.imageData?.takeIf { it.isNotEmpty() }?.let { bytes ->
-            val mimeType = picture.mimeType?.takeIf { it.isNotBlank() } ?: DEFAULT_MIME_TYPE
-            return Artwork(bytes, mimeType)
+        picture?.let {
+            return Artwork(
+                it.imageData,
+                detectMime(it.imageData) ?: it.mimeType ?: DEFAULT_MIME_TYPE,
+            )
         }
 
         val legacyBytes = runCatching { tag.albumImage }.getOrNull()
         return legacyBytes?.takeIf { it.isNotEmpty() }?.let { bytes ->
-            val mimeType = runCatching { tag.albumImageMimeType }.getOrNull()
-                ?.takeIf { it.isNotBlank() } ?: DEFAULT_MIME_TYPE
-            Artwork(bytes, mimeType)
+            val declared = runCatching { tag.albumImageMimeType }.getOrNull()
+            Artwork(bytes, detectMime(bytes) ?: declared ?: DEFAULT_MIME_TYPE)
         }
     }
 
-    private fun ensureV23(mp3: Mp3File): ID3v2 {
+    private fun ensureWritableTag(mp3: Mp3File): ID3v2 {
         val existing = mp3.id3v2Tag
-        val tag = when {
+        return when {
             existing == null -> ID3v23Tag()
-            existing.version == V23_VERSION -> existing
-            else -> convertToV23(existing)
-        }
-        normalizeTextFrames(tag)
-        return tag
-    }
-
-    private fun convertToV23(existing: ID3v2): ID3v23Tag {
-        val converted = ID3v23Tag()
-        var recordedDate: String? = null
-        existing.frameSets.forEach { (frameId, frameSet) ->
-            if (frameId == TYER_IN_V24) {
-                recordedDate = frameSet.frames.firstOrNull()?.let { rawFrameText(it.data) }
-            } else {
-                converted.frameSets[frameId] = frameSet
-            }
-        }
-        converted.padding = existing.padding
-        if (converted.frameSets[AbstractID3v2Tag.ID_YEAR] == null) {
-            val year = recordedDate?.take(4)?.takeIf { it.isNotBlank() }
-            if (year != null) {
-                writeUtf16Frame(converted, AbstractID3v2Tag.ID_YEAR, year)
-            }
-        }
-        return converted
-    }
-
-    private fun normalizeTextFrames(tag: ID3v2) {
-        TEXT_FRAME_IDS.forEach { frameId ->
-            val frames = tag.frameSets[frameId]?.frames ?: return@forEach
-            val texts = frames.mapNotNull { rawFrameText(it.data) }
-            if (texts.isEmpty()) return@forEach
-            val replacement = ID3v2FrameSet(frameId)
-            texts.forEach { replacement.addFrame(utf16Frame(frameId, it)) }
-            tag.frameSets[frameId] = replacement
+            existing.version == V23_VERSION || existing.version == V24_VERSION -> existing
+            else -> throw UnsupportedTagVersionException(
+                existing.version,
+                "ID3 ${existing.version} is not supported; refusing to rewrite it",
+            )
         }
     }
 
@@ -174,6 +253,32 @@ class Mp3TagStore {
         } else {
             writeUtf16Frame(tag, frameId, value)
         }
+    }
+
+    private fun writeYear(tag: ID3v2, year: String?) {
+        tag.clearFrameSet(AbstractID3v2Tag.ID_YEAR)
+        tag.clearFrameSet(TYER_IN_V24)
+        if (year != null) {
+            val frameId = if (tag.version == V24_VERSION) TYER_IN_V24 else AbstractID3v2Tag.ID_YEAR
+            writeUtf16Frame(tag, frameId, year)
+        }
+    }
+
+    private fun writeTrack(tag: ID3v2, draft: TagDraft) {
+        val number = draft.trackNumber
+        if (number == null) {
+            tag.clearFrameSet(AbstractID3v2Tag.ID_TRACK)
+            return
+        }
+        val existingTotal = parseTrack(
+            rawText(tag, AbstractID3v2Tag.ID_TRACK).orEmpty(),
+        ).second
+        val total = draft.trackTotal ?: existingTotal
+        writeUtf16Frame(
+            tag,
+            AbstractID3v2Tag.ID_TRACK,
+            if (total == null) number.toString() else "$number/$total",
+        )
     }
 
     private fun writeUtf16Frame(tag: ID3v2, frameId: String, value: String) {
@@ -198,81 +303,227 @@ class Mp3TagStore {
         tag.padding = padding
     }
 
-    private fun writeArtwork(tag: ID3v2, artwork: Artwork?) {
+    private fun writeArtwork(tag: ID3v2, artwork: Artwork?, mimeType: String?) {
         if (artwork == null) {
             tag.clearAlbumImage()
-        } else {
-            tag.setAlbumImage(
-                artwork.bytes,
-                artwork.mimeType,
-                AbstractID3v2Tag.PICTURETYPE_FRONTCOVER,
-                "",
-            )
+            return
+        }
+        val mime = mimeType ?: throw IllegalArgumentException("Unsupported artwork format")
+        val preserved = tag.frameSets[AbstractID3v2Tag.ID_IMAGE]
+            ?.frames
+            .orEmpty()
+            .mapNotNull { frame ->
+                val picture = runCatching {
+                    ID3v2PictureFrameData(false, frame.data)
+                }.getOrNull()
+                if (picture?.pictureType == AbstractID3v2Tag.PICTURETYPE_FRONTCOVER) {
+                    null
+                } else {
+                    ID3v2Frame(AbstractID3v2Tag.ID_IMAGE, frame.data)
+                }
+            }
+        tag.setAlbumImage(
+            artwork.bytes,
+            mime,
+            AbstractID3v2Tag.PICTURETYPE_FRONTCOVER,
+            "",
+        )
+        val images = tag.frameSets[AbstractID3v2Tag.ID_IMAGE]
+            ?: ID3v2FrameSet(AbstractID3v2Tag.ID_IMAGE).also {
+                tag.frameSets[AbstractID3v2Tag.ID_IMAGE] = it
+            }
+        preserved.forEach(images::addFrame)
+    }
+
+    private fun saveAndVerify(
+        mp3: Mp3File,
+        target: File,
+        directory: File,
+        originalAudio: ByteArray,
+    ) {
+        if (!directory.canWrite()) {
+            throw TagWriteException("Directory is not writable: ${directory.path}")
+        }
+        val prefix = TEMP_PREFIX + target.name + "-"
+        directory.listFiles()
+            ?.filter { it.isFile && it.name.startsWith(prefix) && it.name.endsWith(TEMP_SUFFIX) }
+            ?.forEach { it.delete() }
+
+        val temporary = Files.createTempFile(directory.toPath(), prefix, TEMP_SUFFIX)
+        val backup = File(directory, BACKUP_PREFIX + target.name + BACKUP_SUFFIX)
+        var keepBackup = false
+        try {
+            saver.save(mp3, temporary)
+            force(temporary)
+            if (!digest(Mp3File(temporary), temporary.toFile()).contentEquals(originalAudio)) {
+                throw TagWriteException("Audio changed while writing ${target.name}")
+            }
+
+            Files.copy(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            force(backup.toPath())
+            if (!digest(Mp3File(backup), backup).contentEquals(originalAudio)) {
+                throw TagWriteException("Could not back up ${target.name} safely")
+            }
+
+            mover.move(temporary, target.toPath())
+            if (!digest(Mp3File(target), target).contentEquals(originalAudio)) {
+                throw TagWriteException("Audio verification failed for ${target.name}")
+            }
+        } catch (e: Exception) {
+            if (!target.exists() || !audioMatches(target, originalAudio)) {
+                if (!restore(backup, target, originalAudio)) {
+                    keepBackup = true
+                    throw TagWriteException(
+                        "Could not restore ${target.name}; backup kept at ${backup.path}",
+                        e,
+                    )
+                }
+            }
+            if (e is TagWriteException) throw e
+            throw TagWriteException("Could not replace ${target.name}", e)
+        } finally {
+            runCatching { Files.deleteIfExists(temporary) }
+            if (!keepBackup) {
+                runCatching { Files.deleteIfExists(backup.toPath()) }
+            }
         }
     }
 
-    private fun saveAtomically(mp3: Mp3File, target: File) {
-        val directory = target.absoluteFile.parentFile
-            ?: throw IOException("No parent directory for ${target.name}")
-        val temporary = File.createTempFile("cue-tag-", ".mp3", directory)
-        try {
-            mp3.save(temporary.absolutePath)
-            try {
-                Files.move(
-                    temporary.toPath(),
-                    target.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE,
-                )
-            } catch (e: AtomicMoveNotSupportedException) {
-                Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            }
-        } finally {
-            if (temporary.exists()) {
-                temporary.delete()
+    private fun restore(backup: File, target: File, originalAudio: ByteArray): Boolean {
+        if (!backup.exists()) return false
+        return runCatching {
+            DefaultAtomicMover.move(backup.toPath(), target.toPath())
+            audioMatches(target, originalAudio)
+        }.getOrDefault(false)
+    }
+
+    private fun audioMatches(file: File, expected: ByteArray): Boolean =
+        runCatching { digest(Mp3File(file), file).contentEquals(expected) }.getOrDefault(false)
+
+    /** Hashes only the MPEG frames, excluding ID3 tags and any pre-audio junk. */
+    private fun digest(mp3: Mp3File, file: File): ByteArray {
+        val start = mp3.startOffset
+        val length = mp3.endOffset - start + 1
+        if (start < 0 || length <= 0) {
+            throw TagReadException("MP3 contains no audio frames")
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileChannel.open(file.toPath(), StandardOpenOption.READ).use { channel ->
+            channel.position(start.toLong())
+            var remaining = length.toLong()
+            val buffer = ByteBuffer.allocate(64 * 1024)
+            while (remaining > 0) {
+                buffer.clear()
+                buffer.limit(minOf(buffer.capacity().toLong(), remaining).toInt())
+                val read = channel.read(buffer)
+                if (read < 0) throw IOException("Unexpected end of audio data")
+                if (read == 0) continue
+                buffer.flip()
+                digest.update(buffer)
+                remaining -= read
             }
         }
+        return digest.digest()
+    }
+
+    private fun force(path: Path) {
+        FileChannel.open(path, StandardOpenOption.WRITE).use { it.force(true) }
     }
 
     private fun rawText(tag: ID3v2, frameId: String): String? =
         tag.frameSets[frameId]?.frames?.firstOrNull()?.let { rawFrameText(it.data) }
 
     private fun rawFrameText(data: ByteArray): String? =
-        runCatching { ID3v2TextFrameData(false, data).text?.toString() }.getOrNull()
+        runCatching {
+            com.mpatric.mp3agic.ID3v2TextFrameData(false, data).text?.toString()
+        }.getOrNull()
 
-    private fun parseTrack(raw: String?): Int? = raw
-        ?.substringBefore('/')
+    private fun parseTrack(raw: String): Pair<Int?, Int?> {
+        val value = raw.trim()
+        if (value.isEmpty()) return null to null
+        val separator = value.indexOf('/')
+        val number = value.substring(0, if (separator < 0) value.length else separator)
+            .trim()
+            .toIntOrNull()
+            ?.takeIf { it > 0 }
+        val total = if (separator < 0) {
+            null
+        } else {
+            value.substring(separator + 1).trim().toIntOrNull()?.takeIf { it > 0 }
+        }
+        return number to total
+    }
+
+    private fun normalizeYear(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        val match = YEAR_PATTERN.matchEntire(value.trim())
+            ?: throw IllegalArgumentException("Year must be YYYY or an ISO date")
+        return match.groupValues[1]
+    }
+
+    private fun normalizeReadYear(value: String?): String? = value
         ?.trim()
-        ?.toIntOrNull()
-        ?.takeIf { it > 0 }
+        ?.take(4)
+        ?.takeIf { it.length == 4 && it.all(Char::isDigit) }
 
-    private inline fun <T> safeText(block: () -> T?): T? =
-        runCatching(block).getOrNull()
+    private fun detectMime(bytes: ByteArray): String? {
+        fun startsWith(vararg values: Int): Boolean = bytes.size >= values.size &&
+            values.indices.all { (bytes[it].toInt() and 0xFF) == values[it] }
+        return when {
+            startsWith(0xFF, 0xD8, 0xFF) -> "image/jpeg"
+            startsWith(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) -> "image/png"
+            startsWith(0x47, 0x49, 0x46, 0x38) -> "image/gif"
+            bytes.size >= 12 &&
+                "RIFF".toByteArray().contentEquals(bytes.copyOfRange(0, 4)) &&
+                "WEBP".toByteArray().contentEquals(bytes.copyOfRange(8, 12)) -> "image/webp"
+            else -> null
+        }
+    }
+
+    private inline fun <T> safeText(block: () -> T?): T? = runCatching(block).getOrNull()
+
+    internal fun interface AtomicMover {
+        fun move(source: Path, target: Path)
+    }
+
+    internal fun interface Mp3Saver {
+        fun save(mp3: Mp3File, target: Path)
+    }
+
+    internal object DefaultMp3Saver : Mp3Saver {
+        override fun save(mp3: Mp3File, target: Path) {
+            mp3.save(target.toAbsolutePath().toString())
+        }
+    }
+
+    internal object DefaultAtomicMover : AtomicMover {
+        override fun move(source: Path, target: Path) {
+            try {
+                Files.move(
+                    source,
+                    target,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+            } catch (e: AtomicMoveNotSupportedException) {
+                throw TagWriteException(
+                    "Atomic file replacement is not supported for ${target.fileName}",
+                    e,
+                )
+            }
+        }
+    }
 
     private companion object {
         const val V23_VERSION = "3.0"
+        const val V24_VERSION = "4.0"
         const val TYER_IN_V24 = "TDRC"
         const val DEFAULT_MIME_TYPE = "image/jpeg"
+        const val TEMP_PREFIX = ".cue-tag-"
+        const val TEMP_SUFFIX = ".tmp"
+        const val BACKUP_PREFIX = ".cue-tag-"
+        const val BACKUP_SUFFIX = ".bak"
 
-        val TEXT_FRAME_IDS = setOf(
-            AbstractID3v2Tag.ID_TITLE,
-            AbstractID3v2Tag.ID_ARTIST,
-            AbstractID3v2Tag.ID_ALBUM,
-            AbstractID3v2Tag.ID_ALBUM_ARTIST,
-            AbstractID3v2Tag.ID_YEAR,
-            AbstractID3v2Tag.ID_DATE,
-            AbstractID3v2Tag.ID_GENRE,
-            AbstractID3v2Tag.ID_TRACK,
-            AbstractID3v2Tag.ID_PART_OF_SET,
-            AbstractID3v2Tag.ID_COMPOSER,
-            AbstractID3v2Tag.ID_PUBLISHER,
-            AbstractID3v2Tag.ID_ORIGINAL_ARTIST,
-            AbstractID3v2Tag.ID_COPYRIGHT,
-            AbstractID3v2Tag.ID_ENCODER,
-            AbstractID3v2Tag.ID_KEY,
-            AbstractID3v2Tag.ID_GROUPING,
-            AbstractID3v2Tag.ID_BPM,
-            "TIME",
-        )
+        val YEAR_PATTERN = Regex("""^(\d{4})(?:-\d{2}(?:-\d{2})?)?$""")
     }
 }
