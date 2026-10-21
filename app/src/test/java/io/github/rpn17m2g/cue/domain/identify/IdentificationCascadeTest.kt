@@ -6,6 +6,7 @@ import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.metadata.TagField
 import io.github.rpn17m2g.cue.domain.ocr.OcrCandidate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -233,6 +234,25 @@ class IdentificationCascadeTest {
     }
 
     @Test
+    fun `cancellation from the lookup propagates`() = runTest {
+        var caught: Throwable? = null
+
+        try {
+            cascade(lookup = { throw CancellationException("cancelled") }).identify(
+                ocrCandidates = listOf(getLucky),
+                embeddedTags = null,
+                networkEnabled = true,
+                fingerprintEnabled = false,
+                acoustIdConfigured = false,
+            )
+        } catch (error: CancellationException) {
+            caught = error
+        }
+
+        assertTrue(caught is CancellationException)
+    }
+
+    @Test
     fun `resolver failure falls through to the fingerprint`() = runTest {
         val outcome = cascade(
             lookup = { throw IllegalStateException("network down") },
@@ -320,11 +340,32 @@ class IdentificationCascadeTest {
         )
 
         assertEquals("Get Lucky", outcome.tag.title)
-        assertEquals("Wrong Artist", outcome.tag.artist)
+        assertEquals("Daft Punk", outcome.tag.artist)
         assertEquals(IdentificationSource.EMBEDDED_TAGS, outcome.sources[TagField.TITLE])
-        assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.ARTIST])
+        assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.ARTIST])
         assertTrue(outcome.usedEmbeddedTags)
         assertEquals("Get Lucky", lastSeed?.title)
+    }
+
+    @Test
+    fun `lookup seed forwards the album from embedded tags`() = runTest {
+        var lastSeed: LookupSeed? = null
+        val embedded = TagDraft(album = "Random Access Memories")
+
+        cascade(
+            lookup = { seed ->
+                lastSeed = seed
+                emptyList()
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = embedded,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+        )
+
+        assertEquals("Random Access Memories", lastSeed?.album)
     }
 
     @Test

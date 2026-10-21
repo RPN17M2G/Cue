@@ -56,6 +56,22 @@ class MetadataMergerTest {
     }
 
     @Test
+    fun `near exact title overrides a mismatched ocr artist`() {
+        val base = TagDraft(title = "Get Lucky", artist = "Wrong Artist")
+        val match = MetadataMatch(
+            title = "Get Lucky",
+            artist = "Daft Punk",
+            source = IdentificationSource.ITUNES,
+            score = 0.9,
+        )
+
+        val result = MetadataMerger.merge(base, listOf(match), baseSource = IdentificationSource.OCR_LATIN)
+
+        assertEquals("Daft Punk", result.tag.artist)
+        assertEquals(IdentificationSource.ITUNES, result.sources[TagField.ARTIST])
+    }
+
+    @Test
     fun `high confidence match never overrides manual fields`() {
         val base = TagDraft(title = "Get Lucky", artist = "Daft Punk")
         val match = MetadataMatch(

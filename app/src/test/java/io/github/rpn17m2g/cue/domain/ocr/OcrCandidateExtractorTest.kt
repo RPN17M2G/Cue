@@ -59,6 +59,10 @@ class OcrCandidateExtractorTest {
             listOf(
                 "12:34",
                 "Battery 85%",
+                "100%",
+                "9:41 AM",
+                "12:34:56 PM",
+                "01:02:03",
                 "Up next",
                 "Shuffle",
                 "Library",
@@ -67,10 +71,6 @@ class OcrCandidateExtractorTest {
                 "Explore",
                 "Sign in",
                 "Add to playlist",
-                "Share",
-                "Download",
-                "Like",
-                "More",
                 "Play next",
                 "Save to library",
                 "https://example.com/watch?v=1",
@@ -85,11 +85,54 @@ class OcrCandidateExtractorTest {
 
     @Test
     fun `numeric and dotted titles are not mistaken for noise`() {
-        val titles = listOf("1999", "100%", "Mr.Kitty", "A.B.C.")
+        val titles = listOf("1999", "Mr.Kitty", "A.B.C.")
 
         val candidates = OcrCandidateExtractor.extract(listOf(titles))
 
         assertEquals(titles.toSet(), candidates.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `ambiguous single word titles are kept`() {
+        val titles = listOf("Like", "More", "Share", "Download")
+
+        val candidates = OcrCandidateExtractor.extract(listOf(titles))
+
+        assertEquals(titles.toSet(), candidates.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `embedded urls and bare domains are filtered`() {
+        val frames = listOf(
+            listOf(
+                "music.youtube.com",
+                "Watch on https://youtu.be/abc",
+                "www.example.com",
+            ),
+        )
+
+        assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
+    }
+
+    @Test
+    fun `bare clock title survives without status context`() {
+        val candidates = OcrCandidateExtractor.extract(listOf(listOf("4:33")))
+
+        assertEquals(listOf("4:33"), candidates.map { it.title })
+    }
+
+    @Test
+    fun `bare clock is filtered when the frame has a status line`() {
+        val candidates = OcrCandidateExtractor.extract(listOf(listOf("4:33", "9:41 AM")))
+
+        assertTrue(candidates.none { it.title == "4:33" })
+    }
+
+    @Test
+    fun `meridiem and duration clocks are always filtered`() {
+        assertTrue(OcrCandidateExtractor.extract(listOf(listOf("9:41 AM"))).isEmpty())
+        assertTrue(OcrCandidateExtractor.extract(listOf(listOf("12:34:56 PM"))).isEmpty())
+        assertTrue(OcrCandidateExtractor.extract(listOf(listOf("01:02:03"))).isEmpty())
     }
 
     @Test
