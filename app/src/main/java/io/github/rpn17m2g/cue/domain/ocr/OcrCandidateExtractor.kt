@@ -32,11 +32,12 @@ object OcrCandidateExtractor {
     private val MERIDIEM = Regex("\\d{1,2}:\\d{2}(:\\d{2})?\\s*[AaPp][Mm]")
     private val DURATION = Regex("^\\d{1,2}:\\d{2}:\\d{2}$")
     private val BARE_CLOCK = Regex("^\\d{1,2}:\\d{2}$")
-    private val PERCENT = Regex("^\\d{1,3}%$")
+    private val PERCENT = Regex("^\\d{1,3}\\s*%$")
     private val BATTERY = Regex(".*\\b(?:battery|charging)\\b.*\\d{1,3}%", RegexOption.IGNORE_CASE)
-    private val URL = Regex("(?i)(?:https?://|www\\.)\\S+")
-    private val BARE_DOMAIN = Regex(
-        "(?i)^(?:[a-z0-9-]+\\.){2,}(?:com|net|org|io|il|co|uk|de|fr|ru|tv|me|app|dev|info|biz|edu|gov)$",
+    private val DOMAIN = Regex(
+        "(?i)(?:[a-z0-9-]+\\.)+" +
+            "(?:com|net|org|io|co|me|app|dev|ly|gl|be|music|youtube|spotify|link|page)" +
+            "(?![a-z0-9-])(?:[/:?#]\\S*)?",
     )
     private val HAS_LETTER_OR_DIGIT = Regex("[\\p{L}\\p{Nd}]")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
@@ -126,8 +127,7 @@ object OcrCandidateExtractor {
         if (BARE_CLOCK.matches(line) && statusContext) return true
         if (PERCENT.matches(line)) return true
         if (BATTERY.matches(line)) return true
-        if (URL.containsMatchIn(line)) return true
-        if (BARE_DOMAIN.matches(line)) return true
+        if (DOMAIN.containsMatchIn(line)) return true
         return false
     }
 
