@@ -128,8 +128,8 @@ class AcoustIdClient internal constructor(
 
     private fun AcoustIdError?.toLookupError(httpCode: Int?): LookupError = when (this?.code) {
         INVALID_API_KEY, INVALID_API_KEY_ALT -> LookupError.MissingKey
-        RATE_LIMITED -> LookupError.RateLimited
-        UNKNOWN_ERROR -> LookupError.Network()
+        TOO_MANY_REQUESTS -> LookupError.RateLimited
+        SERVICE_UNAVAILABLE -> LookupError.Http(HTTP_SERVICE_UNAVAILABLE)
         else -> when {
             httpCode == null -> LookupError.Parse()
             httpCode == 429 -> LookupError.RateLimited
@@ -144,7 +144,8 @@ class AcoustIdClient internal constructor(
         const val STATUS_OK = "ok"
         const val INVALID_API_KEY = 4
         const val INVALID_API_KEY_ALT = 17
-        const val RATE_LIMITED = 13
-        const val UNKNOWN_ERROR = 14
+        const val SERVICE_UNAVAILABLE = 13
+        const val TOO_MANY_REQUESTS = 14
+        const val HTTP_SERVICE_UNAVAILABLE = 503
     }
 }

@@ -162,7 +162,7 @@ class AcoustIdClientTest {
             MockResponse()
                 .setResponseCode(429)
                 .setHeader("Content-Type", "application/json")
-                .setBody("""{"status":"error","error":{"code":13,"message":"rate limited"}}"""),
+                .setBody("""{"status":"error","error":{"code":14,"message":"rate limited"}}"""),
         )
 
         val result = client.lookup(
@@ -171,6 +171,23 @@ class AcoustIdClientTest {
         )
 
         assertEquals(LookupError.RateLimited, (result as LookupResult.Failure).error)
+    }
+
+    @Test
+    fun `http 503 error body with service unavailable code maps to service unavailable`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(503)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"status":"error","error":{"code":13,"message":"service unavailable"}}"""),
+        )
+
+        val result = client.lookup(
+            input = FingerprintInput("chromaprint", 30),
+            apiKey = "test-key",
+        )
+
+        assertEquals(LookupError.Http(503), (result as LookupResult.Failure).error)
     }
 
     @Test
