@@ -28,7 +28,7 @@ $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
 
 $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(2)) `
     -RepetitionInterval (New-TimeSpan -Hours 2) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)
+    -RepetitionDuration (New-TimeSpan -Days 3650)
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2)
