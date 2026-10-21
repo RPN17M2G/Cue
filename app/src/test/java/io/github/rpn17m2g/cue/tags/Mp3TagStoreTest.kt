@@ -4,7 +4,9 @@ import com.mpatric.mp3agic.AbstractID3v2Tag
 import com.mpatric.mp3agic.EncodedText
 import com.mpatric.mp3agic.ID3v22Tag
 import com.mpatric.mp3agic.ID3v23Tag
+import com.mpatric.mp3agic.ID3v24Frame
 import com.mpatric.mp3agic.ID3v24Tag
+import com.mpatric.mp3agic.ID3v2
 import com.mpatric.mp3agic.ID3v2Frame
 import com.mpatric.mp3agic.ID3v2FrameSet
 import com.mpatric.mp3agic.ID3v2PictureFrameData
@@ -374,6 +376,32 @@ class Mp3TagStoreTest {
     }
 
     @Test
+    fun `total-only track edits write the slash total form`() {
+        val file = taggedFile("track-total-only.mp3")
+
+        store.writeInPlace(file, TagDraft(trackTotal = 12), setOf(TagField.TRACK_NUMBER))
+
+        assertEquals("/12", Mp3File(file).id3v2Tag.track)
+        val read = checkNotNull(store.read(file))
+        assertNull(read.trackNumber)
+        assertEquals(12, read.trackTotal)
+    }
+
+    @Test
+    fun `invalid track values are ignored when track number is not selected`() {
+        val file = taggedFile("track-unselected.mp3")
+        store.writeInPlace(file, TagDraft(title = "Before"), TagField.ALL_FIELDS)
+
+        store.writeInPlace(
+            file,
+            TagDraft(title = "After", trackNumber = 0, trackTotal = -1),
+            setOf(TagField.TITLE),
+        )
+
+        assertEquals("After", store.read(file)!!.title)
+    }
+
+    @Test
     fun `unknown frames survive a text update`() {
         val file = taggedFile("unknown-frame.mp3")
         store.writeInPlace(file, TagDraft(title = "Before"), TagField.ALL_FIELDS)
@@ -476,6 +504,40 @@ class Mp3TagStoreTest {
     }
 
     @Test
+    fun `clearing the front cover keeps other apic pictures`() {
+        val file = taggedFile("apic-clear.mp3")
+        val backCover = TestImages.png(width = 7, height = 9)
+        store.writeInPlace(
+            file,
+            TagDraft(
+                title = "Song",
+                artwork = Artwork(TestImages.jpeg(width = 10, height = 10), "image/jpeg"),
+            ),
+            TagField.ALL_FIELDS,
+        )
+        appendRawFrame(
+            file,
+            AbstractID3v2Tag.ID_IMAGE,
+            apicPayload("image/png", AbstractID3v2Tag.PICTURETYPE_BACKCOVER, backCover),
+        )
+
+        store.writeInPlace(file, TagDraft(artwork = null), setOf(TagField.ARTWORK))
+
+        val pictures = rawApicFrames(file).map {
+            ID3v2PictureFrameData(false, it.data)
+        }
+        assertTrue(pictures.none {
+            it.pictureType == AbstractID3v2Tag.PICTURETYPE_FRONTCOVER
+        })
+        assertEquals(1, pictures.size)
+        assertEquals(
+            AbstractID3v2Tag.PICTURETYPE_BACKCOVER.toInt(),
+            pictures.single().pictureType.toInt(),
+        )
+        assertArrayEquals(backCover, pictures.single().imageData)
+    }
+
+    @Test
     fun `artwork mime type is derived from the bytes`() {
         val file = taggedFile("mime.mp3")
         val png = TestImages.png(width = 11, height = 11)
@@ -556,6 +618,83 @@ class Mp3TagStoreTest {
         assertNotNull(tag.frameSets["TDRC"])
         assertNull(tag.frameSets[AbstractID3v2Tag.ID_YEAR])
         assertEquals("2021", store.read(file)!!.year)
+    }
+
+    @Test
+    fun `v24 long utf16 title keeps the following artist frame readable`() {
+        val file = taggedFile("v24-long-title.mp3")
+        writeV24Fixture(file, title = "Short", artist = "Old Artist", year = "2019")
+        val longTitle = "כותרת ארוכה מאוד ".repeat(10)
+        val artist = "אמן שאחרי הכותרת"
+
+        store.writeInPlace(
+            file,
+            TagDraft(title = longTitle, artist = artist),
+            setOf(TagField.TITLE, TagField.ARTIST),
+        )
+
+        val tag = checkNotNull(Mp3File(file).id3v2Tag)
+        assertEquals("4.0", tag.version)
+        assertEquals(longTitle, tag.title)
+        assertEquals(artist, tag.artist)
+        val read = checkNotNull(store.read(file))
+        assertEquals(longTitle, read.title)
+        assertEquals(artist, read.artist)
+    }
+
+    @Test
+    fun `v24 replacing the front cover keeps a large back cover intact`() {
+        val file = taggedFile("v24-apic-replace.mp3")
+        writeV24Fixture(file, title = "Song", artist = "Artist", year = "2019")
+        val backCover = TestImages.png(width = 400, height = 400)
+        appendRawFrame(
+            file,
+            AbstractID3v2Tag.ID_IMAGE,
+            apicPayload(
+                "image/jpeg",
+                AbstractID3v2Tag.PICTURETYPE_FRONTCOVER,
+                TestImages.jpeg(width = 10, height = 10),
+            ),
+        )
+        appendRawFrame(
+            file,
+            AbstractID3v2Tag.ID_IMAGE,
+            apicPayload("image/png", AbstractID3v2Tag.PICTURETYPE_BACKCOVER, backCover),
+        )
+        val newFront = TestImages.jpeg(width = 14, height = 14)
+
+        store.writeInPlace(
+            file,
+            TagDraft(title = "Song", artwork = Artwork(newFront, "image/jpeg")),
+            setOf(TagField.TITLE, TagField.ARTWORK),
+        )
+
+        assertV24Pictures(file, newFront, backCover)
+    }
+
+    @Test
+    fun `v24 clearing the front cover keeps a large back cover intact`() {
+        val file = taggedFile("v24-apic-clear.mp3")
+        writeV24Fixture(file, title = "Song", artist = "Artist", year = "2019")
+        val backCover = TestImages.png(width = 400, height = 400)
+        appendRawFrame(
+            file,
+            AbstractID3v2Tag.ID_IMAGE,
+            apicPayload(
+                "image/jpeg",
+                AbstractID3v2Tag.PICTURETYPE_FRONTCOVER,
+                TestImages.jpeg(width = 10, height = 10),
+            ),
+        )
+        appendRawFrame(
+            file,
+            AbstractID3v2Tag.ID_IMAGE,
+            apicPayload("image/png", AbstractID3v2Tag.PICTURETYPE_BACKCOVER, backCover),
+        )
+
+        store.writeInPlace(file, TagDraft(artwork = null), setOf(TagField.ARTWORK))
+
+        assertV24Pictures(file, null, backCover)
     }
 
     @Test
@@ -651,12 +790,14 @@ class Mp3TagStoreTest {
         val corrupting = Mp3TagStore(
             Mp3TagStore.AtomicMover { source, target ->
                 Mp3TagStore.DefaultAtomicMover.move(source, target)
-                RandomAccessFile(target.toFile(), "rw").use { raf ->
-                    val audioStart = Mp3File(target.toFile()).startOffset.toLong()
-                    raf.seek(audioStart)
-                    val value = raf.read()
-                    raf.seek(audioStart)
-                    raf.write(value xor 0x01)
+                if (source.fileName.toString().endsWith(".tmp")) {
+                    RandomAccessFile(target.toFile(), "rw").use { raf ->
+                        val audioStart = Mp3File(target.toFile()).startOffset.toLong()
+                        raf.seek(audioStart)
+                        val value = raf.read()
+                        raf.seek(audioStart)
+                        raf.write(value xor 0x01)
+                    }
                 }
             },
         )
@@ -670,6 +811,32 @@ class Mp3TagStoreTest {
     }
 
     @Test
+    fun `restore failure reports that the moved backup is no longer available`() {
+        val file = taggedFile("restore-message.mp3", Mp3Fixtures.audioOnly(frameCount = 6))
+        val corrupting = Mp3TagStore(
+            Mp3TagStore.AtomicMover { source, target ->
+                Mp3TagStore.DefaultAtomicMover.move(source, target)
+                RandomAccessFile(target.toFile(), "rw").use { raf ->
+                    val audioStart = Mp3File(target.toFile()).startOffset.toLong()
+                    raf.seek(audioStart)
+                    val value = raf.read()
+                    raf.seek(audioStart)
+                    raf.write(value xor 0x01)
+                }
+            },
+        )
+
+        val error = assertThrows(TagWriteException::class.java) {
+            corrupting.writeInPlace(file, TagDraft(title = "New"), TagField.ALL_FIELDS)
+        }
+
+        assertTrue(error.message!!.contains("backup is no longer available"))
+        assertFalse(error.message!!.contains("backup kept"))
+        assertFalse(File(file.parentFile!!, ".cue-tag-${file.name}.bak").exists())
+        assertNoArtifacts(file.parentFile!!)
+    }
+
+    @Test
     fun `stale temporary files are removed before writing`() {
         val file = taggedFile("stale.mp3", Mp3Fixtures.audioOnly())
         val stale = File(file.parentFile!!, ".cue-tag-${file.name}-stale.tmp")
@@ -679,6 +846,37 @@ class Mp3TagStoreTest {
 
         assertFalse(stale.exists())
         assertNoArtifacts(file.parentFile!!)
+    }
+
+    @Test
+    fun `stale backup is recovered when the target is missing`() {
+        val file = File(temporaryFolder.root, "recover.mp3")
+        val backup = File(temporaryFolder.root, ".cue-tag-recover.mp3.bak")
+        backup.writeBytes(Mp3Fixtures.audioOnly())
+
+        store.writeInPlace(file, TagDraft(title = "Recovered"), TagField.ALL_FIELDS)
+
+        assertTrue(file.exists())
+        assertFalse(backup.exists())
+        assertEquals("Recovered", store.read(file)!!.title)
+        assertNoArtifacts(file.parentFile!!)
+    }
+
+    @Test
+    fun `stale backup blocks an existing target and names the backup`() {
+        val file = taggedFile("stale-backup.mp3", Mp3Fixtures.audioOnly())
+        val backup = File(file.parentFile!!, ".cue-tag-${file.name}.bak")
+        backup.writeBytes(Mp3Fixtures.audioOnly(frameCount = 3))
+        val originalTarget = file.readBytes()
+        val originalBackup = backup.readBytes()
+
+        val error = assertThrows(TagWriteException::class.java) {
+            store.writeInPlace(file, TagDraft(title = "New"), TagField.ALL_FIELDS)
+        }
+
+        assertTrue(error.message!!.contains(backup.path))
+        assertArrayEquals(originalTarget, file.readBytes())
+        assertArrayEquals(originalBackup, backup.readBytes())
     }
 
     @Test
@@ -745,7 +943,9 @@ class Mp3TagStoreTest {
     private fun writeRawFrame(file: File, frameId: String, payload: ByteArray) {
         val mp3 = Mp3File(file)
         val tag = mp3.id3v2Tag ?: ID3v23Tag()
-        tag.frameSets[frameId] = frameSet(frameId, payload)
+        tag.frameSets[frameId] = ID3v2FrameSet(frameId).also {
+            it.addFrame(frameFor(tag, frameId, payload))
+        }
         invalidateLength(tag)
         mp3.id3v2Tag = tag
         saveReplacing(mp3, file)
@@ -756,11 +956,18 @@ class Mp3TagStoreTest {
         val tag = mp3.id3v2Tag ?: ID3v23Tag()
         val frames = tag.frameSets[frameId]
             ?: ID3v2FrameSet(frameId).also { tag.frameSets[frameId] = it }
-        frames.addFrame(ID3v2Frame(frameId, payload))
+        frames.addFrame(frameFor(tag, frameId, payload))
         invalidateLength(tag)
         mp3.id3v2Tag = tag
         saveReplacing(mp3, file)
     }
+
+    private fun frameFor(tag: ID3v2, frameId: String, payload: ByteArray): ID3v2Frame =
+        if (tag.version == "4.0") {
+            ID3v24Frame(frameId, payload)
+        } else {
+            ID3v2Frame(frameId, payload)
+        }
 
     private fun invalidateLength(tag: com.mpatric.mp3agic.ID3v2) {
         val padding = tag.padding
@@ -770,6 +977,28 @@ class Mp3TagStoreTest {
 
     private fun rawApicFrames(file: File): List<ID3v2Frame> =
         Mp3File(file).id3v2Tag.frameSets[AbstractID3v2Tag.ID_IMAGE]?.frames.orEmpty()
+
+    private fun assertV24Pictures(file: File, front: ByteArray?, back: ByteArray) {
+        val tag = checkNotNull(Mp3File(file).id3v2Tag)
+        assertEquals("4.0", tag.version)
+        val pictures = rawApicFrames(file).map {
+            ID3v2PictureFrameData(false, it.data)
+        }
+        val fronts = pictures.filter {
+            it.pictureType == AbstractID3v2Tag.PICTURETYPE_FRONTCOVER
+        }
+        val backs = pictures.filter {
+            it.pictureType == AbstractID3v2Tag.PICTURETYPE_BACKCOVER
+        }
+        if (front == null) {
+            assertTrue(fronts.isEmpty())
+        } else {
+            assertEquals(1, fronts.size)
+            assertArrayEquals(front, fronts.single().imageData)
+        }
+        assertEquals(1, backs.size)
+        assertArrayEquals(back, backs.single().imageData)
+    }
 
     private fun apicPayload(mimeType: String, pictureType: Byte, image: ByteArray): ByteArray =
         byteArrayOf(EncodedText.TEXT_ENCODING_ISO_8859_1) +

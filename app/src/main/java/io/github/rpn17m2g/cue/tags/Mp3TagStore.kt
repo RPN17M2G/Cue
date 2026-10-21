@@ -5,6 +5,7 @@ import com.mpatric.mp3agic.EncodedText
 import com.mpatric.mp3agic.ID3v1
 import com.mpatric.mp3agic.ID3v2
 import com.mpatric.mp3agic.ID3v23Tag
+import com.mpatric.mp3agic.ID3v24Frame
 import com.mpatric.mp3agic.ID3v2Frame
 import com.mpatric.mp3agic.ID3v2FrameSet
 import com.mpatric.mp3agic.ID3v2PictureFrameData
@@ -53,17 +54,24 @@ class Mp3TagStore internal constructor(
         } else {
             null
         }
-        if (tag.trackNumber != null) {
-            require(tag.trackNumber > 0) { "trackNumber must be positive" }
-        }
-        if (tag.trackTotal != null) {
-            require(tag.trackTotal > 0) { "trackTotal must be positive" }
+        if (TagField.TRACK_NUMBER in fields) {
+            if (tag.trackNumber != null) {
+                require(tag.trackNumber > 0) { "trackNumber must be positive" }
+            }
+            if (tag.trackTotal != null) {
+                require(tag.trackTotal > 0) { "trackTotal must be positive" }
+            }
         }
 
         val target = file.absoluteFile
         val directory = target.parentFile
             ?: throw TagWriteException("No parent directory for ${target.name}")
-        if (Files.isSymbolicLink(target.toPath()) || !Files.isRegularFile(target.toPath())) {
+        if (Files.isSymbolicLink(target.toPath())) {
+            throw TagWriteException("Refusing to replace non-regular file: ${target.name}")
+        }
+        val backup = backupFor(target, directory)
+        recoverOrRejectStaleBackup(target, backup)
+        if (!Files.isRegularFile(target.toPath())) {
             throw TagWriteException("Refusing to replace non-regular file: ${target.name}")
         }
 
@@ -105,7 +113,7 @@ class Mp3TagStore internal constructor(
 
             mp3.id3v2Tag = id3
             mp3.removeId3v1Tag()
-            saveAndVerify(mp3, target, directory, originalAudio)
+            saveAndVerify(mp3, target, directory, backup, originalAudio)
         } catch (e: TagReadException) {
             throw e
         } catch (e: TagWriteException) {
@@ -266,13 +274,17 @@ class Mp3TagStore internal constructor(
 
     private fun writeTrack(tag: ID3v2, draft: TagDraft) {
         val number = draft.trackNumber
-        if (number == null) {
-            tag.clearFrameSet(AbstractID3v2Tag.ID_TRACK)
-            return
-        }
         val existingTotal = parseTrack(
             rawText(tag, AbstractID3v2Tag.ID_TRACK).orEmpty(),
         ).second
+        if (number == null) {
+            if (draft.trackTotal == null) {
+                tag.clearFrameSet(AbstractID3v2Tag.ID_TRACK)
+            } else {
+                writeUtf16Frame(tag, AbstractID3v2Tag.ID_TRACK, "/${draft.trackTotal}")
+            }
+            return
+        }
         val total = draft.trackTotal ?: existingTotal
         writeUtf16Frame(
             tag,
@@ -283,15 +295,22 @@ class Mp3TagStore internal constructor(
 
     private fun writeUtf16Frame(tag: ID3v2, frameId: String, value: String) {
         val frameSet = ID3v2FrameSet(frameId)
-        frameSet.addFrame(utf16Frame(frameId, value))
+        frameSet.addFrame(utf16Frame(tag, frameId, value))
         tag.frameSets[frameId] = frameSet
     }
 
-    private fun utf16Frame(frameId: String, value: String): ID3v2Frame {
+    private fun utf16Frame(tag: ID3v2, frameId: String, value: String): ID3v2Frame {
         val encoded = EncodedText(EncodedText.TEXT_ENCODING_UTF_16, value)
         val payload = byteArrayOf(encoded.textEncoding) + encoded.toBytes(true, false)
-        return ID3v2Frame(frameId, payload)
+        return frameFor(tag, frameId, payload)
     }
+
+    private fun frameFor(tag: ID3v2, frameId: String, payload: ByteArray): ID3v2Frame =
+        if (tag.version == V24_VERSION) {
+            ID3v24Frame(frameId, payload)
+        } else {
+            ID3v2Frame(frameId, payload)
+        }
 
     /**
      * mp3agic caches the serialized tag size and only clears it from its own setters.
@@ -304,12 +323,24 @@ class Mp3TagStore internal constructor(
     }
 
     private fun writeArtwork(tag: ID3v2, artwork: Artwork?, mimeType: String?) {
+        val preserved = nonFrontPictures(tag)
         if (artwork == null) {
             tag.clearAlbumImage()
+            appendPictures(tag, preserved)
             return
         }
         val mime = mimeType ?: throw IllegalArgumentException("Unsupported artwork format")
-        val preserved = tag.frameSets[AbstractID3v2Tag.ID_IMAGE]
+        tag.setAlbumImage(
+            artwork.bytes,
+            mime,
+            AbstractID3v2Tag.PICTURETYPE_FRONTCOVER,
+            "",
+        )
+        appendPictures(tag, preserved)
+    }
+
+    private fun nonFrontPictures(tag: ID3v2): List<ID3v2Frame> =
+        tag.frameSets[AbstractID3v2Tag.ID_IMAGE]
             ?.frames
             .orEmpty()
             .mapNotNull { frame ->
@@ -319,26 +350,24 @@ class Mp3TagStore internal constructor(
                 if (picture?.pictureType == AbstractID3v2Tag.PICTURETYPE_FRONTCOVER) {
                     null
                 } else {
-                    ID3v2Frame(AbstractID3v2Tag.ID_IMAGE, frame.data)
+                    frameFor(tag, AbstractID3v2Tag.ID_IMAGE, frame.data)
                 }
             }
-        tag.setAlbumImage(
-            artwork.bytes,
-            mime,
-            AbstractID3v2Tag.PICTURETYPE_FRONTCOVER,
-            "",
-        )
+
+    private fun appendPictures(tag: ID3v2, pictures: List<ID3v2Frame>) {
+        if (pictures.isEmpty()) return
         val images = tag.frameSets[AbstractID3v2Tag.ID_IMAGE]
             ?: ID3v2FrameSet(AbstractID3v2Tag.ID_IMAGE).also {
                 tag.frameSets[AbstractID3v2Tag.ID_IMAGE] = it
             }
-        preserved.forEach(images::addFrame)
+        pictures.forEach(images::addFrame)
     }
 
     private fun saveAndVerify(
         mp3: Mp3File,
         target: File,
         directory: File,
+        backup: File,
         originalAudio: ByteArray,
     ) {
         if (!directory.canWrite()) {
@@ -350,31 +379,44 @@ class Mp3TagStore internal constructor(
             ?.forEach { it.delete() }
 
         val temporary = Files.createTempFile(directory.toPath(), prefix, TEMP_SUFFIX)
-        val backup = File(directory, BACKUP_PREFIX + target.name + BACKUP_SUFFIX)
         var keepBackup = false
+        var backupCreated = false
         try {
+            forceDirectory(directory.toPath())
             saver.save(mp3, temporary)
             force(temporary)
             if (!digest(Mp3File(temporary), temporary.toFile()).contentEquals(originalAudio)) {
                 throw TagWriteException("Audio changed while writing ${target.name}")
             }
 
-            Files.copy(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            if (backup.exists()) {
+                throw TagWriteException(
+                    "Stale backup exists at ${backup.path}; refusing to overwrite it",
+                )
+            }
+            backupCreated = true
+            Files.copy(target.toPath(), backup.toPath())
             force(backup.toPath())
             if (!digest(Mp3File(backup), backup).contentEquals(originalAudio)) {
                 throw TagWriteException("Could not back up ${target.name} safely")
             }
 
             mover.move(temporary, target.toPath())
+            forceDirectory(directory.toPath())
             if (!digest(Mp3File(target), target).contentEquals(originalAudio)) {
                 throw TagWriteException("Audio verification failed for ${target.name}")
             }
         } catch (e: Exception) {
             if (!target.exists() || !audioMatches(target, originalAudio)) {
                 if (!restore(backup, target, originalAudio)) {
-                    keepBackup = true
+                    keepBackup = backup.exists()
+                    val backupStatus = if (keepBackup) {
+                        "backup kept at ${backup.path}"
+                    } else {
+                        "backup is no longer available"
+                    }
                     throw TagWriteException(
-                        "Could not restore ${target.name}; backup kept at ${backup.path}",
+                        "Could not restore ${target.name}; $backupStatus",
                         e,
                     )
                 }
@@ -383,19 +425,45 @@ class Mp3TagStore internal constructor(
             throw TagWriteException("Could not replace ${target.name}", e)
         } finally {
             runCatching { Files.deleteIfExists(temporary) }
-            if (!keepBackup) {
+            if (backupCreated && !keepBackup) {
                 runCatching { Files.deleteIfExists(backup.toPath()) }
             }
         }
     }
 
+    private fun recoverOrRejectStaleBackup(target: File, backup: File) {
+        if (!backup.exists()) return
+        if (target.exists()) {
+            throw TagWriteException(
+                "Stale backup exists at ${backup.path}; remove it explicitly after verifying ${target.name}",
+            )
+        }
+        try {
+            Mp3File(backup)
+        } catch (e: Exception) {
+            throw TagWriteException(
+                "Backup ${backup.path} is not a readable MP3; refusing to recover it",
+                e,
+            )
+        }
+        try {
+            mover.move(backup.toPath(), target.toPath())
+        } catch (e: Exception) {
+            throw TagWriteException("Could not recover ${target.name} from ${backup.path}", e)
+        }
+    }
+
     private fun restore(backup: File, target: File, originalAudio: ByteArray): Boolean {
         if (!backup.exists()) return false
+        if (!audioMatches(backup, originalAudio)) return false
         return runCatching {
-            DefaultAtomicMover.move(backup.toPath(), target.toPath())
+            mover.move(backup.toPath(), target.toPath())
             audioMatches(target, originalAudio)
         }.getOrDefault(false)
     }
+
+    private fun backupFor(target: File, directory: File): File =
+        File(directory, BACKUP_PREFIX + target.name + BACKUP_SUFFIX)
 
     private fun audioMatches(file: File, expected: ByteArray): Boolean =
         runCatching { digest(Mp3File(file), file).contentEquals(expected) }.getOrDefault(false)
@@ -428,6 +496,15 @@ class Mp3TagStore internal constructor(
 
     private fun force(path: Path) {
         FileChannel.open(path, StandardOpenOption.WRITE).use { it.force(true) }
+    }
+
+    private fun forceDirectory(directory: Path) {
+        try {
+            FileChannel.open(directory, StandardOpenOption.READ).use { it.force(true) }
+        } catch (_: UnsupportedOperationException) {
+        } catch (e: IOException) {
+            if (!IS_WINDOWS) throw e
+        }
     }
 
     private fun rawText(tag: ID3v2, frameId: String): String? =
@@ -524,6 +601,8 @@ class Mp3TagStore internal constructor(
         const val BACKUP_PREFIX = ".cue-tag-"
         const val BACKUP_SUFFIX = ".bak"
 
+        val IS_WINDOWS = System.getProperty("os.name").orEmpty()
+            .startsWith("Windows", ignoreCase = true)
         val YEAR_PATTERN = Regex("""^(\d{4})(?:-\d{2}(?:-\d{2})?)?$""")
     }
 }
