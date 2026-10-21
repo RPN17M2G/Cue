@@ -109,8 +109,10 @@ foreground service and the UI layer; settings live in DataStore.
 - **Type detection:** MIME type plus a probe. Videos go to the conversion flow;
   MP3 files go to the tag-editing flow. Unsupported files produce a clear
   unsupported-format error.
-- **Video containers:** any that FFmpeg can demux (MP4, MKV, WebM, MOV, …).
-  A video with no audio track is an error state.
+- **Video containers:** MP4/MOV, Matroska/WebM, and OGG (Opus/Vorbis). The
+  minimal native build enables exactly these demuxers/decoders; other containers
+  require a build change. Screen recordings are normally MP4. A video with no
+  audio track is an error state.
 - **Audio:** MP3 only for tag editing.
 - **Sources are never modified** by the conversion flow.
 - **One job at a time.** Picking a new file while processing is not allowed.
@@ -229,15 +231,17 @@ song they want.
 
 ## 9. Native components
 
-- A **single minimal FFmpeg** build (AAC decode, MP3 encode via libmp3lame, trim,
-  metadata) with **`--enable-chromaprint`**, produced per ABI by a committed
-  build script (ffmpeg-android-maker style, run via Docker/WSL with the NDK).
-  Compiled `.so` files are **not** committed.
-- Shipped as `libffmpeg.so`, executed via `Process`; fingerprints are emitted
+- A **minimal FFmpeg** build (AAC/MP3/Opus/Vorbis decode, MP3 encode via
+  libmp3lame, trim, metadata) with **`--enable-chromaprint`**, produced per ABI
+  by a committed build script (ffmpeg-android-maker style, run via WSL with the
+  NDK). FFmpeg, LAME, and Chromaprint are built as **shared libraries** so the
+  LGPL components remain replaceable. Compiled `.so` files are **not** committed.
+- Shipped as `libffmpeg.so` plus its `libav*.so`, `libchromaprint.so`, and
+  `libmp3lame.so` dependencies, executed via `Process`; fingerprints are emitted
   with `-f chromaprint`. mp3agic is pure Java. See
   `docs/ADR/0001-native-ffmpeg-via-process.md`.
-- LGPL-only configuration; GPL components disabled. See
-  `docs/ADR/0005-lgpl-compliance.md`.
+- LGPL-only configuration; GPL components disabled. License notices ship in
+  `app/src/main/assets/licenses/`. See `docs/ADR/0005-lgpl-compliance.md`.
 
 ### Permissions
 `INTERNET`, `POST_NOTIFICATIONS`, `FOREGROUND_SERVICE`,
