@@ -191,14 +191,16 @@ song they want.
   untouched.
 
 ### Tag writing
-- **mp3agic** handles all ID3v2.3 reads and writes (text and artwork).
-  See `docs/ADR/0002-id3-writing-with-mp3agic.md`.
+- **mp3agic** handles all ID3 reads and writes (text and artwork). New tags are
+  ID3v2.3; existing ID3v2.4 tags stay v2.4 and ID3v2.2 is rejected. See
+  `docs/ADR/0002-id3-writing-with-mp3agic.md`.
 - Text fields (including Hebrew) are written as **UTF-16**.
 - Cover art is fetched at 600×600, downscaled to ≤1000 px JPEG, embedded as a
-  front-cover APIC frame.
-- **Tag-only edits** are written **in place** to the selected MP3 (SAF write
-  access). Any change to the audio (trim, conversion) produces a **new file** in
-  `Music/Cue`.
+  front-cover APIC frame. Replacing it preserves non-front APIC pictures.
+- **Tag-only edits** are written **in place** to the selected MP3. The SAF adapter
+  copies the document to the cache, edits and verifies that local copy, then
+  writes it back through `ContentResolver`. Any change to the audio (trim,
+  conversion) produces a **new file** in `Music/Cue`.
 
 ---
 

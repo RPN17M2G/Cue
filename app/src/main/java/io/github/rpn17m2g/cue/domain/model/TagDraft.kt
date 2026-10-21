@@ -15,6 +15,7 @@ data class TagDraft(
     val genre: String? = null,
     val trackNumber: Int? = null,
     val artwork: Artwork? = null,
+    val trackTotal: Int? = null,
 ) {
     val hasCoreTags: Boolean
         get() = title.isNotBlank() && artist.isNotBlank() && album.isNotBlank()
