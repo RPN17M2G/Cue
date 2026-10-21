@@ -16,7 +16,7 @@ script ready.
 
 **Deliverables**
 - Gradle project: Kotlin 2.x, AGP, `:app` module, Compose, Material 3 Expressive.
-- `applicationId io.github.rpn17m2g.cue`, minSdk 31, target/compile 36.
+- `applicationId io.github.rpn17m2g.cue`, minSdk 31, target/compile 35 (36 deferred until the SDK is installed).
 - Package-by-feature skeleton (`ui`, `ocr`, `metadata`, `audio`, `tags`, `data`,
   `settings`).
 - `AppContainer` for DI; DataStore wired for settings; Navigation Compose graph

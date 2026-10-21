@@ -54,7 +54,7 @@ proprietary SDKs are used.
 | Item | Value |
 |---|---|
 | Min SDK | 31 (Android 12) |
-| Compile / target SDK | 36 |
+| Compile / target SDK | 35 (36 deferred until the SDK is installed) |
 | Language | Kotlin 2.x |
 | UI | Jetpack Compose, Material 3 Expressive |
 | Module layout | Single `:app` module, package-by-feature |
