@@ -28,7 +28,7 @@ $lines = @(
     ")",
     "del /q `"$exitFile`" 2>nul",
     "call gradlew.bat $argsText --console=plain > `"$log`" 2>&1",
-    "echo %ERRORLEVEL%> `"$exitFile`"",
+    "(echo %ERRORLEVEL%)>`"$exitFile`"",
     "endlocal"
 )
 Set-Content -LiteralPath $cmdPath -Value $lines -Encoding ASCII
