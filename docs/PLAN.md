@@ -1,6 +1,6 @@
 # Cue — Design Plan
 
-Status: agreed design; Phase 1 walking skeleton implemented.
+Status: agreed design; Phase 1 walking skeleton and Phase 2 recognition implemented.
 Owner: Omer Gindi (`RPN17M2G`).
 App id: `io.github.rpn17m2g.cue`.
 
