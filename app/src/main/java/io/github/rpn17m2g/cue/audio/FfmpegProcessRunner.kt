@@ -22,11 +22,18 @@ import kotlinx.coroutines.withContext
 class FfmpegProcessRunner(
     private val binaryPath: String,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val environment: Map<String, String> = emptyMap(),
+    private val environmentStarter: FfmpegProcessStarter? = null,
     private val startProcess: (List<String>) -> Process = ::startDefaultProcess,
 ) : FfmpegRunner {
 
     override suspend fun run(args: List<String>, onLine: (String) -> Unit): Int = withContext(ioDispatcher) {
-        val process = startProcess(listOf(binaryPath) + args)
+        val command = listOf(binaryPath) + args
+        val process = when {
+            environmentStarter != null -> environmentStarter.start(command, environment)
+            environment.isEmpty() -> startProcess(command)
+            else -> FfmpegProcessStarter.System.start(command, environment)
+        }
         closeQuietly(process.outputStream)
         try {
             coroutineScope {
@@ -92,4 +99,28 @@ class FfmpegProcessRunner(
     }
 }
 
+/**
+ * Starts FFmpeg with an explicit environment. Android cannot exec a library from
+ * the APK directly, so the binary lives in the native library directory and the
+ * loader needs `LD_LIBRARY_PATH` pointing there to find its shared dependencies.
+ */
+fun interface FfmpegProcessStarter {
+    fun start(command: List<String>, environment: Map<String, String>): Process
+
+    companion object {
+        val System: FfmpegProcessStarter = FfmpegProcessStarter(::startProcessWithEnvironment)
+    }
+}
+
 private fun startDefaultProcess(command: List<String>): Process = ProcessBuilder(command).start()
+
+private fun startProcessWithEnvironment(
+    command: List<String>,
+    environment: Map<String, String>,
+): Process {
+    val builder = ProcessBuilder(command)
+    if (environment.isNotEmpty()) {
+        builder.environment().putAll(environment)
+    }
+    return builder.start()
+}

@@ -6,8 +6,17 @@
     <string name="home_subtitle">הפיכת הקלטת מסך לקובץ MP3 עם תגיות</string>
     <string name="home_add_file">הוספת קובץ</string>
     <string name="home_settings">הגדרות</string>
+    <string name="home_preparing">מכין את הקובץ…</string>
 
     <string name="review_title">בדיקת הרצועה</string>
+    <string name="review_session_missing">הקובץ הזה כבר אינו זמין. יש לבחור אותו שוב.</string>
+    <string name="review_play">נגינת תצוגה מקדימה</string>
+    <string name="review_pause">השהיית התצוגה המקדימה</string>
+    <string name="review_trim">חיתוך</string>
+    <string name="review_trim_start">התחלה %1$s</string>
+    <string name="review_trim_end">סיום %1$s</string>
+    <string name="review_estimated_size_value">גודל משוער: %1$s</string>
+    <string name="review_year_invalid">השנה צריכה להיות בפורמט YYYY או תאריך ISO</string>
     <string name="review_save">עיבוד</string>
     <string name="review_field_title">כותרת</string>
     <string name="review_field_artist">אמן</string>
@@ -23,23 +32,36 @@
     <string name="review_estimated_size">גודל משוער</string>
 
     <string name="processing_title">מעבד</string>
+    <string name="processing_stage_prepare">הכנה</string>
     <string name="processing_stage_convert">המרה</string>
     <string name="processing_stage_tag">כתיבת תגיות</string>
     <string name="processing_stage_save">שמירה</string>
     <string name="processing_cancel">ביטול</string>
+    <string name="processing_percent">%1$d%%</string>
 
     <string name="result_title">נשמר</string>
     <string name="result_play">נגינה</string>
     <string name="result_share">שיתוף</string>
     <string name="result_open_with">פתיחה באמצעות</string>
     <string name="result_show_folder">הצגה בתיקייה</string>
+    <string name="result_show_folder_failed">אין יישומון ניהול קבצים שיכול לפתוח את התיקייה.</string>
     <string name="result_edit_tags">עריכת תגיות</string>
+    <string name="result_edit_tags_unavailable">עריכת התגיות של קובץ שמור תגיע בשלב 4.</string>
     <string name="result_process_another">עיבוד קובץ נוסף</string>
+    <string name="result_missing">הקובץ השמור אינו זמין בסשן הזה.</string>
+    <string name="result_saved_to">נשמר ב־%1$s</string>
+    <string name="result_share_chooser">שיתוף שיר</string>
 
     <string name="error_title">משהו השתבש</string>
     <string name="error_retry">ניסיון חוזר</string>
     <string name="error_back">חזרה</string>
     <string name="error_details">פרטים טכניים</string>
+    <string name="error_details_hide">הסתרת פרטים טכניים</string>
+    <string name="error_details_empty">לא נרשמו פרטים נוספים.</string>
+    <string name="error_processing_failed">לא ניתן היה לעבד את השיר.</string>
+    <string name="error_ffmpeg_unavailable">ממיר האודיו אינו זמין במכשיר הזה.</string>
+    <string name="error_input_failed">לא ניתן היה לפתוח את הקובץ שנבחר.</string>
+    <string name="error_busy">קובץ אחר עדיין בעיבוד.</string>
 
     <string name="settings_title">הגדרות</string>
     <string name="settings_language">שפה</string>
@@ -60,4 +82,20 @@
     <string name="quality_v2">V2 (רגילה)</string>
     <string name="quality_cbr256">CBR 256</string>
     <string name="quality_cbr192">CBR 192</string>
+
+    <string name="settings_language_system">לפי המערכת</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_hebrew">עברית</string>
+    <string name="settings_theme_system">לפי המערכת</string>
+    <string name="settings_theme_light">בהיר</string>
+    <string name="settings_theme_dark">כהה</string>
+    <string name="settings_phase5_hint">החלפת שפה וערכת נושא תגיע בשלב 5.</string>
+
+    <string name="notification_channel_processing">עיבוד אודיו</string>
+    <string name="notification_channel_processing_description">מציג התקדמות המרה ומאפשר ביטול</string>
+    <string name="notification_processing_title">ממיר שיר</string>
+    <string name="notification_progress_text">%1$s · %2$d%%</string>
+    <string name="notification_done_title">השיר נשמר</string>
+    <string name="notification_failed_title">העיבוד נכשל</string>
+    <string name="notification_failed_text">יש להקיש כדי לראות מה קרה</string>
 </resources>

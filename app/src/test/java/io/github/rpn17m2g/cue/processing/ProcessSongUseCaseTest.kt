@@ -1,0 +1,237 @@
+package io.github.rpn17m2g.cue.processing
+
+import io.github.rpn17m2g.cue.audio.FfmpegRunner
+import io.github.rpn17m2g.cue.data.input.InputKind
+import io.github.rpn17m2g.cue.data.input.ResolvedInput
+import io.github.rpn17m2g.cue.data.output.OutputStore
+import io.github.rpn17m2g.cue.data.output.SavedSong
+import io.github.rpn17m2g.cue.domain.model.Artwork
+import io.github.rpn17m2g.cue.domain.model.QualityPreset
+import io.github.rpn17m2g.cue.domain.model.TagDraft
+import io.github.rpn17m2g.cue.domain.model.TrimRange
+import io.github.rpn17m2g.cue.tags.TagField
+import io.github.rpn17m2g.cue.tags.TagStore
+import java.io.File
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+class ProcessSongUseCaseTest {
+
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    private val tagStore = RecordingTagStore()
+    private val outputStore = RecordingOutputStore()
+
+    @Test
+    fun `a successful job runs every stage and deletes its temp file`() = runTest {
+        val input = inputFile()
+        val tempDir = File(folder.root, "work")
+        val stages = mutableListOf<ProcessingStage>()
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = listOf("out_time_ms=5000000")), tempDir)
+
+        val saved = useCase.execute(job(input), onProgress = { stage, progress ->
+            assertTrue(progress in 0f..1f)
+            stages += stage
+        })
+
+        assertEquals("Daft Punk - Get Lucky.mp3", saved.displayName)
+        assertEquals(listOf(ProcessingStage.Preparing, ProcessingStage.Converting, ProcessingStage.Tagging, ProcessingStage.Saving), stages.distinct())
+        assertEquals(TagField.TEXT_FIELDS, tagStore.fields)
+        assertEquals("Daft Punk", tagStore.draft?.artist)
+        assertTrue(outputStore.saved)
+        assertEquals(0, tempDir.listFiles()?.size)
+        assertTrue(input.exists())
+    }
+
+    @Test
+    fun `the progress callback scales conversion time against the track duration`() = runTest {
+        val input = inputFile()
+        val progress = mutableListOf<Float>()
+        val useCase = useCase(
+            WritingRunner(exitCode = 0, lines = listOf("out_time_ms=5000000")),
+            File(folder.root, "work"),
+        )
+
+        useCase.execute(job(input)) { stage, value ->
+            if (stage == ProcessingStage.Converting) progress += value
+        }
+
+        assertEquals(0.45f, progress.max(), 0.001f)
+    }
+
+    @Test
+    fun `a trim window drives the conversion arguments`() = runTest {
+        val input = inputFile()
+        val runner = WritingRunner(exitCode = 0, lines = emptyList())
+        val useCase = useCase(runner, File(folder.root, "work"))
+
+        useCase.execute(job(input, trim = TrimRange(2_000, 8_000))) { _, _ -> }
+
+        assertTrue(runner.args.containsAll(listOf("-ss", "2.000", "-t", "6.000")))
+    }
+
+    @Test
+    fun `artwork is added to the tag fields when present`() = runTest {
+        val input = inputFile()
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), File(folder.root, "work"))
+        val artwork = Artwork(byteArrayOf(1, 2, 3))
+        val artworkJob = job(input).copy(draft = job(input).draft.copy(artwork = artwork))
+
+        useCase.execute(artworkJob) { _, _ -> }
+
+        assertEquals(TagField.TEXT_FIELDS + TagField.ARTWORK, tagStore.fields)
+    }
+
+    @Test
+    fun `a non-zero exit fails with the stderr diagnostics and cleans the temp file`() = runTest {
+        val input = inputFile()
+        val tempDir = File(folder.root, "work")
+        val useCase = useCase(
+            WritingRunner(exitCode = 2, lines = listOf("Error opening input", "Conversion failed!")),
+            tempDir,
+        )
+
+        val error = runCatching {
+            useCase.execute(job(input)) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        assertTrue((error as ProcessingException).details.contains("Error opening input"))
+        assertFalse(outputStore.saved)
+        assertEquals(0, tempDir.listFiles()?.size)
+    }
+
+    @Test
+    fun `a missing input fails before conversion`() = runTest {
+        val missing = ResolvedInput(
+            id = "missing",
+            uri = "content://missing",
+            path = File(folder.root, "gone.mp4").absolutePath,
+            displayName = "gone.mp4",
+            mimeType = "video/mp4",
+            kind = InputKind.VIDEO,
+            durationMs = 10_000,
+        )
+        val runner = WritingRunner(exitCode = 0, lines = emptyList())
+        val useCase = useCase(runner, File(folder.root, "work"))
+
+        val error = runCatching {
+            useCase.execute(job(missing)) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        assertTrue(runner.args.isEmpty())
+    }
+
+    @Test
+    fun `cancellation propagates and removes the temp file`() = runTest {
+        val input = inputFile()
+        val tempDir = File(folder.root, "work")
+        val started = CompletableDeferred<Unit>()
+        val runner = FfmpegRunner { _, _ ->
+            started.complete(Unit)
+            awaitCancellation()
+        }
+        val useCase = useCase(runner, tempDir)
+
+        val deferred = async(Dispatchers.Default) {
+            useCase.execute(job(input)) { _, _ -> }
+        }
+        started.await()
+        deferred.cancelAndJoin()
+
+        assertTrue(deferred.isCancelled)
+        withContext(Dispatchers.IO) {
+            assertEquals(0, tempDir.listFiles()?.size)
+        }
+    }
+
+    private fun useCase(runner: FfmpegRunner, tempDir: File) = ProcessSongUseCase(
+        runner = runner,
+        tagStore = tagStore,
+        outputStore = outputStore,
+        tempDirectory = tempDir,
+        ioDispatcher = Dispatchers.Unconfined,
+    )
+
+    private fun inputFile(): File = folder.newFile("input.mp4").apply {
+        writeBytes(byteArrayOf(0, 1, 2, 3))
+    }
+
+    private fun job(input: File, trim: TrimRange? = null): ProcessingJob = job(
+        ResolvedInput(
+            id = "input",
+            uri = "content://input",
+            path = input.absolutePath,
+            displayName = "input.mp4",
+            mimeType = "video/mp4",
+            kind = InputKind.VIDEO,
+            durationMs = 10_000,
+        ),
+        trim,
+    )
+
+    private fun job(input: ResolvedInput, trim: TrimRange? = null): ProcessingJob = ProcessingJob(
+        input = input,
+        draft = TagDraft(
+            title = "Get Lucky",
+            artist = "Daft Punk",
+            album = "Random Access Memories",
+        ),
+        trim = trim,
+        quality = QualityPreset.V0,
+        outputFolder = "Music/Cue",
+        filenameTemplate = "{artist} - {title}",
+    )
+
+    private class WritingRunner(
+        private val exitCode: Int,
+        private val lines: List<String>,
+    ) : FfmpegRunner {
+        val args = mutableListOf<String>()
+
+        override suspend fun run(args: List<String>, onLine: (String) -> Unit): Int {
+            this.args += args
+            lines.forEach(onLine)
+            File(args.last()).writeBytes(byteArrayOf(9, 9, 9))
+            return exitCode
+        }
+    }
+
+    private class RecordingTagStore : TagStore {
+        var draft: TagDraft? = null
+        var fields: Set<TagField>? = null
+
+        override fun read(file: File): TagDraft? = null
+
+        override fun writeInPlace(file: File, tag: TagDraft, fields: Set<TagField>) {
+            this.draft = tag
+            this.fields = fields
+        }
+    }
+
+    private class RecordingOutputStore : OutputStore {
+        var saved = false
+
+        override suspend fun save(source: File, displayNameBase: String, outputFolder: String): SavedSong {
+            saved = true
+            return SavedSong(
+                uri = "content://media/audio/1",
+                displayName = "$displayNameBase.mp3",
+                relativePath = "$outputFolder/",
+            )
+        }
+    }
+}
