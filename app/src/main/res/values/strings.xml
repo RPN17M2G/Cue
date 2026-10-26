@@ -27,9 +27,29 @@
     <string name="review_field_track">Track number</string>
     <string name="review_field_artwork">Artwork</string>
     <string name="review_search_online">Look up online</string>
-    <string name="review_other_matches">Other matches</string>
+    <string name="review_other_matches_count">Other matches (%1$d)</string>
     <string name="review_quality">Quality</string>
     <string name="review_estimated_size">Estimated size</string>
+    <string name="review_identifying">Reading text and looking up the song…</string>
+    <string name="review_lookup">Song details</string>
+    <string name="review_searching">Searching…</string>
+    <string name="review_search_hint">Search by title or artist</string>
+    <string name="review_search_action">Search</string>
+    <string name="review_search_results">Search results</string>
+    <string name="review_no_matches">No matches found.</string>
+    <string name="review_search_offline">Online lookups are turned off in Settings.</string>
+    <string name="review_ocr_details">Text from the recording</string>
+    <string name="review_ocr_hide">Hide text</string>
+    <string name="review_ocr_failed">Text recognition failed on this device.</string>
+    <string name="review_ocr_empty">No readable text was found.</string>
+
+    <string name="source_embedded">File tag</string>
+    <string name="source_ocr_latin">OCR</string>
+    <string name="source_ocr_hebrew">OCR (Hebrew)</string>
+    <string name="source_itunes">iTunes</string>
+    <string name="source_musicbrainz">MusicBrainz</string>
+    <string name="source_fingerprint">Fingerprint</string>
+    <string name="source_manual">Edited</string>
 
     <string name="processing_title">Processing</string>
     <string name="processing_stage_prepare">Prepare</string>
@@ -77,6 +97,7 @@
     <string name="settings_ocr_interval">OCR frame interval (ms)</string>
     <string name="settings_http_timeout">HTTP timeout (ms)</string>
     <string name="settings_http_retries">HTTP retries</string>
+    <string name="settings_range_hint">Allowed range: %1$d–%2$d</string>
 
     <string name="quality_v0">V0 (high)</string>
     <string name="quality_v2">V2 (standard)</string>

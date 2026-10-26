@@ -27,9 +27,29 @@
     <string name="review_field_track">מספר רצועה</string>
     <string name="review_field_artwork">עטיפה</string>
     <string name="review_search_online">חיפוש מקוון</string>
-    <string name="review_other_matches">התאמות נוספות</string>
+    <string name="review_other_matches_count">התאמות נוספות (%1$d)</string>
     <string name="review_quality">איכות</string>
     <string name="review_estimated_size">גודל משוער</string>
+    <string name="review_identifying">קורא טקסט ומחפש את השיר…</string>
+    <string name="review_lookup">פרטי השיר</string>
+    <string name="review_searching">מחפש…</string>
+    <string name="review_search_hint">חיפוש לפי כותרת או אמן</string>
+    <string name="review_search_action">חיפוש</string>
+    <string name="review_search_results">תוצאות חיפוש</string>
+    <string name="review_no_matches">לא נמצאו התאמות.</string>
+    <string name="review_search_offline">חיפושים מקוונים כבויים בהגדרות.</string>
+    <string name="review_ocr_details">טקסט מההקלטה</string>
+    <string name="review_ocr_hide">הסתרת טקסט</string>
+    <string name="review_ocr_failed">זיהוי הטקסט נכשל במכשיר הזה.</string>
+    <string name="review_ocr_empty">לא נמצא טקסט קריא.</string>
+
+    <string name="source_embedded">תגית קובץ</string>
+    <string name="source_ocr_latin">OCR</string>
+    <string name="source_ocr_hebrew">OCR (עברית)</string>
+    <string name="source_itunes">iTunes</string>
+    <string name="source_musicbrainz">MusicBrainz</string>
+    <string name="source_fingerprint">טביעת אצבע</string>
+    <string name="source_manual">נערך</string>
 
     <string name="processing_title">מעבד</string>
     <string name="processing_stage_prepare">הכנה</string>
@@ -77,6 +97,7 @@
     <string name="settings_ocr_interval">מרווח פריימים ל־OCR (מילישניות)</string>
     <string name="settings_http_timeout">פסק זמן HTTP (מילישניות)</string>
     <string name="settings_http_retries">ניסיונות חוזרים ב־HTTP</string>
+    <string name="settings_range_hint">טווח מותר: %1$d–%2$d</string>
 
     <string name="quality_v0">V0 (גבוהה)</string>
     <string name="quality_v2">V2 (רגילה)</string>

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,10 +25,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.rpn17m2g.cue.R
@@ -76,6 +81,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onNetwork = { enabled -> viewModel.update { it.copy(networkLookups = enabled) } },
                 onFingerprint = { enabled -> viewModel.update { it.copy(fingerprintEnabled = enabled) } },
                 onAcoustIdKey = { key -> viewModel.update { it.copy(acoustIdKey = key) } },
+                onScanWindow = { seconds -> viewModel.update { it.copy(scanWindowSeconds = seconds) } },
+                onOcrInterval = { intervalMs -> viewModel.update { it.copy(ocrIntervalMs = intervalMs) } },
             )
         }
     }
@@ -90,6 +97,8 @@ private fun SettingsBody(
     onNetwork: (Boolean) -> Unit,
     onFingerprint: (Boolean) -> Unit,
     onAcoustIdKey: (String) -> Unit,
+    onScanWindow: (Int) -> Unit,
+    onOcrInterval: (Long) -> Unit,
 ) {
     Text(
         text = stringResource(R.string.settings_quality),
@@ -121,6 +130,19 @@ private fun SettingsBody(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
+    HorizontalDivider()
+    IntSettingField(
+        value = settings.scanWindowSeconds,
+        label = stringResource(R.string.settings_scan_window),
+        range = AppSettings.SCAN_WINDOW_RANGE,
+        onValue = onScanWindow,
+    )
+    LongSettingField(
+        value = settings.ocrIntervalMs,
+        label = stringResource(R.string.settings_ocr_interval),
+        range = AppSettings.OCR_INTERVAL_RANGE,
+        onValue = onOcrInterval,
+    )
     ToggleRow(
         label = stringResource(R.string.settings_network),
         checked = settings.networkLookups,
@@ -151,6 +173,56 @@ private fun SettingsBody(
         text = stringResource(R.string.settings_phase5_hint),
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun IntSettingField(
+    value: Int,
+    label: String,
+    range: IntRange,
+    onValue: (Int) -> Unit,
+) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { input ->
+            val digits = input.filter(Char::isDigit).take(3)
+            text = digits
+            digits.toIntOrNull()?.takeIf { it in range }?.let(onValue)
+        },
+        label = { Text(label) },
+        supportingText = {
+            Text(stringResource(R.string.settings_range_hint, range.first, range.last))
+        },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    )
+}
+
+@Composable
+private fun LongSettingField(
+    value: Long,
+    label: String,
+    range: LongRange,
+    onValue: (Long) -> Unit,
+) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { input ->
+            val digits = input.filter(Char::isDigit).take(5)
+            text = digits
+            digits.toLongOrNull()?.takeIf { it in range }?.let(onValue)
+        },
+        label = { Text(label) },
+        supportingText = {
+            Text(stringResource(R.string.settings_range_hint, range.first, range.last))
+        },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
 }
 
