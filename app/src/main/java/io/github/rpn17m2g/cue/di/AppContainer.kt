@@ -4,16 +4,26 @@ import android.content.Context
 import io.github.rpn17m2g.cue.audio.FfmpegProcessRunner
 import io.github.rpn17m2g.cue.audio.FfmpegRuntime
 import io.github.rpn17m2g.cue.data.input.InputResolver
+import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.data.metadata.LookupPolicy
 import io.github.rpn17m2g.cue.data.metadata.MetadataClients
 import io.github.rpn17m2g.cue.data.metadata.MetadataQuery
+import io.github.rpn17m2g.cue.data.ocr.MediaVideoFrameExtractor
+import io.github.rpn17m2g.cue.data.ocr.MlKitOcrEngine
+import io.github.rpn17m2g.cue.data.ocr.TesseractHebrewOcrEngine
 import io.github.rpn17m2g.cue.data.output.MediaStoreOutputStore
 import io.github.rpn17m2g.cue.data.output.OutputStore
 import io.github.rpn17m2g.cue.data.session.SessionRepository
 import io.github.rpn17m2g.cue.data.settings.DataStoreSettingsRepository
 import io.github.rpn17m2g.cue.domain.identify.IdentificationCascade
+import io.github.rpn17m2g.cue.domain.identify.IdentifySongUseCase
+import io.github.rpn17m2g.cue.domain.identify.SongIdentification
+import io.github.rpn17m2g.cue.domain.model.TagDraft
+import io.github.rpn17m2g.cue.domain.ocr.DualOcrRecognizer
+import io.github.rpn17m2g.cue.domain.ocr.FrameExtractor
 import io.github.rpn17m2g.cue.processing.ProcessingSession
 import io.github.rpn17m2g.cue.processing.ProcessSongUseCase
+import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.SettingsRepository
 import io.github.rpn17m2g.cue.tags.ArtworkEncoder
 import io.github.rpn17m2g.cue.tags.BitmapArtworkEncoder
@@ -70,15 +80,49 @@ class AppContainer(context: Context) {
 
     val errorReporter = ErrorReporter()
 
-    private val metadataLock = Mutex()
-    private var metadataClients: MetadataClients? = null
+    private val frameExtractor: FrameExtractor by lazy { MediaVideoFrameExtractor() }
 
+    private val ocrRecognizer: DualOcrRecognizer by lazy {
+        DualOcrRecognizer(
+            latin = MlKitOcrEngine(appContext),
+            hebrew = TesseractHebrewOcrEngine(appContext),
+        )
+    }
+
+    private val identifySongUseCase: IdentifySongUseCase by lazy {
+        IdentifySongUseCase(
+            tagStore = tagStore,
+            frameExtractor = frameExtractor,
+            recognizer = ocrRecognizer,
+            framesRoot = File(appContext.cacheDir, "frames"),
+        )
+    }
+
+    private val metadataLock = Mutex()
+    private var metadataCache: MetadataCache? = null
+
+    private data class MetadataCache(
+        val policy: LookupPolicy,
+        val clients: MetadataClients,
+    )
+
+    /**
+     * Rebuilds the clients when lookup settings change. A cached OkHttp client
+     * would otherwise keep the old timeout, retry count, network gate, and
+     * AcoustID key for the rest of the process.
+     */
     suspend fun metadataClients(): MetadataClients {
-        metadataClients?.let { return it }
+        val policy = LookupPolicy.from(settingsRepository.settings.first())
+        metadataCache?.let { cached ->
+            if (cached.policy == policy) return cached.clients
+        }
         return metadataLock.withLock {
-            metadataClients ?: MetadataClients(
-                LookupPolicy.from(settingsRepository.settings.first()),
-            ).also { metadataClients = it }
+            val cached = metadataCache
+            if (cached != null && cached.policy == policy) {
+                cached.clients
+            } else {
+                MetadataClients(policy).also { metadataCache = MetadataCache(policy, it) }
+            }
         }
     }
 
@@ -89,4 +133,17 @@ class AppContainer(context: Context) {
             fingerprintLookup = { emptyList() },
         )
     }
+
+    suspend fun identifySong(
+        input: ResolvedInput,
+        embeddedTags: TagDraft?,
+        settings: AppSettings,
+        preferHebrew: Boolean,
+    ): SongIdentification = identifySongUseCase.identify(
+        input = input,
+        embeddedTags = embeddedTags,
+        settings = settings,
+        preferHebrew = preferHebrew,
+        cascade = identificationCascade(),
+    )
 }

@@ -7,6 +7,16 @@ enum class AppLanguage { SYSTEM, ENGLISH, HEBREW }
 
 enum class AppTheme { SYSTEM, LIGHT, DARK }
 
+/**
+ * Hebrew text cannot be read by ML Kit's Latin recognizer, so the Hebrew Tesseract
+ * pass is mandatory for a Hebrew UI and a fallback otherwise.
+ */
+fun AppLanguage.prefersHebrew(systemLanguage: String): Boolean = when (this) {
+    AppLanguage.SYSTEM -> systemLanguage.lowercase().startsWith("he")
+    AppLanguage.ENGLISH -> false
+    AppLanguage.HEBREW -> true
+}
+
 data class AppSettings(
     val scanWindowSeconds: Int = DEFAULT_SCAN_WINDOW_SECONDS,
     val defaultQuality: QualityPreset = QualityPreset.V0,
@@ -32,6 +42,7 @@ data class AppSettings(
         const val DEFAULT_HTTP_RETRIES = 2
 
         val SCAN_WINDOW_RANGE = 5..120
+        val OCR_INTERVAL_RANGE = 250L..10_000L
     }
 }
 

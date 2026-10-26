@@ -27,6 +27,18 @@ app/src/main/assets/licenses/:
   Source: https://github.com/acoustid/chromaprint/releases/download/v1.5.1/chromaprint-1.5.1.tar.gz
   License: KissFFT-BSD-3-Clause.txt
 
+- Tesseract4Android 4.8.0, including Tesseract OCR 5.5.1 and Leptonica
+  1.85.0 (Apache-2.0)
+  Copyright (c) 2019 Adaptech s.r.o., Robert Pösel.
+  Copyright (c) 2006-2024 Google Inc. and the Tesseract OCR contributors.
+  Source: https://github.com/adaptech-cz/Tesseract4Android
+  License: Tesseract4Android-Apache-2.0.txt
+
+- Hebrew OCR traineddata (Apache-2.0)
+  Source: https://github.com/tesseract-ocr/tessdata_fast
+  Packaged as src/main/assets/tessdata/heb.traineddata; covered by
+  Tesseract4Android-Apache-2.0.txt.
+
 Compliance statement
 --------------------
 The LGPL components are dynamically linked. The executable libffmpeg.so and the
