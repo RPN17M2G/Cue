@@ -24,7 +24,8 @@ import java.util.Locale
  *
  * Scores combine stability, quality and the presence of an artist:
  * `0.45 * stability + 0.45 * bestQuality + 0.1 * (artist ? 1 : 0)`, capped at
- * `1.0`. Equal scores are ordered by normalized title, then artist.
+ * `1.0`. Scores are compared at three decimals and near-ties prefer the top of
+ * a stacked title/artist/album block, then the normalized title, then artist.
  */
 object OcrCandidateExtractor {
 
@@ -179,16 +180,24 @@ object OcrCandidateExtractor {
             val seen = HashSet<CandidateKey>()
             kept.forEachIndexed { index, line ->
                 val quality = qualityOf(line, largest)
+                val subtitle = looksLikeSubtitle(kept, index)
                 val artist = line.inlineArtist ?: bestArtist(kept, index)?.text
                 if (artist != null) {
                     val pairKey = CandidateKey(normalize(line.text), normalize(artist))
                     if (seen.add(pairKey)) {
-                        record(stats, pairKey, line.text, artist, quality)
+                        record(stats, pairKey, line.text, artist, quality, subtitle)
                     }
                 }
                 val soloKey = CandidateKey(normalize(line.text), null)
                 if (seen.add(soloKey)) {
-                    record(stats, soloKey, line.text, null, quality * SOLO_QUALITY_PENALTY)
+                    record(
+                        stats,
+                        soloKey,
+                        line.text,
+                        null,
+                        quality * SOLO_QUALITY_PENALTY,
+                        subtitle,
+                    )
                 }
             }
         }
@@ -198,17 +207,21 @@ object OcrCandidateExtractor {
                 val stability = stat.frameCount / totalFrames
                 val base = STABILITY_WEIGHT * stability + QUALITY_WEIGHT * stat.bestQuality
                 val artistBonus = if (stat.artist != null) ARTIST_WEIGHT else 0.0
-                OcrCandidate(
+                stat to OcrCandidate(
                     title = stat.title,
                     artist = stat.artist,
                     score = (base + artistBonus).coerceAtMost(1.0),
                 )
             }
             .sortedWith(
-                compareByDescending<OcrCandidate> { it.score }
-                    .thenBy { normalize(it.title) }
-                    .thenBy { it.artist?.let(::normalize).orEmpty() },
+                compareByDescending<Pair<CandidateStat, OcrCandidate>> { (_, candidate) ->
+                    kotlin.math.round(candidate.score * SCORE_TIE_PRECISION)
+                }
+                    .thenBy { (stat, _) -> stat.alwaysSubtitle }
+                    .thenBy { (_, candidate) -> normalize(candidate.title) }
+                    .thenBy { (_, candidate) -> candidate.artist?.let(::normalize).orEmpty() },
             )
+            .map { (_, candidate) -> candidate }
     }
 
     private fun record(
@@ -217,12 +230,14 @@ object OcrCandidateExtractor {
         title: String,
         artist: String?,
         quality: Double,
+        subtitle: Boolean,
     ) {
         val existing = stats[key]
         stats[key] = existing?.copy(
             frameCount = existing.frameCount + 1,
             bestQuality = maxOf(existing.bestQuality, quality),
-        ) ?: CandidateStat(title, artist, 1, quality)
+            alwaysSubtitle = existing.alwaysSubtitle && subtitle,
+        ) ?: CandidateStat(title, artist, 1, quality, subtitle)
     }
 
     /** Drops chrome and keeps the geometry the ranking needs. */
@@ -295,6 +310,30 @@ object OcrCandidateExtractor {
     }
 
     /**
+     * True when a line of similar size sits directly above [index]. A player
+     * stacks title, artist and album on top of each other, so every line but
+     * the first of that stack looks like somebody's subtitle. Hebrew letters
+     * with ascenders make the boxes of those lines nearly the same height, so
+     * this breaks the resulting near-ties in favour of the top of the stack.
+     */
+    private fun looksLikeSubtitle(kept: List<KeptLine>, index: Int): Boolean {
+        val line = kept[index]
+        val box = line.box ?: return false
+        for (otherIndex in kept.indices) {
+            if (otherIndex == index) continue
+            val other = kept[otherIndex]
+            val otherBox = other.box ?: continue
+            if (otherBox.bottom > box.top + box.height * 0.25f) continue
+            if (otherBox.height < box.height * MIN_TITLE_STACK_RATIO) continue
+            if (otherBox.horizontalOverlap(box) < MIN_HORIZONTAL_OVERLAP) continue
+            val gap = (box.top - otherBox.bottom).coerceAtLeast(0f)
+            if (gap > box.height * MAX_ARTIST_GAP_IN_HEIGHTS) continue
+            return true
+        }
+        return false
+    }
+
+    /**
      * Splits the common one-line "Artist - Title" form used by notifications
      * and by YouTube, where the two fields share a single text line. The artist
      * is the left half, matching the way the earlier dash parser read it.
@@ -322,8 +361,7 @@ object OcrCandidateExtractor {
     }
 
     /** The line directly under [index] that plausibly names the artist. */
-    private fun bestArtist(kept: List<KeptLine>, index: Int): KeptLine? {
-        val title = kept[index]
+    private fun bestArtist(kept: List<KeptLine>, index: Int): KeptLine? {        val title = kept[index]
         val titleBox = title.box ?: return null
         var best: KeptLine? = null
         var bestGap = Float.MAX_VALUE
@@ -369,10 +407,17 @@ object OcrCandidateExtractor {
         val artist: String?,
         val frameCount: Int,
         val bestQuality: Double,
+        val alwaysSubtitle: Boolean,
     )
 
     private const val SOLO_QUALITY_PENALTY = 0.9
 
     /** Single-word chrome is dropped unless it is at least this big. */
     private const val SINGLE_WORD_TITLE_RATIO = 0.6f
+
+    /** Scores are compared at this precision, so near-ties fall to the layout. */
+    private const val SCORE_TIE_PRECISION = 1000.0
+
+    /** How tall the line above must be, relative to this one, to count. */
+    private const val MIN_TITLE_STACK_RATIO = 0.85f
 }

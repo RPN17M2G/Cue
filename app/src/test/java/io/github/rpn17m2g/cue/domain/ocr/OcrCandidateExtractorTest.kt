@@ -91,6 +91,23 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `a stacked title is preferred over the artist and album lines below it`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("פנתרה", 0.4017f, 0.54375f, 0.6000f, 0.56406f),
+                line("נועהקירל", 0.4085f, 0.59375f, 0.5898f, 0.61406f),
+                line("פנתרה", 0.4525f, 0.63672f, 0.5492f, 0.64688f),
+            )
+        }
+
+        val candidate = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("פנתרה", candidate.title)
+        assertEquals("נועהקירל", candidate.artist)
+    }
+
+    @Test
     fun `status bar date and player label lose to the big centered title`() {
         val frames = List(3) { index ->
             frame(
