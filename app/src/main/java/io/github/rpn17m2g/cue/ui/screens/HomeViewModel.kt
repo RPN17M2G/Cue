@@ -31,6 +31,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                     container.inputResolver.cleanup(it.input)
                 }
                 container.sessionRepository.clear()
+                container.inputResolver.releasePersistedPermissions()
                 val input = container.inputResolver.resolve(uri)
                 val session = container.sessionRepository.create(input)
                 onResolved(session.id)

@@ -3,9 +3,12 @@ package io.github.rpn17m2g.cue.processing
 import io.github.rpn17m2g.cue.audio.FfmpegCommandBuilder
 import io.github.rpn17m2g.cue.audio.FfmpegProgressParser
 import io.github.rpn17m2g.cue.audio.FfmpegRunner
+import io.github.rpn17m2g.cue.data.input.DocumentEditor
+import io.github.rpn17m2g.cue.data.input.InputKind
 import io.github.rpn17m2g.cue.data.output.OutputStore
 import io.github.rpn17m2g.cue.data.output.SavedSong
 import io.github.rpn17m2g.cue.domain.filename.FilenameRenderer
+import io.github.rpn17m2g.cue.domain.model.matchesWritten
 import io.github.rpn17m2g.cue.tags.TagField
 import io.github.rpn17m2g.cue.tags.TagStore
 import java.io.File
@@ -17,18 +20,28 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /**
- * Convert, tag, and publish one job. The temp MP3 is removed on every exit path;
- * the input cache copy is owned by the caller so a retry can reuse it.
+ * Converts and publishes a new file, or rewrites the tags of an existing MP3 in
+ * place. Temp files are removed on every exit path; the input cache copy is owned
+ * by the caller so a retry can reuse it.
  */
 class ProcessSongUseCase(
     private val runner: FfmpegRunner,
     private val tagStore: TagStore,
     private val outputStore: OutputStore,
+    private val documentEditor: DocumentEditor,
     private val tempDirectory: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     suspend fun execute(
+        job: ProcessingJob,
+        onProgress: (ProcessingStage, Float) -> Unit,
+    ): SavedSong = when (job.mode) {
+        ProcessingMode.CONVERT_AND_SAVE -> convertAndSave(job, onProgress)
+        ProcessingMode.EDIT_IN_PLACE -> editInPlace(job, onProgress)
+    }
+
+    private suspend fun convertAndSave(
         job: ProcessingJob,
         onProgress: (ProcessingStage, Float) -> Unit,
     ): SavedSong {
@@ -37,10 +50,7 @@ class ProcessSongUseCase(
         if (!input.isFile) {
             throw ProcessingException("The input file is no longer available")
         }
-        val temp = withContext(ioDispatcher) {
-            tempDirectory.mkdirs()
-            File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, tempDirectory)
-        }
+        val temp = createTemp()
         try {
             convert(job, temp, onProgress)
             coroutineContext.ensureActive()
@@ -56,6 +66,89 @@ class ProcessSongUseCase(
             return saved
         } finally {
             temp.delete()
+        }
+    }
+
+    /**
+     * Edits a copy of the cache file and publishes it back to the source
+     * document. The untouched cache copy is the restore point when the provider
+     * fails mid-write or the read-back does not match.
+     */
+    private suspend fun editInPlace(
+        job: ProcessingJob,
+        onProgress: (ProcessingStage, Float) -> Unit,
+    ): SavedSong {
+        onProgress(ProcessingStage.Preparing, 0f)
+        val original = File(job.input.path)
+        if (!original.isFile) {
+            throw ProcessingException("The input file is no longer available")
+        }
+        if (job.input.kind != InputKind.MP3) {
+            throw ProcessingException("Only MP3 files can be edited in place")
+        }
+        val uri = job.input.uri
+        if (uri.isBlank()) {
+            throw ProcessingException("The source file cannot be updated")
+        }
+
+        val temp = createTemp()
+        try {
+            withContext(ioDispatcher) { original.copyTo(temp, overwrite = true) }
+            if (job.changedFields.isNotEmpty()) {
+                writeTags(job, temp, onProgress)
+                coroutineContext.ensureActive()
+                onProgress(ProcessingStage.Saving, SAVING_PROGRESS)
+                publishInPlace(uri, temp, original, job)
+            }
+            onProgress(ProcessingStage.Saving, 1f)
+            return SavedSong(
+                uri = job.input.uri,
+                displayName = job.input.displayName,
+                relativePath = "",
+                inPlaceEdit = true,
+            )
+        } finally {
+            temp.delete()
+        }
+    }
+
+    private suspend fun publishInPlace(
+        uri: String,
+        edited: File,
+        original: File,
+        job: ProcessingJob,
+    ) {
+        try {
+            documentEditor.replace(uri, edited)
+            verify(uri, job)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            val restored = runCatching { documentEditor.replace(uri, original) }.isSuccess
+            throw ProcessingException(
+                if (restored) {
+                    "Could not update the original file"
+                } else {
+                    "Could not update the original file and the restore failed"
+                },
+                listOfNotNull(e.message, if (restored) null else "The source may be incomplete"),
+                e,
+            )
+        }
+    }
+
+    private suspend fun verify(uri: String, job: ProcessingJob) {
+        val verification = createTemp()
+        try {
+            documentEditor.copyTo(uri, verification)
+            val written = withContext(ioDispatcher) {
+                runCatching { tagStore.read(verification) }.getOrNull()
+            } ?: throw ProcessingException("The updated file has no readable tag")
+            if (!written.matchesWritten(job.draft, job.changedFields)) {
+                throw ProcessingException("The tags read back differently from what was written")
+            }
+        } finally {
+            verification.delete()
         }
     }
 
@@ -103,15 +196,24 @@ class ProcessSongUseCase(
         temp: File,
         onProgress: (ProcessingStage, Float) -> Unit,
     ) {
-        onProgress(ProcessingStage.Tagging, TAGGING_PROGRESS)
         val fields = if (job.draft.artwork != null) {
             TagField.TEXT_FIELDS + TagField.ARTWORK
         } else {
             TagField.TEXT_FIELDS
         }
+        writeTags(job, temp, onProgress, fields)
+    }
+
+    private suspend fun writeTags(
+        job: ProcessingJob,
+        target: File,
+        onProgress: (ProcessingStage, Float) -> Unit,
+        fields: Set<TagField> = job.changedFields,
+    ) {
+        onProgress(ProcessingStage.Tagging, TAGGING_PROGRESS)
         try {
             withContext(ioDispatcher) {
-                tagStore.writeInPlace(temp, job.draft, fields)
+                tagStore.writeInPlace(target, job.draft, fields)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -122,6 +224,11 @@ class ProcessSongUseCase(
                 e,
             )
         }
+    }
+
+    private suspend fun createTemp(): File = withContext(ioDispatcher) {
+        tempDirectory.mkdirs()
+        File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, tempDirectory)
     }
 
     private companion object {

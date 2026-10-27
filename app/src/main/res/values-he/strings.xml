@@ -18,6 +18,20 @@
     <string name="review_estimated_size_value">גודל משוער: %1$s</string>
     <string name="review_year_invalid">השנה צריכה להיות בפורמט YYYY או תאריך ISO</string>
     <string name="review_save">עיבוד</string>
+    <string name="review_save_tags">שמירת תגיות</string>
+    <string name="review_artwork">עטיפה</string>
+    <string name="review_artwork_none">ללא עטיפה</string>
+    <string name="review_artwork_search">חיפוש עטיפות</string>
+    <string name="review_artwork_gallery">בחירת תמונה</string>
+    <string name="review_artwork_remove">הסרת עטיפה</string>
+    <string name="review_artwork_search_title">בחירת עטיפה</string>
+    <string name="review_artwork_search_hint">חיפוש עטיפות לפי כותרת או אמן</string>
+    <string name="review_artwork_offline">חיפושים מקוונים כבויים בהגדרות.</string>
+    <string name="review_artwork_no_results">לא נמצאו עטיפות.</string>
+    <string name="review_artwork_failed">לא ניתן היה לטעון את העטיפה.</string>
+    <string name="review_artwork_unavailable">לא זמין</string>
+    <string name="review_artwork_choose">בחירת העטיפה הזו</string>
+    <string name="review_artwork_close">סגירה</string>
     <string name="review_field_title">כותרת</string>
     <string name="review_field_artist">אמן</string>
     <string name="review_field_album">אלבום</string>
@@ -61,16 +75,17 @@
     <string name="processing_percent">%1$d%%</string>
 
     <string name="result_title">נשמר</string>
+    <string name="result_title_updated">התגיות עודכנו</string>
     <string name="result_play">נגינה</string>
     <string name="result_share">שיתוף</string>
     <string name="result_open_with">פתיחה באמצעות</string>
     <string name="result_show_folder">הצגה בתיקייה</string>
     <string name="result_show_folder_failed">אין יישומון ניהול קבצים שיכול לפתוח את התיקייה.</string>
     <string name="result_edit_tags">עריכת תגיות</string>
-    <string name="result_edit_tags_unavailable">עריכת התגיות של קובץ שמור תגיע בשלב 4.</string>
     <string name="result_process_another">עיבוד קובץ נוסף</string>
     <string name="result_missing">הקובץ השמור אינו זמין בסשן הזה.</string>
     <string name="result_saved_to">נשמר ב־%1$s</string>
+    <string name="result_updated_in_place">התגיות עודכנו בקובץ המקורי.</string>
     <string name="result_share_chooser">שיתוף שיר</string>
 
     <string name="error_title">משהו השתבש</string>
@@ -118,8 +133,10 @@
     <string name="notification_channel_processing">עיבוד אודיו</string>
     <string name="notification_channel_processing_description">מציג התקדמות המרה ומאפשר ביטול</string>
     <string name="notification_processing_title">ממיר שיר</string>
+    <string name="notification_updating_title">מעדכן תגיות</string>
     <string name="notification_progress_text">%1$s · %2$d%%</string>
     <string name="notification_done_title">השיר נשמר</string>
+    <string name="notification_tags_updated_title">התגיות עודכנו</string>
     <string name="notification_failed_title">העיבוד נכשל</string>
     <string name="notification_failed_text">יש להקיש כדי לראות מה קרה</string>
 </resources>

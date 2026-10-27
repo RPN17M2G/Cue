@@ -39,6 +39,7 @@ class SongProcessingService : Service() {
     private lateinit var container: AppContainer
     private var runningJob: Job? = null
     private var runningInputId: String? = null
+    private var runningInPlace = false
     private var lastStage: ProcessingStage? = null
     private var lastPercent = -1
 
@@ -66,6 +67,7 @@ class SongProcessingService : Service() {
         lastStage = null
         lastPercent = -1
         runningInputId = job.input.id
+        runningInPlace = job.mode == ProcessingMode.EDIT_IN_PLACE
         container.processingSession.running(ProcessingStage.Preparing, 0f)
         ServiceCompat.startForeground(
             this,
@@ -76,7 +78,9 @@ class SongProcessingService : Service() {
         container.sessionRepository.remember(job)
         runningJob = scope.launch {
             try {
-                container.ffmpegRuntime.verify()
+                if (job.needsConversion) {
+                    container.ffmpegRuntime.verify()
+                }
                 val saved = container.processSongUseCase.execute(job) { stage, progress ->
                     publishProgress(stage, progress)
                 }
@@ -118,7 +122,15 @@ class SongProcessingService : Service() {
             COMPLETION_NOTIFICATION_ID,
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_cue)
-                .setContentTitle(getString(R.string.notification_done_title))
+                .setContentTitle(
+                    getString(
+                        if (song.inPlaceEdit) {
+                            R.string.notification_tags_updated_title
+                        } else {
+                            R.string.notification_done_title
+                        },
+                    ),
+                )
                 .setContentText(song.displayName)
                 .setAutoCancel(true)
                 .setContentIntent(openApp(InputIntentParser.OPEN_RESULT, RESULT_REQUEST_CODE))
@@ -160,7 +172,15 @@ class SongProcessingService : Service() {
         val text = getString(R.string.notification_progress_text, stageLabel(stage), percent)
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_cue)
-            .setContentTitle(getString(R.string.notification_processing_title))
+            .setContentTitle(
+                getString(
+                    if (runningInPlace) {
+                        R.string.notification_updating_title
+                    } else {
+                        R.string.notification_processing_title
+                    },
+                ),
+            )
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

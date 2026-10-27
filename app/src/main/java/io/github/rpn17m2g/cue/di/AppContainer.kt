@@ -3,7 +3,10 @@ package io.github.rpn17m2g.cue.di
 import android.content.Context
 import io.github.rpn17m2g.cue.audio.FfmpegProcessRunner
 import io.github.rpn17m2g.cue.audio.FfmpegRuntime
+import io.github.rpn17m2g.cue.data.artwork.ArtworkRepository
 import io.github.rpn17m2g.cue.data.fingerprint.FfmpegFingerprintExtractor
+import io.github.rpn17m2g.cue.data.input.ContentResolverDocumentEditor
+import io.github.rpn17m2g.cue.data.input.DocumentEditor
 import io.github.rpn17m2g.cue.data.input.InputResolver
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.data.metadata.FingerprintInput
@@ -65,13 +68,24 @@ class AppContainer(context: Context) {
 
     val artworkEncoder: ArtworkEncoder by lazy { BitmapArtworkEncoder() }
 
+    val documentEditor: DocumentEditor by lazy { ContentResolverDocumentEditor(appContext) }
+
     val outputStore: OutputStore by lazy { MediaStoreOutputStore(appContext) }
+
+    val artworkRepository: ArtworkRepository by lazy {
+        ArtworkRepository(
+            context = appContext,
+            clients = { metadataClients() },
+            encoder = artworkEncoder,
+        )
+    }
 
     val processSongUseCase: ProcessSongUseCase by lazy {
         ProcessSongUseCase(
             runner = ffmpegRunner,
             tagStore = tagStore,
             outputStore = outputStore,
+            documentEditor = documentEditor,
             tempDirectory = File(appContext.cacheDir, "processing"),
         )
     }

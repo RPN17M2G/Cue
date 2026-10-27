@@ -7,7 +7,10 @@ enum class InputKind {
 
 /**
  * A picker/share input copied into the app cache. [path] is always a local file;
- * [uri] is kept only for diagnostics and for re-reading the source.
+ * [uri] identifies the source document for in-place write-back.
+ *
+ * [canEditInPlace] is true only when the source grants persistent write access
+ * (SAF) or is a MediaStore row this app may update.
  */
 data class ResolvedInput(
     val id: String,
@@ -17,6 +20,7 @@ data class ResolvedInput(
     val mimeType: String?,
     val kind: InputKind,
     val durationMs: Long?,
+    val canEditInPlace: Boolean = false,
 )
 
 /** Decides whether an input goes through the conversion or the MP3 flow. */

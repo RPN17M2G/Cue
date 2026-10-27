@@ -95,6 +95,16 @@ fun CueNavHost(
                         popUpTo(Routes.HOME) { inclusive = true }
                     }
                 },
+                onEditTags = { inputId ->
+                    navController.navigate(Routes.review(inputId)) {
+                        launchSingleTop = true
+                    }
+                },
+                onEditError = {
+                    navController.navigate(Routes.ERROR) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable(Routes.ERROR) {

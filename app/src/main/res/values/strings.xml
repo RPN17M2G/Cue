@@ -18,6 +18,20 @@
     <string name="review_estimated_size_value">Estimated size: %1$s</string>
     <string name="review_year_invalid">Year must be YYYY or an ISO date</string>
     <string name="review_save">Process</string>
+    <string name="review_save_tags">Save tags</string>
+    <string name="review_artwork">Artwork</string>
+    <string name="review_artwork_none">No cover</string>
+    <string name="review_artwork_search">Search covers</string>
+    <string name="review_artwork_gallery">Choose image</string>
+    <string name="review_artwork_remove">Remove cover</string>
+    <string name="review_artwork_search_title">Choose cover art</string>
+    <string name="review_artwork_search_hint">Search covers by title or artist</string>
+    <string name="review_artwork_offline">Online lookups are turned off in Settings.</string>
+    <string name="review_artwork_no_results">No covers found.</string>
+    <string name="review_artwork_failed">The cover could not be loaded.</string>
+    <string name="review_artwork_unavailable">Unavailable</string>
+    <string name="review_artwork_choose">Choose this cover</string>
+    <string name="review_artwork_close">Close</string>
     <string name="review_field_title">Title</string>
     <string name="review_field_artist">Artist</string>
     <string name="review_field_album">Album</string>
@@ -61,16 +75,17 @@
     <string name="processing_percent">%1$d%%</string>
 
     <string name="result_title">Saved</string>
+    <string name="result_title_updated">Tags updated</string>
     <string name="result_play">Play</string>
     <string name="result_share">Share</string>
     <string name="result_open_with">Open with</string>
     <string name="result_show_folder">Show in folder</string>
     <string name="result_show_folder_failed">No file manager is available to open that folder.</string>
     <string name="result_edit_tags">Edit tags</string>
-    <string name="result_edit_tags_unavailable">Editing tags of a saved file arrives in Phase 4.</string>
     <string name="result_process_another">Process another</string>
     <string name="result_missing">The saved file is not available in this session.</string>
     <string name="result_saved_to">Saved to %1$s</string>
+    <string name="result_updated_in_place">Tags updated in the original file.</string>
     <string name="result_share_chooser">Share song</string>
 
     <string name="error_title">Something went wrong</string>
@@ -118,8 +133,10 @@
     <string name="notification_channel_processing">Audio processing</string>
     <string name="notification_channel_processing_description">Shows conversion progress and lets you cancel</string>
     <string name="notification_processing_title">Converting song</string>
+    <string name="notification_updating_title">Updating tags</string>
     <string name="notification_progress_text">%1$s · %2$d%%</string>
     <string name="notification_done_title">Song saved</string>
+    <string name="notification_tags_updated_title">Tags updated</string>
     <string name="notification_failed_title">Processing failed</string>
     <string name="notification_failed_text">Tap to see what went wrong</string>
 </resources>

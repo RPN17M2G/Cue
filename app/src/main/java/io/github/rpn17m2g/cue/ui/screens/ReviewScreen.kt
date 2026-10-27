@@ -1,6 +1,12 @@
 package io.github.rpn17m2g.cue.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.text.format.DateUtils
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -9,13 +15,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +36,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
@@ -51,7 +64,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -66,7 +82,9 @@ import androidx.media3.ui.PlayerView
 import io.github.rpn17m2g.cue.R
 import io.github.rpn17m2g.cue.data.input.InputKind
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
+import io.github.rpn17m2g.cue.data.metadata.ArtworkCandidate
 import io.github.rpn17m2g.cue.domain.metadata.TagField
+import io.github.rpn17m2g.cue.domain.model.Artwork
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
@@ -138,6 +156,12 @@ fun ReviewScreen(
                 onRetry = viewModel::retryIdentification,
                 onSearch = viewModel::search,
                 onApplyMatch = viewModel::applyMatch,
+                onOpenArtworkPicker = viewModel::openArtworkPicker,
+                onCloseArtworkPicker = viewModel::closeArtworkPicker,
+                onSearchArtwork = viewModel::searchArtwork,
+                onChooseArtwork = viewModel::chooseArtwork,
+                onGalleryArtwork = viewModel::chooseGalleryArtwork,
+                onRemoveArtwork = viewModel::removeArtwork,
             )
         }
     }
@@ -154,8 +178,19 @@ private fun ReviewContent(
     onRetry: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
+    onOpenArtworkPicker: () -> Unit,
+    onCloseArtworkPicker: () -> Unit,
+    onSearchArtwork: (String) -> Unit,
+    onChooseArtwork: (ArtworkCandidate) -> Unit,
+    onGalleryArtwork: (android.net.Uri) -> Unit,
+    onRemoveArtwork: () -> Unit,
 ) {
     val input = state.input ?: return
+    val galleryPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) onGalleryArtwork(uri)
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -177,6 +212,17 @@ private fun ReviewContent(
         )
         if (state.identifying) IdentificationBanner()
         TagFields(state = state, onUpdate = onUpdate)
+        ArtworkSection(
+            artwork = state.draft.artwork,
+            applying = state.artworkApplying,
+            onSearchCovers = onOpenArtworkPicker,
+            onPickGallery = {
+                galleryPicker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                )
+            },
+            onRemove = onRemoveArtwork,
+        )
         LookupSection(
             state = state,
             onRetry = onRetry,
@@ -187,14 +233,16 @@ private fun ReviewContent(
         if (state.hasTrim) {
             TrimSection(state = state, onTrim = onTrim)
         }
-        QualitySection(
-            state = state,
-            onQuality = onQuality,
-            estimatedBytes = estimateMp3Bytes(
-                durationMs = state.effectiveDurationMs ?: 0L,
-                preset = state.quality,
-            ),
-        )
+        if (!state.tagOnlyEdit) {
+            QualitySection(
+                state = state,
+                onQuality = onQuality,
+                estimatedBytes = estimateMp3Bytes(
+                    durationMs = state.effectiveDurationMs ?: 0L,
+                    preset = state.quality,
+                ),
+            )
+        }
         state.errorRes?.let {
             Text(
                 text = stringResource(it),
@@ -207,8 +255,20 @@ private fun ReviewContent(
             enabled = !state.saving,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(stringResource(R.string.review_save))
+            Text(
+                stringResource(
+                    if (state.tagOnlyEdit) R.string.review_save_tags else R.string.review_save,
+                ),
+            )
         }
+    }
+    if (state.artworkPickerOpen) {
+        ArtworkPickerDialog(
+            state = state,
+            onDismiss = onCloseArtworkPicker,
+            onSearch = onSearchArtwork,
+            onChoose = onChooseArtwork,
+        )
     }
 }
 
@@ -302,6 +362,226 @@ private fun TagFields(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
 }
+
+@Composable
+private fun ArtworkSection(
+    artwork: Artwork?,
+    applying: Boolean,
+    onSearchCovers: () -> Unit,
+    onPickGallery: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.review_artwork),
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (artwork != null) {
+                ArtworkThumbnail(artwork = artwork, modifier = Modifier.size(96.dp))
+            } else {
+                Surface(
+                    modifier = Modifier.size(96.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.review_artwork_none),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedButton(onClick = onSearchCovers, enabled = !applying) {
+                    Text(stringResource(R.string.review_artwork_search))
+                }
+                OutlinedButton(onClick = onPickGallery, enabled = !applying) {
+                    Text(stringResource(R.string.review_artwork_gallery))
+                }
+                if (artwork != null) {
+                    TextButton(onClick = onRemove, enabled = !applying) {
+                        Text(stringResource(R.string.review_artwork_remove))
+                    }
+                }
+            }
+            if (applying) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtworkThumbnail(
+    artwork: Artwork,
+    modifier: Modifier = Modifier,
+) {
+    val bitmap = remember(artwork) { decodeArtwork(artwork.bytes) }
+    if (bitmap == null) {
+        Surface(
+            modifier = modifier,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(12.dp),
+        ) {}
+    } else {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = stringResource(R.string.review_field_artwork),
+            contentScale = ContentScale.Crop,
+            modifier = modifier.clip(RoundedCornerShape(12.dp)),
+        )
+    }
+}
+
+@Composable
+private fun ArtworkPickerDialog(
+    state: ReviewUiState,
+    onDismiss: () -> Unit,
+    onSearch: (String) -> Unit,
+    onChoose: (ArtworkCandidate) -> Unit,
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.review_artwork_search_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(stringResource(R.string.review_artwork_search_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { onSearch(query) },
+                            enabled = query.isNotBlank() && !state.artworkSearching,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.review_search_action),
+                            )
+                        }
+                    },
+                )
+                when {
+                    state.artworkOffline -> Text(
+                        text = stringResource(R.string.review_artwork_offline),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    state.artworkSearching -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        Text(
+                            text = stringResource(R.string.review_searching),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    state.artworkFailed -> Text(
+                        text = stringResource(R.string.review_artwork_failed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    state.artworkSearchCompleted && state.artworkResults.isEmpty() -> Text(
+                        text = stringResource(R.string.review_artwork_no_results),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.artworkResults.isNotEmpty() -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.artworkResults, key = { it.artworkUrl600 }) { candidate ->
+                            CoverCell(candidate = candidate, onClick = { onChoose(candidate) })
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.review_artwork_close))
+            }
+        },
+    )
+}
+
+@Composable
+private fun CoverCell(
+    candidate: ArtworkCandidate,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    val repository = remember(context) { context.appContainer().artworkRepository }
+    var preview by remember(candidate.artworkUrl600) {
+        mutableStateOf<PreviewState>(PreviewState.Loading)
+    }
+    LaunchedEffect(candidate.artworkUrl600) {
+        val bitmap = repository.preview(candidate.artworkUrl600)
+        preview = if (bitmap == null) PreviewState.Failed else PreviewState.Loaded(bitmap)
+    }
+    val fallbackDescription = stringResource(R.string.review_artwork_choose)
+    val description = listOfNotNull(candidate.album, candidate.artist)
+        .joinToString(" · ")
+        .ifBlank { fallbackDescription }
+    Surface(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        when (val current = preview) {
+            PreviewState.Loading -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            }
+            PreviewState.Failed -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.review_artwork_unavailable),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            is PreviewState.Loaded -> Image(
+                bitmap = current.bitmap.asImageBitmap(),
+                contentDescription = description,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+private sealed interface PreviewState {
+    data object Loading : PreviewState
+    data object Failed : PreviewState
+    data class Loaded(val bitmap: Bitmap) : PreviewState
+}
+
+private fun decodeArtwork(bytes: ByteArray): Bitmap? = runCatching {
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+}.getOrNull()
 
 private fun ReviewUiState.sourceFor(
     field: TagField,

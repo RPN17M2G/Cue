@@ -54,7 +54,8 @@ fun ProcessingScreen(
     val running = state as? ProcessingState.Running
     val currentStage = running?.stage
     val progress = running?.progress ?: 0f
-    val currentIndex = currentStage?.let(STAGES::indexOf) ?: -1
+    val stages = if (viewModel.inPlace) IN_PLACE_STAGES else STAGES
+    val currentIndex = currentStage?.let(stages::indexOf) ?: -1
 
     Scaffold { padding ->
         Column(
@@ -80,7 +81,7 @@ fun ProcessingScreen(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                STAGES.forEachIndexed { index, stage ->
+                stages.forEachIndexed { index, stage ->
                     StageRow(
                         label = stringResource(stage.labelRes()),
                         icon = when {
@@ -136,6 +137,12 @@ private fun StageRow(
 private val STAGES = listOf(
     ProcessingStage.Preparing,
     ProcessingStage.Converting,
+    ProcessingStage.Tagging,
+    ProcessingStage.Saving,
+)
+
+private val IN_PLACE_STAGES = listOf(
+    ProcessingStage.Preparing,
     ProcessingStage.Tagging,
     ProcessingStage.Saving,
 )

@@ -1,20 +1,27 @@
 package io.github.rpn17m2g.cue.ui.screens
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.rpn17m2g.cue.R
 import io.github.rpn17m2g.cue.data.input.InputKind
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
+import io.github.rpn17m2g.cue.data.metadata.ArtworkCandidate
 import io.github.rpn17m2g.cue.data.metadata.MetadataQuery
 import io.github.rpn17m2g.cue.di.AppContainer
 import io.github.rpn17m2g.cue.domain.identify.SongIdentification
 import io.github.rpn17m2g.cue.domain.metadata.TagField
+import io.github.rpn17m2g.cue.domain.model.Artwork
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimMath
+import io.github.rpn17m2g.cue.domain.model.TrimRange
+import io.github.rpn17m2g.cue.domain.model.changedFieldsFrom
 import io.github.rpn17m2g.cue.processing.ProcessingJob
+import io.github.rpn17m2g.cue.processing.ProcessingMode
+import io.github.rpn17m2g.cue.processing.ProcessingModeSelector
 import io.github.rpn17m2g.cue.processing.ProcessingState
 import io.github.rpn17m2g.cue.processing.SongProcessingService
 import io.github.rpn17m2g.cue.settings.AppSettings
@@ -53,12 +60,26 @@ data class ReviewUiState(
     val ocrAttempted: Boolean = false,
     val ocrFailed: Boolean = false,
     val fingerprintAvailable: Boolean = false,
+    val artworkPickerOpen: Boolean = false,
+    val artworkResults: List<ArtworkCandidate> = emptyList(),
+    val artworkSearching: Boolean = false,
+    val artworkSearchCompleted: Boolean = false,
+    val artworkOffline: Boolean = false,
+    val artworkFailed: Boolean = false,
+    val artworkApplying: Boolean = false,
 ) {
     val hasTrim: Boolean get() = durationMs != null && durationMs > TrimMath.MIN_DURATION_MS
 
+    val trimRange: TrimRange?
+        get() = TrimMath.trimRange(trimStartMs, trimEndMs, durationMs)
+
+    /** Editing tags of a writable MP3 without a trim needs no re-encode. */
+    val tagOnlyEdit: Boolean
+        get() = input?.kind == InputKind.MP3 && input.canEditInPlace && trimRange == null
+
     val effectiveDurationMs: Long?
         get() = TrimMath.effectiveDurationMs(
-            TrimMath.trimRange(trimStartMs, trimEndMs, durationMs),
+            trimRange,
             durationMs,
         )
 
@@ -262,20 +283,133 @@ class ReviewViewModel(
             _state.update { it.copy(errorRes = R.string.review_year_invalid) }
             return
         }
-        val job = ProcessingJob(
-            input = input,
-            draft = current.draft.copy(year = year),
-            trim = TrimMath.trimRange(current.trimStartMs, current.trimEndMs, current.durationMs),
-            quality = current.quality,
-            outputFolder = settings.outputFolder,
-            filenameTemplate = settings.filenameTemplate,
-        )
         _state.update { it.copy(saving = true) }
-        container.errorReporter.clear()
-        container.sessionRepository.remember(job)
-        container.processingSession.reset()
-        SongProcessingService.start(container.appContext, job)
-        onStarted(input.id)
+        viewModelScope.launch {
+            try {
+                val latest = container.settingsRepository.settings.first()
+                settings = latest
+                val snapshot = _state.value
+                val jobDraft = snapshot.draft.copy(
+                    year = snapshot.draft.year?.trim()?.takeIf { it.isNotEmpty() },
+                )
+                val trim = TrimMath.trimRange(
+                    snapshot.trimStartMs,
+                    snapshot.trimEndMs,
+                    snapshot.durationMs,
+                )
+                val mode = ProcessingModeSelector.mode(input, trim)
+                val job = ProcessingJob(
+                    input = input,
+                    draft = jobDraft,
+                    trim = trim,
+                    quality = snapshot.quality,
+                    outputFolder = latest.outputFolder,
+                    filenameTemplate = latest.filenameTemplate,
+                    mode = mode,
+                    changedFields = if (mode == ProcessingMode.EDIT_IN_PLACE) {
+                        jobDraft.changedFieldsFrom(embeddedTags ?: TagDraft())
+                    } else {
+                        emptySet()
+                    },
+                )
+                container.errorReporter.clear()
+                container.sessionRepository.remember(job)
+                container.processingSession.reset()
+                SongProcessingService.start(container.appContext, job)
+                onStarted(input.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _state.update {
+                    it.copy(saving = false, errorRes = R.string.error_processing_failed)
+                }
+            }
+        }
+    }
+
+    fun openArtworkPicker() {
+        _state.update { it.copy(artworkPickerOpen = true, artworkFailed = false) }
+    }
+
+    fun closeArtworkPicker() {
+        _state.update { it.copy(artworkPickerOpen = false) }
+    }
+
+    fun searchArtwork(query: String) {
+        val term = query.trim()
+        if (term.isEmpty() || _state.value.artworkSearching) return
+        viewModelScope.launch {
+            val latest = try {
+                container.settingsRepository.settings.first()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                settings
+            }
+            settings = latest
+            if (!latest.networkLookups) {
+                _state.update {
+                    it.copy(
+                        artworkOffline = true,
+                        artworkSearchCompleted = false,
+                        artworkResults = emptyList(),
+                        artworkFailed = false,
+                    )
+                }
+                return@launch
+            }
+            _state.update {
+                it.copy(
+                    artworkSearching = true,
+                    artworkSearchCompleted = false,
+                    artworkOffline = false,
+                    artworkFailed = false,
+                )
+            }
+            val results = container.artworkRepository.search(term)
+            _state.update {
+                it.copy(
+                    artworkSearching = false,
+                    artworkSearchCompleted = true,
+                    artworkResults = results,
+                )
+            }
+        }
+    }
+
+    fun chooseArtwork(candidate: ArtworkCandidate) {
+        if (_state.value.artworkApplying) return
+        viewModelScope.launch {
+            _state.update { it.copy(artworkApplying = true, artworkFailed = false) }
+            val artwork = container.artworkRepository.load(candidate)
+            if (artwork == null) {
+                _state.update { it.copy(artworkApplying = false, artworkFailed = true) }
+            } else {
+                applyArtwork(artwork)
+            }
+        }
+    }
+
+    fun chooseGalleryArtwork(uri: Uri) {
+        if (_state.value.artworkApplying) return
+        viewModelScope.launch {
+            _state.update { it.copy(artworkApplying = true, artworkFailed = false) }
+            val artwork = container.artworkRepository.fromUri(uri)
+            if (artwork == null) {
+                _state.update { it.copy(artworkApplying = false, artworkFailed = true) }
+            } else {
+                applyArtwork(artwork)
+            }
+        }
+    }
+
+    fun removeArtwork() {
+        updateDraft(TagField.ARTWORK) { it.copy(artwork = null) }
+    }
+
+    private fun applyArtwork(artwork: Artwork) {
+        updateDraft(TagField.ARTWORK) { it.copy(artwork = artwork) }
+        _state.update { it.copy(artworkPickerOpen = false, artworkApplying = false) }
     }
 
     private suspend fun identifyNow() {

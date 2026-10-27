@@ -68,4 +68,6 @@ class MetadataClients(
     val resolver: CompositeMetadataResolver = CompositeMetadataResolver(iTunes, musicBrainz, gate)
 
     val artworkSearch: ArtworkSearch get() = iTunes
+
+    val artworkFetcher: ArtworkFetcher = HttpArtworkFetcher(coverArtHttp.client)
 }

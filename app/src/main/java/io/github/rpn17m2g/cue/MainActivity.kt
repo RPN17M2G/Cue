@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
                     container.inputResolver.cleanup(previous.input)
                 }
                 container.sessionRepository.clear()
+                container.inputResolver.releasePersistedPermissions()
                 val resolved = container.inputResolver.resolve(uri)
                 val session = container.sessionRepository.create(resolved)
                 container.navigationRequests.navigate(Routes.review(session.id))

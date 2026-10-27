@@ -13,6 +13,7 @@ data class SavedSong(
     val uri: String,
     val displayName: String,
     val relativePath: String,
+    val inPlaceEdit: Boolean = false,
 )
 
 interface OutputStore {

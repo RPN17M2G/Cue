@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -26,16 +28,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.rpn17m2g.cue.R
 import io.github.rpn17m2g.cue.data.output.SavedSong
 import io.github.rpn17m2g.cue.processing.ProcessingState
-import io.github.rpn17m2g.cue.ui.navigation.appContainer
 import io.github.rpn17m2g.cue.ui.cueViewModel
+import io.github.rpn17m2g.cue.ui.navigation.appContainer
 
 @Composable
 fun ResultScreen(
     onProcessAnother: () -> Unit,
+    onEditTags: (String) -> Unit,
+    onEditError: () -> Unit,
 ) {
     val context = LocalContext.current
     val viewModel = cueViewModel { ResultViewModel(context.appContainer()) }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val editing by viewModel.editing.collectAsStateWithLifecycle()
     val song = (state as? ProcessingState.Done)?.song
 
     Scaffold { padding ->
@@ -47,7 +52,13 @@ fun ResultScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = stringResource(R.string.result_title),
+                text = stringResource(
+                    if (song?.inPlaceEdit == true) {
+                        R.string.result_title_updated
+                    } else {
+                        R.string.result_title
+                    },
+                ),
                 style = MaterialTheme.typography.headlineMedium,
             )
             if (song == null) {
@@ -61,7 +72,11 @@ fun ResultScreen(
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    text = stringResource(R.string.result_saved_to, song.relativePath),
+                    text = if (song.inPlaceEdit) {
+                        stringResource(R.string.result_updated_in_place)
+                    } else {
+                        stringResource(R.string.result_saved_to, song.relativePath)
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -81,22 +96,25 @@ fun ResultScreen(
                     }) {
                         Text(stringResource(R.string.result_share))
                     }
-                    OutlinedButton(onClick = { showInFolder(context, song) }) {
-                        Text(stringResource(R.string.result_show_folder))
+                    if (song.relativePath.isNotBlank()) {
+                        OutlinedButton(onClick = { showInFolder(context, song) }) {
+                            Text(stringResource(R.string.result_show_folder))
+                        }
                     }
                 }
                 OutlinedButton(
-                    onClick = { },
-                    enabled = false,
+                    onClick = {
+                        viewModel.editTags(song, onReady = onEditTags, onError = onEditError)
+                    },
+                    enabled = !editing,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(stringResource(R.string.result_edit_tags))
+                    if (editing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    } else {
+                        Text(stringResource(R.string.result_edit_tags))
+                    }
                 }
-                Text(
-                    text = stringResource(R.string.result_edit_tags_unavailable),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             Button(
                 onClick = {

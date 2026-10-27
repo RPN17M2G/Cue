@@ -6,6 +6,7 @@ import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimRange
+import io.github.rpn17m2g.cue.tags.TagField
 
 /** Passes a job to the service without serializing artwork bytes. */
 internal object ProcessingJobCodec {
@@ -18,6 +19,7 @@ internal object ProcessingJobCodec {
         intent.putExtra(KEY_MIME, job.input.mimeType)
         intent.putExtra(KEY_KIND, job.input.kind.name)
         intent.putExtra(KEY_DURATION, job.input.durationMs ?: ABSENT_LONG)
+        intent.putExtra(KEY_CAN_EDIT, job.input.canEditInPlace)
         intent.putExtra(KEY_TITLE, job.draft.title)
         intent.putExtra(KEY_ARTIST, job.draft.artist)
         intent.putExtra(KEY_ALBUM, job.draft.album)
@@ -31,6 +33,11 @@ internal object ProcessingJobCodec {
         intent.putExtra(KEY_QUALITY, job.quality.name)
         intent.putExtra(KEY_OUTPUT_FOLDER, job.outputFolder)
         intent.putExtra(KEY_TEMPLATE, job.filenameTemplate)
+        intent.putExtra(KEY_MODE, job.mode.name)
+        intent.putStringArrayListExtra(
+            KEY_CHANGED_FIELDS,
+            ArrayList(job.changedFields.map(TagField::name)),
+        )
     }
 
     fun read(intent: Intent): ProcessingJob? {
@@ -45,6 +52,9 @@ internal object ProcessingJobCodec {
             ?: return null
         val trimStart = intent.getLongExtra(KEY_TRIM_START, ABSENT_LONG)
         val trimEnd = intent.getLongExtra(KEY_TRIM_END, ABSENT_LONG)
+        val mode = intent.getStringExtra(KEY_MODE)
+            ?.let { name -> ProcessingMode.entries.firstOrNull { it.name == name } }
+            ?: ProcessingMode.CONVERT_AND_SAVE
         return ProcessingJob(
             input = ResolvedInput(
                 id = id,
@@ -54,6 +64,7 @@ internal object ProcessingJobCodec {
                 mimeType = intent.getStringExtra(KEY_MIME),
                 kind = kind,
                 durationMs = intent.getLongExtra(KEY_DURATION, ABSENT_LONG).takeIf { it != ABSENT_LONG },
+                canEditInPlace = intent.getBooleanExtra(KEY_CAN_EDIT, false),
             ),
             draft = TagDraft(
                 title = intent.getStringExtra(KEY_TITLE).orEmpty(),
@@ -73,6 +84,11 @@ internal object ProcessingJobCodec {
             quality = quality,
             outputFolder = intent.getStringExtra(KEY_OUTPUT_FOLDER).orEmpty(),
             filenameTemplate = intent.getStringExtra(KEY_TEMPLATE).orEmpty(),
+            mode = mode,
+            changedFields = intent.getStringArrayListExtra(KEY_CHANGED_FIELDS)
+                .orEmpty()
+                .mapNotNull { name -> TagField.entries.firstOrNull { it.name == name } }
+                .toSet(),
         )
     }
 
@@ -86,6 +102,7 @@ internal object ProcessingJobCodec {
     private const val KEY_MIME = "input_mime"
     private const val KEY_KIND = "input_kind"
     private const val KEY_DURATION = "input_duration"
+    private const val KEY_CAN_EDIT = "input_can_edit"
     private const val KEY_TITLE = "tag_title"
     private const val KEY_ARTIST = "tag_artist"
     private const val KEY_ALBUM = "tag_album"
@@ -99,4 +116,6 @@ internal object ProcessingJobCodec {
     private const val KEY_QUALITY = "quality"
     private const val KEY_OUTPUT_FOLDER = "output_folder"
     private const val KEY_TEMPLATE = "filename_template"
+    private const val KEY_MODE = "processing_mode"
+    private const val KEY_CHANGED_FIELDS = "changed_fields"
 }
