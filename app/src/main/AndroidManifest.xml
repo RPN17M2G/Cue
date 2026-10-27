@@ -20,7 +20,13 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Cue"
-        tools:ignore="UnusedAttribute">
+        tools:ignore="UnusedAttribute,UnusedTranslation">
+
+        <!-- Hebrew lives in res/values-iw: the resource matcher resolves a Hebrew
+             request through the legacy "iw" code, so res/values-he never matches
+             and every string would fall back to English. The modern "he" tag is
+             still what locales_config.xml and the app-locale APIs use. -->
+
 
         <activity
             android:name=".MainActivity"
