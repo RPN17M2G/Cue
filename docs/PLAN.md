@@ -144,6 +144,13 @@ The cascade, in order. Each stage may be skipped when it cannot help.
    Art Archive. Requires network, the fingerprint toggle, and a configured key.
 5. **Manual entry.** Always available; never blocked.
 
+**Provider pacing.** Every request to MusicBrainz is spaced at least 1 s apart
+(their published limit). AcoustID publishes a 3-requests-per-second limit, but
+Cue keeps a full 20 s between fingerprint lookups — one lookup happens per
+processed file, so three requests per minute is plenty and leaves a wide margin.
+Both limits are enforced by an OkHttp interceptor, so retries count too;
+AcoustID lookups are POSTs and are never replayed automatically.
+
 ML Kit v2 does **not** support the Hebrew script; that is why Tesseract is the
 second pass. See `docs/ADR/0003-dual-ocr-mlkit-tesseract.md`.
 
@@ -293,7 +300,8 @@ No storage permissions (SAF + MediaStore).
 | FFmpeg + chromaprint cross-compile is fiddly on Windows | Committed script + Docker/WSL; one-time setup |
 | ML Kit cannot read Hebrew | Tesseract second pass; fingerprint/manual fallbacks |
 | OCR heuristics need real data | Real samples + frequency/stability aggregation |
-| iTunes rate limits / MusicBrainz User-Agent rules | Backoff, retries, compliant User-Agent |
+| iTunes rate limits / MusicBrainz User-Agent rules | Backoff, retries, compliant User-Agent, 1 req/s MusicBrainz pacing |
+| AcoustID rate limit (3 req/s published) | 20 s between lookups (3/min); POSTs are never auto-replayed |
 | AcoustID needs a key | Settings field + `local.properties` default; feature disabled gracefully without it |
 | Emulator differs from hardware | Final validation on the physical phone |
 | Transcode generation loss | Quality presets default high (V0); never re-encode for tag-only edits |
