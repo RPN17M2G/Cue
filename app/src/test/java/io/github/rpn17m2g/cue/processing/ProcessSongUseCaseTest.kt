@@ -1,6 +1,7 @@
 package io.github.rpn17m2g.cue.processing
 
 import io.github.rpn17m2g.cue.audio.FfmpegRunner
+import io.github.rpn17m2g.cue.data.input.DocumentEditor
 import io.github.rpn17m2g.cue.data.input.InputKind
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.data.output.OutputStore
@@ -12,6 +13,7 @@ import io.github.rpn17m2g.cue.domain.model.TrimRange
 import io.github.rpn17m2g.cue.tags.TagField
 import io.github.rpn17m2g.cue.tags.TagStore
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -19,8 +21,10 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -158,10 +162,86 @@ class ProcessSongUseCaseTest {
         }
     }
 
-    private fun useCase(runner: FfmpegRunner, tempDir: File) = ProcessSongUseCase(
+    @Test
+    fun `an in-place job writes only changed tags and skips ffmpeg`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        val runner = WritingRunner(exitCode = 0, lines = emptyList())
+        val editor = FakeDocumentEditor()
+        val tempDir = File(folder.root, "work")
+        val useCase = useCase(runner, tempDir, editor)
+        val fields = setOf(TagField.TITLE, TagField.ARTIST)
+
+        val saved = useCase.execute(inPlaceJob(input, fields)) { _, _ -> }
+
+        assertTrue(runner.args.isEmpty())
+        assertEquals(fields, tagStore.fields)
+        assertEquals(1, editor.writes.size)
+        assertTrue(saved.inPlaceEdit)
+        assertEquals("content://doc/song.mp3", saved.uri)
+        assertEquals(0, tempDir.listFiles()?.size)
+    }
+
+    @Test
+    fun `an in-place job with no changed fields leaves the source untouched`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        val editor = FakeDocumentEditor()
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), folder.root, editor)
+
+        val saved = useCase.execute(inPlaceJob(input, emptySet())) { _, _ -> }
+
+        assertNull(tagStore.fields)
+        assertTrue(editor.writes.isEmpty())
+        assertTrue(saved.inPlaceEdit)
+    }
+
+    @Test
+    fun `a failed in-place write restores the original document`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        val editor = FakeDocumentEditor().apply { failNextWrite = true }
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), folder.root, editor)
+
+        val error = runCatching {
+            useCase.execute(inPlaceJob(input, setOf(TagField.TITLE))) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        assertEquals(1, editor.writes.size)
+        assertArrayEquals(input.readBytes(), editor.writes.single())
+    }
+
+    @Test
+    fun `a mismatched read-back restores the original document`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        tagStore.readBack = TagDraft(title = "Something else")
+        val editor = FakeDocumentEditor()
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), folder.root, editor)
+
+        val error = runCatching {
+            useCase.execute(inPlaceJob(input, setOf(TagField.TITLE))) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        assertEquals(2, editor.writes.size)
+        assertArrayEquals(input.readBytes(), editor.writes.last())
+    }
+
+    private fun useCase(
+        runner: FfmpegRunner,
+        tempDir: File,
+        editor: DocumentEditor = FakeDocumentEditor(),
+    ) = ProcessSongUseCase(
         runner = runner,
         tagStore = tagStore,
         outputStore = outputStore,
+        documentEditor = editor,
         tempDirectory = tempDir,
         ioDispatcher = Dispatchers.Unconfined,
     )
@@ -196,6 +276,19 @@ class ProcessSongUseCaseTest {
         filenameTemplate = "{artist} - {title}",
     )
 
+    private fun inPlaceJob(input: File, fields: Set<TagField>): ProcessingJob = job(
+        ResolvedInput(
+            id = "mp3",
+            uri = "content://doc/song.mp3",
+            path = input.absolutePath,
+            displayName = "song.mp3",
+            mimeType = "audio/mpeg",
+            kind = InputKind.MP3,
+            durationMs = 10_000,
+            canEditInPlace = true,
+        ),
+    ).copy(mode = ProcessingMode.EDIT_IN_PLACE, changedFields = fields)
+
     private class WritingRunner(
         private val exitCode: Int,
         private val lines: List<String>,
@@ -213,12 +306,34 @@ class ProcessSongUseCaseTest {
     private class RecordingTagStore : TagStore {
         var draft: TagDraft? = null
         var fields: Set<TagField>? = null
+        var readBack: TagDraft? = null
 
-        override fun read(file: File): TagDraft? = null
+        override fun read(file: File): TagDraft? = readBack ?: draft
 
         override fun writeInPlace(file: File, tag: TagDraft, fields: Set<TagField>) {
             this.draft = tag
             this.fields = fields
+        }
+    }
+
+    private class FakeDocumentEditor : DocumentEditor {
+        private var document: ByteArray = byteArrayOf()
+
+        val writes = mutableListOf<ByteArray>()
+        var failNextWrite = false
+
+        override suspend fun replace(uri: String, source: File) {
+            if (failNextWrite) {
+                failNextWrite = false
+                throw IOException("provider refused the write")
+            }
+            val bytes = source.readBytes()
+            document = bytes
+            writes += bytes
+        }
+
+        override suspend fun copyTo(uri: String, target: File) {
+            target.writeBytes(document)
         }
     }
 
