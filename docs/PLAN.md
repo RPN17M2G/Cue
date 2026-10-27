@@ -1,6 +1,6 @@
 # Cue — Design Plan
 
-Status: agreed design; Phase 1 walking skeleton and Phase 2 recognition implemented.
+Status: agreed design; Phase 1 walking skeleton, Phase 2 recognition, and Phase 3 fingerprint fallback implemented.
 Owner: Omer Gindi (`RPN17M2G`).
 App id: `io.github.rpn17m2g.cue`.
 
@@ -223,7 +223,8 @@ song they want.
 - Output folder (default `Music/Cue`)
 - Network lookups (default on)
 - Fingerprint matching (default on when a key is present)
-- AcoustID API key (default injected from `local.properties`; overridable here)
+- AcoustID API key (default from the `acoustid.apiKey` property in
+  `local.properties`; overridable here)
 - Language (System / English / עברית)
 - Theme (System / Light / Dark)
 - Advanced: filename template, OCR frame interval (default 2 s), HTTP timeout
