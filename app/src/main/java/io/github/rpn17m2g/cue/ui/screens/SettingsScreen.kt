@@ -157,6 +157,17 @@ private fun SettingsBody(
         value = settings.acoustIdKey,
         onValueChange = onAcoustIdKey,
         label = { Text(stringResource(R.string.settings_acoustid_key)) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (settings.acoustIdKey.isBlank()) {
+                        R.string.settings_acoustid_missing
+                    } else {
+                        R.string.settings_acoustid_hint
+                    },
+                ),
+            )
+        },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )

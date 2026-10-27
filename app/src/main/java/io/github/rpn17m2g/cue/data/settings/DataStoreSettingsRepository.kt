@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import io.github.rpn17m2g.cue.BuildConfig
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
@@ -55,7 +56,7 @@ class DataStoreSettingsRepository(
         outputFolder = preferences[Keys.OUTPUT_FOLDER] ?: AppSettings.DEFAULT_OUTPUT_FOLDER,
         networkLookups = preferences[Keys.NETWORK] ?: true,
         fingerprintEnabled = preferences[Keys.FINGERPRINT] ?: true,
-        acoustIdKey = preferences[Keys.ACOUSTID_KEY].orEmpty(),
+        acoustIdKey = preferences[Keys.ACOUSTID_KEY] ?: BuildConfig.ACOUSTID_API_KEY,
         language = preferences[Keys.LANGUAGE]
             ?.let { name -> AppLanguage.entries.firstOrNull { it.name == name } }
             ?: AppLanguage.SYSTEM,

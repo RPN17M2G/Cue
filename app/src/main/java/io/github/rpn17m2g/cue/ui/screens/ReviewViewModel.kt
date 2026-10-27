@@ -52,6 +52,7 @@ data class ReviewUiState(
     val rawOcrLines: List<String> = emptyList(),
     val ocrAttempted: Boolean = false,
     val ocrFailed: Boolean = false,
+    val fingerprintAvailable: Boolean = false,
 ) {
     val hasTrim: Boolean get() = durationMs != null && durationMs > TrimMath.MIN_DURATION_MS
 
@@ -111,6 +112,7 @@ class ReviewViewModel(
             trimEndMs = duration ?: 0L,
             durationMs = duration,
             identifying = true,
+            fingerprintAvailable = settings.fingerprintAvailable,
         )
         identifyNow()
     }
@@ -284,6 +286,7 @@ class ReviewViewModel(
                 identifying = true,
                 ocrFailed = false,
                 searchOffline = !settings.networkLookups,
+                fingerprintAvailable = settings.fingerprintAvailable,
             )
         }
         val result = try {

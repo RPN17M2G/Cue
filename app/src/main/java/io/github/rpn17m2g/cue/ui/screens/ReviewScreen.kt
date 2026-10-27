@@ -361,6 +361,18 @@ private fun LookupSection(
             color = MaterialTheme.colorScheme.error,
         )
     }
+    if (
+        state.input?.kind == InputKind.VIDEO &&
+        !state.fingerprintAvailable &&
+        !state.identifying &&
+        state.rawOcrLines.isEmpty()
+    ) {
+        Text(
+            text = stringResource(R.string.review_fingerprint_unavailable),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     if (state.alternatives.isNotEmpty()) {
         OtherMatches(
             matches = state.alternatives,

@@ -38,6 +38,7 @@
     <string name="review_search_results">Search results</string>
     <string name="review_no_matches">No matches found.</string>
     <string name="review_search_offline">Online lookups are turned off in Settings.</string>
+    <string name="review_fingerprint_unavailable">No readable text was found. Add an AcoustID key in Settings to identify songs by audio fingerprint.</string>
     <string name="review_ocr_details">Text from the recording</string>
     <string name="review_ocr_hide">Hide text</string>
     <string name="review_ocr_failed">Text recognition failed on this device.</string>
@@ -92,6 +93,8 @@
     <string name="settings_network">Online lookups</string>
     <string name="settings_fingerprint">Fingerprint matching</string>
     <string name="settings_acoustid_key">AcoustID API key</string>
+    <string name="settings_acoustid_missing">Fingerprint lookup is off until a free AcoustID key from acoustid.org is entered.</string>
+    <string name="settings_acoustid_hint">Used for fingerprint lookup when the text cannot be read.</string>
     <string name="settings_advanced">Advanced</string>
     <string name="settings_filename_template">Filename template</string>
     <string name="settings_ocr_interval">OCR frame interval (ms)</string>

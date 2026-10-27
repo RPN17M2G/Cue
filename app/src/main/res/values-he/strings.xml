@@ -38,6 +38,7 @@
     <string name="review_search_results">תוצאות חיפוש</string>
     <string name="review_no_matches">לא נמצאו התאמות.</string>
     <string name="review_search_offline">חיפושים מקוונים כבויים בהגדרות.</string>
+    <string name="review_fingerprint_unavailable">לא נמצא טקסט קריא. הוסיפו מפתח AcoustID בהגדרות כדי לזהות שירים לפי טביעת אצבע של האודיו.</string>
     <string name="review_ocr_details">טקסט מההקלטה</string>
     <string name="review_ocr_hide">הסתרת טקסט</string>
     <string name="review_ocr_failed">זיהוי הטקסט נכשל במכשיר הזה.</string>
@@ -92,6 +93,8 @@
     <string name="settings_network">חיפושים מקוונים</string>
     <string name="settings_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="settings_acoustid_key">מפתח API של AcoustID</string>
+    <string name="settings_acoustid_missing">זיהוי לפי טביעת אצבע מושבת עד להזנת מפתח AcoustID חינמי מ־acoustid.org.</string>
+    <string name="settings_acoustid_hint">משמש לזיהוי לפי טביעת אצבע כשאין טקסט קריא.</string>
     <string name="settings_advanced">מתקדם</string>
     <string name="settings_filename_template">תבנית שם קובץ</string>
     <string name="settings_ocr_interval">מרווח פריימים ל־OCR (מילישניות)</string>

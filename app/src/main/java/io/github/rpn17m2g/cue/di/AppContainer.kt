@@ -3,9 +3,12 @@ package io.github.rpn17m2g.cue.di
 import android.content.Context
 import io.github.rpn17m2g.cue.audio.FfmpegProcessRunner
 import io.github.rpn17m2g.cue.audio.FfmpegRuntime
+import io.github.rpn17m2g.cue.data.fingerprint.FfmpegFingerprintExtractor
 import io.github.rpn17m2g.cue.data.input.InputResolver
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
+import io.github.rpn17m2g.cue.data.metadata.FingerprintInput
 import io.github.rpn17m2g.cue.data.metadata.LookupPolicy
+import io.github.rpn17m2g.cue.data.metadata.LookupResult
 import io.github.rpn17m2g.cue.data.metadata.MetadataClients
 import io.github.rpn17m2g.cue.data.metadata.MetadataQuery
 import io.github.rpn17m2g.cue.data.ocr.MediaVideoFrameExtractor
@@ -15,6 +18,7 @@ import io.github.rpn17m2g.cue.data.output.MediaStoreOutputStore
 import io.github.rpn17m2g.cue.data.output.OutputStore
 import io.github.rpn17m2g.cue.data.session.SessionRepository
 import io.github.rpn17m2g.cue.data.settings.DataStoreSettingsRepository
+import io.github.rpn17m2g.cue.domain.identify.FingerprintExtractor
 import io.github.rpn17m2g.cue.domain.identify.IdentificationCascade
 import io.github.rpn17m2g.cue.domain.identify.IdentifySongUseCase
 import io.github.rpn17m2g.cue.domain.identify.SongIdentification
@@ -98,6 +102,13 @@ class AppContainer(context: Context) {
         )
     }
 
+    private val fingerprintExtractor: FingerprintExtractor by lazy {
+        FfmpegFingerprintExtractor(
+            runner = ffmpegRunner,
+            outputDirectory = File(appContext.cacheDir, "fingerprints"),
+        )
+    }
+
     private val metadataLock = Mutex()
     private var metadataCache: MetadataCache? = null
 
@@ -126,11 +137,23 @@ class AppContainer(context: Context) {
         }
     }
 
-    suspend fun identificationCascade(): IdentificationCascade {
+    suspend fun identificationCascade(inputPath: String): IdentificationCascade {
         val clients = metadataClients()
         return IdentificationCascade(
             lookup = { seed -> clients.resolver.search(MetadataQuery(seed.title, seed.artist)) },
-            fingerprintLookup = { emptyList() },
+            fingerprintLookup = fingerprintLookup@{ seed ->
+                val input = File(inputPath)
+                if (!input.isFile) return@fingerprintLookup emptyList()
+                val fingerprint = fingerprintExtractor.extract(input, seed.durationMs)
+                    ?: return@fingerprintLookup emptyList()
+                val result = clients.acoustId.lookup(
+                    FingerprintInput(fingerprint.value, fingerprint.durationSeconds),
+                )
+                when (result) {
+                    is LookupResult.Success -> result.value
+                    is LookupResult.Failure -> emptyList()
+                }
+            },
         )
     }
 
@@ -144,6 +167,6 @@ class AppContainer(context: Context) {
         embeddedTags = embeddedTags,
         settings = settings,
         preferHebrew = preferHebrew,
-        cascade = identificationCascade(),
+        cascade = identificationCascade(input.path),
     )
 }
