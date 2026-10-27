@@ -1,6 +1,7 @@
 # Cue — Design Plan
 
-Status: agreed design; Phase 1 walking skeleton, Phase 2 recognition, and Phase 3 fingerprint fallback implemented.
+Status: agreed design; Phase 1 walking skeleton, Phase 2 recognition, Phase 3
+fingerprint fallback, and Phase 4 MP3 tag editing & trimming implemented.
 Owner: Omer Gindi (`RPN17M2G`).
 App id: `io.github.rpn17m2g.cue`.
 
