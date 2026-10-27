@@ -2,6 +2,12 @@ package io.github.rpn17m2g.cue.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -71,14 +77,22 @@ fun HomeScreen(
             ) {
                 Text(stringResource(R.string.home_add_file))
             }
-            if (resolving) {
-                Spacer(Modifier.height(16.dp))
-                CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.home_preparing),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+            AnimatedVisibility(
+                visible = resolving,
+                enter = fadeIn(tween(HOME_FADE_MILLIS)) +
+                    expandVertically(tween(HOME_FADE_MILLIS)),
+                exit = fadeOut(tween(HOME_FADE_MILLIS)) +
+                    shrinkVertically(tween(HOME_FADE_MILLIS)),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(Modifier.height(16.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.home_preparing),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             IconButton(onClick = onOpenSettings, enabled = !resolving) {
@@ -92,3 +106,5 @@ fun HomeScreen(
 }
 
 private val INPUT_MIME_TYPES = arrayOf("video/*", "audio/*")
+
+private const val HOME_FADE_MILLIS = 200

@@ -1,10 +1,19 @@
 package io.github.rpn17m2g.cue.ui.navigation
 
 import android.content.Context
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -38,11 +47,35 @@ object Routes {
 fun Context.appContainer(): AppContainer =
     (applicationContext as CueApplication).container
 
+private const val TRANSITION_MILLIS = 300
+
+/**
+ * Screens advance towards the inline end in left-to-right and towards the
+ * inline start in right-to-left, so the motion matches the reading direction
+ * the user sees. A `sign` of -1 mirrors every horizontal offset for RTL.
+ */
+private fun forwardEnter(sign: Int): EnterTransition =
+    slideInHorizontally(tween(TRANSITION_MILLIS)) { width -> sign * width } +
+        fadeIn(tween(TRANSITION_MILLIS))
+
+private fun forwardExit(sign: Int): ExitTransition =
+    slideOutHorizontally(tween(TRANSITION_MILLIS)) { width -> -sign * width / 4 } +
+        fadeOut(tween(TRANSITION_MILLIS))
+
+private fun backEnter(sign: Int): EnterTransition =
+    slideInHorizontally(tween(TRANSITION_MILLIS)) { width -> -sign * width / 4 } +
+        fadeIn(tween(TRANSITION_MILLIS))
+
+private fun backExit(sign: Int): ExitTransition =
+    slideOutHorizontally(tween(TRANSITION_MILLIS)) { width -> sign * width } +
+        fadeOut(tween(TRANSITION_MILLIS))
+
 @Composable
 fun CueNavHost(
     navController: NavHostController = rememberNavController(),
 ) {
     val container = LocalContext.current.appContainer()
+    val sign = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
     val request by container.navigationRequests.request.collectAsStateWithLifecycle()
     LaunchedEffect(request) {
         val target = request ?: return@LaunchedEffect
@@ -51,7 +84,14 @@ fun CueNavHost(
             launchSingleTop = true
         }
     }
-    NavHost(navController = navController, startDestination = Routes.HOME) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.HOME,
+        enterTransition = { forwardEnter(sign) },
+        exitTransition = { forwardExit(sign) },
+        popEnterTransition = { backEnter(sign) },
+        popExitTransition = { backExit(sign) },
+    ) {
         composable(Routes.HOME) {
             HomeScreen(
                 onStartReview = { id -> navController.navigate(Routes.review(id)) },

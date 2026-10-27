@@ -43,6 +43,8 @@ data class AppSettings(
 
         val SCAN_WINDOW_RANGE = 5..120
         val OCR_INTERVAL_RANGE = 250L..10_000L
+        val HTTP_TIMEOUT_RANGE = 1_000L..60_000L
+        val HTTP_RETRIES_RANGE = 0..5
     }
 }
 

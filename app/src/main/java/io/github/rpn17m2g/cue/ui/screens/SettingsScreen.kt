@@ -40,8 +40,8 @@ import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.AppTheme
-import io.github.rpn17m2g.cue.ui.navigation.appContainer
 import io.github.rpn17m2g.cue.ui.cueViewModel
+import io.github.rpn17m2g.cue.ui.navigation.appContainer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,12 +77,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 settings = settings,
                 onQuality = { quality -> viewModel.update { it.copy(defaultQuality = quality) } },
                 onOutputFolder = { folder -> viewModel.update { it.copy(outputFolder = folder) } },
-                onTemplate = { template -> viewModel.update { it.copy(filenameTemplate = template) } },
+                onLanguage = { language -> viewModel.update { it.copy(language = language) } },
+                onTheme = { theme -> viewModel.update { it.copy(theme = theme) } },
                 onNetwork = { enabled -> viewModel.update { it.copy(networkLookups = enabled) } },
                 onFingerprint = { enabled -> viewModel.update { it.copy(fingerprintEnabled = enabled) } },
                 onAcoustIdKey = { key -> viewModel.update { it.copy(acoustIdKey = key) } },
+                onTemplate = { template -> viewModel.update { it.copy(filenameTemplate = template) } },
                 onScanWindow = { seconds -> viewModel.update { it.copy(scanWindowSeconds = seconds) } },
                 onOcrInterval = { intervalMs -> viewModel.update { it.copy(ocrIntervalMs = intervalMs) } },
+                onHttpTimeout = { timeoutMs -> viewModel.update { it.copy(httpTimeoutMs = timeoutMs) } },
+                onHttpRetries = { retries -> viewModel.update { it.copy(httpRetries = retries) } },
             )
         }
     }
@@ -93,29 +97,24 @@ private fun SettingsBody(
     settings: AppSettings,
     onQuality: (QualityPreset) -> Unit,
     onOutputFolder: (String) -> Unit,
-    onTemplate: (String) -> Unit,
+    onLanguage: (AppLanguage) -> Unit,
+    onTheme: (AppTheme) -> Unit,
     onNetwork: (Boolean) -> Unit,
     onFingerprint: (Boolean) -> Unit,
     onAcoustIdKey: (String) -> Unit,
+    onTemplate: (String) -> Unit,
     onScanWindow: (Int) -> Unit,
     onOcrInterval: (Long) -> Unit,
+    onHttpTimeout: (Long) -> Unit,
+    onHttpRetries: (Int) -> Unit,
 ) {
-    Text(
-        text = stringResource(R.string.settings_quality),
-        style = MaterialTheme.typography.titleLarge,
+    SectionTitle(R.string.settings_quality)
+    ChoiceChips(
+        options = QualityPreset.entries,
+        selected = settings.defaultQuality,
+        labelRes = QualityPreset::labelRes,
+        onSelect = onQuality,
     )
-    Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        QualityPreset.entries.forEach { preset ->
-            FilterChip(
-                selected = settings.defaultQuality == preset,
-                onClick = { onQuality(preset) },
-                label = { Text(stringResource(preset.labelRes())) },
-            )
-        }
-    }
     OutlinedTextField(
         value = settings.outputFolder,
         onValueChange = onOutputFolder,
@@ -123,26 +122,24 @@ private fun SettingsBody(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    OutlinedTextField(
-        value = settings.filenameTemplate,
-        onValueChange = onTemplate,
-        label = { Text(stringResource(R.string.settings_filename_template)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
+    HorizontalDivider()
+
+    SectionTitle(R.string.settings_language)
+    ChoiceChips(
+        options = AppLanguage.entries,
+        selected = settings.language,
+        labelRes = AppLanguage::labelRes,
+        onSelect = onLanguage,
+    )
+    SectionTitle(R.string.settings_theme)
+    ChoiceChips(
+        options = AppTheme.entries,
+        selected = settings.theme,
+        labelRes = AppTheme::labelRes,
+        onSelect = onTheme,
     )
     HorizontalDivider()
-    IntSettingField(
-        value = settings.scanWindowSeconds,
-        label = stringResource(R.string.settings_scan_window),
-        range = AppSettings.SCAN_WINDOW_RANGE,
-        onValue = onScanWindow,
-    )
-    LongSettingField(
-        value = settings.ocrIntervalMs,
-        label = stringResource(R.string.settings_ocr_interval),
-        range = AppSettings.OCR_INTERVAL_RANGE,
-        onValue = onOcrInterval,
-    )
+
     ToggleRow(
         label = stringResource(R.string.settings_network),
         checked = settings.networkLookups,
@@ -172,19 +169,68 @@ private fun SettingsBody(
         singleLine = true,
     )
     HorizontalDivider()
-    PlaceholderRow(
-        label = stringResource(R.string.settings_language),
-        value = stringResource(settings.language.labelRes()),
+
+    SectionTitle(R.string.settings_advanced)
+    OutlinedTextField(
+        value = settings.filenameTemplate,
+        onValueChange = onTemplate,
+        label = { Text(stringResource(R.string.settings_filename_template)) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
     )
-    PlaceholderRow(
-        label = stringResource(R.string.settings_theme),
-        value = stringResource(settings.theme.labelRes()),
+    IntSettingField(
+        value = settings.scanWindowSeconds,
+        label = stringResource(R.string.settings_scan_window),
+        range = AppSettings.SCAN_WINDOW_RANGE,
+        onValue = onScanWindow,
     )
+    LongSettingField(
+        value = settings.ocrIntervalMs,
+        label = stringResource(R.string.settings_ocr_interval),
+        range = AppSettings.OCR_INTERVAL_RANGE,
+        onValue = onOcrInterval,
+    )
+    LongSettingField(
+        value = settings.httpTimeoutMs,
+        label = stringResource(R.string.settings_http_timeout),
+        range = AppSettings.HTTP_TIMEOUT_RANGE,
+        onValue = onHttpTimeout,
+    )
+    IntSettingField(
+        value = settings.httpRetries,
+        label = stringResource(R.string.settings_http_retries),
+        range = AppSettings.HTTP_RETRIES_RANGE,
+        onValue = onHttpRetries,
+    )
+}
+
+@Composable
+private fun SectionTitle(resId: Int) {
     Text(
-        text = stringResource(R.string.settings_phase5_hint),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = stringResource(resId),
+        style = MaterialTheme.typography.titleLarge,
     )
+}
+
+@Composable
+private fun <T> ChoiceChips(
+    options: List<T>,
+    selected: T,
+    labelRes: (T) -> Int,
+    onSelect: (T) -> Unit,
+) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(stringResource(labelRes(option))) },
+            )
+        }
+    }
 }
 
 @Composable
@@ -198,7 +244,7 @@ private fun IntSettingField(
     OutlinedTextField(
         value = text,
         onValueChange = { input ->
-            val digits = input.filter(Char::isDigit).take(3)
+            val digits = input.filter(Char::isDigit).take(5)
             text = digits
             digits.toIntOrNull()?.takeIf { it in range }?.let(onValue)
         },
@@ -257,27 +303,6 @@ private fun ToggleRow(
     }
 }
 
-@Composable
-private fun PlaceholderRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun QualityPreset.labelRes(): Int = when (this) {
     QualityPreset.V0 -> R.string.quality_v0
     QualityPreset.V2 -> R.string.quality_v2
@@ -285,14 +310,12 @@ private fun QualityPreset.labelRes(): Int = when (this) {
     QualityPreset.CBR_192 -> R.string.quality_cbr192
 }
 
-@Composable
 private fun AppLanguage.labelRes(): Int = when (this) {
     AppLanguage.SYSTEM -> R.string.settings_language_system
     AppLanguage.ENGLISH -> R.string.settings_language_english
     AppLanguage.HEBREW -> R.string.settings_language_hebrew
 }
 
-@Composable
 private fun AppTheme.labelRes(): Int = when (this) {
     AppTheme.SYSTEM -> R.string.settings_theme_system
     AppTheme.LIGHT -> R.string.settings_theme_light

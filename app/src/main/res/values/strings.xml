@@ -43,7 +43,6 @@
     <string name="review_search_online">Look up online</string>
     <string name="review_other_matches_count">Other matches (%1$d)</string>
     <string name="review_quality">Quality</string>
-    <string name="review_estimated_size">Estimated size</string>
     <string name="review_identifying">Reading text and looking up the song…</string>
     <string name="review_lookup">Song details</string>
     <string name="review_searching">Searching…</string>
@@ -128,7 +127,6 @@
     <string name="settings_theme_system">System</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
-    <string name="settings_phase5_hint">Language and theme switching arrive in Phase 5.</string>
 
     <string name="notification_channel_processing">Audio processing</string>
     <string name="notification_channel_processing_description">Shows conversion progress and lets you cancel</string>

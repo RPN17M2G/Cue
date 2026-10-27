@@ -1,5 +1,12 @@
 package io.github.rpn17m2g.cue.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,6 +63,11 @@ fun ProcessingScreen(
     val progress = running?.progress ?: 0f
     val stages = if (viewModel.inPlace) IN_PLACE_STAGES else STAGES
     val currentIndex = currentStage?.let(stages::indexOf) ?: -1
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = PROGRESS_MILLIS),
+        label = "processing progress",
+    )
 
     Scaffold { padding ->
         Column(
@@ -70,13 +82,13 @@ fun ProcessingScreen(
                 style = MaterialTheme.typography.headlineMedium,
             )
             LinearProgressIndicator(
-                progress = { progress },
+                progress = { animatedProgress },
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
                 text = stringResource(
                     R.string.processing_percent,
-                    (progress * 100).roundToInt(),
+                    (animatedProgress * 100).roundToInt(),
                 ),
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -109,30 +121,52 @@ private fun StageRow(
     icon: ImageVector,
     isActive: Boolean,
 ) {
+    val iconTint by animateColorAsState(
+        targetValue = if (isActive) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(durationMillis = STAGE_MILLIS),
+        label = "stage icon tint",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (isActive) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(durationMillis = STAGE_MILLIS),
+        label = "stage label color",
+    )
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isActive) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+        AnimatedContent(
+            targetState = icon,
+            transitionSpec = {
+                fadeIn(tween(durationMillis = STAGE_MILLIS)) togetherWith
+                    fadeOut(tween(durationMillis = STAGE_MILLIS))
             },
-        )
+            label = "stage icon",
+        ) { current ->
+            Icon(
+                imageVector = current,
+                contentDescription = null,
+                tint = iconTint,
+            )
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (isActive) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
+            color = labelColor,
         )
     }
 }
+
+private const val PROGRESS_MILLIS = 350
+private const val STAGE_MILLIS = 200
 
 private val STAGES = listOf(
     ProcessingStage.Preparing,

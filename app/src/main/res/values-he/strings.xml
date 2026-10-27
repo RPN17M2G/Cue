@@ -43,7 +43,6 @@
     <string name="review_search_online">חיפוש מקוון</string>
     <string name="review_other_matches_count">התאמות נוספות (%1$d)</string>
     <string name="review_quality">איכות</string>
-    <string name="review_estimated_size">גודל משוער</string>
     <string name="review_identifying">קורא טקסט ומחפש את השיר…</string>
     <string name="review_lookup">פרטי השיר</string>
     <string name="review_searching">מחפש…</string>
@@ -128,7 +127,6 @@
     <string name="settings_theme_system">לפי המערכת</string>
     <string name="settings_theme_light">בהיר</string>
     <string name="settings_theme_dark">כהה</string>
-    <string name="settings_phase5_hint">החלפת שפה וערכת נושא תגיע בשלב 5.</string>
 
     <string name="notification_channel_processing">עיבוד אודיו</string>
     <string name="notification_channel_processing_description">מציג התקדמות המרה ומאפשר ביטול</string>

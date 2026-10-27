@@ -5,21 +5,30 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import androidx.core.os.LocaleListCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import io.github.rpn17m2g.cue.data.input.InputIntentParser
 import io.github.rpn17m2g.cue.di.AppContainer
+import io.github.rpn17m2g.cue.settings.AppLanguage
+import io.github.rpn17m2g.cue.settings.AppSettings
+import io.github.rpn17m2g.cue.settings.localeTag
 import io.github.rpn17m2g.cue.ui.navigation.CueNavHost
 import io.github.rpn17m2g.cue.ui.navigation.Routes
 import io.github.rpn17m2g.cue.ui.theme.CueTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -31,8 +40,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
+        applyLanguageChanges()
         setContent {
-            CueTheme {
+            val settings by container.settingsRepository.settings.collectAsStateWithLifecycle(
+                initialValue = AppSettings(),
+            )
+            CueTheme(theme = settings.theme) {
                 CueNavHost()
             }
         }
@@ -85,6 +98,30 @@ class MainActivity : ComponentActivity() {
                 container.errorReporter.report(getString(R.string.error_input_failed), e.message)
                 container.navigationRequests.navigate(Routes.ERROR)
             }
+        }
+    }
+
+    /**
+     * AppCompat stores the selected tag, applies it before the activity is
+     * recreated, and recreates on a change so RTL and translated resources load
+     * from the start of the next screen pass.
+     */
+    private fun applyLanguageChanges() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                container.settingsRepository.settings.collect { settings ->
+                    applyLanguage(settings.language)
+                }
+            }
+        }
+    }
+
+    private fun applyLanguage(language: AppLanguage) {
+        val desired = language.localeTag()
+            ?.let(LocaleListCompat::forLanguageTags)
+            ?: LocaleListCompat.getEmptyLocaleList()
+        if (AppCompatDelegate.getApplicationLocales() != desired) {
+            AppCompatDelegate.setApplicationLocales(desired)
         }
     }
 
