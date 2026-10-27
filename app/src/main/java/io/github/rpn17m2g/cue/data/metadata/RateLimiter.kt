@@ -9,7 +9,7 @@ import java.io.IOException
  * monotonic clock; tests inject both the clock and the sleeper.
  */
 class RateLimiter(
-    private val minIntervalMs: Long = 1_000L,
+    val minIntervalMs: Long = 1_000L,
     private val clock: WallClock = WallClock.Monotonic,
     private val sleeper: Sleeper = Sleeper.System,
 ) {

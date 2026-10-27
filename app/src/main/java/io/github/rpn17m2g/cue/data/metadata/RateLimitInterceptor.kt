@@ -5,7 +5,7 @@ import okhttp3.Response
 
 /** Applies a provider-specific request pace, including retries replayed by OkHttp. */
 class RateLimitInterceptor(
-    private val limiter: RateLimiter = RateLimiter(),
+    val limiter: RateLimiter = RateLimiter(),
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         limiter.acquire { chain.call().isCanceled() }

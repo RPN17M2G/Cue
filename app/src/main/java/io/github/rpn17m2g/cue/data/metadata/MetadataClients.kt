@@ -1,10 +1,23 @@
 package io.github.rpn17m2g.cue.data.metadata
 
+import okhttp3.OkHttpClient
+
 object MetadataEndpoints {
     const val ITUNES = "https://itunes.apple.com/"
     const val MUSICBRAINZ = "https://musicbrainz.org/"
     const val ACOUSTID = "https://api.acoustid.org/"
     const val COVER_ART_ARCHIVE = "https://coverartarchive.org/"
+}
+
+/**
+ * Provider pacing. MusicBrainz asks for at most one request per second; AcoustID
+ * publishes three per second, but Cue sends at most one fingerprint lookup per
+ * processed file and keeps a full 20 s between them, so a burst of retries can
+ * never come close to either ceiling.
+ */
+internal object ProviderRateLimits {
+    const val MUSICBRAINZ_MIN_INTERVAL_MS = 1_000L
+    const val ACOUSTID_MIN_INTERVAL_MS = 20_000L
 }
 
 private const val COVER_ART_TIMEOUT_MS = 3_000L
@@ -22,8 +35,16 @@ class MetadataClients(
 ) {
     private val gate = policy.networkGate
 
-    private val musicBrainzHttp = http.clientWith(
-        RateLimitInterceptor(RateLimiter(clock = clock, sleeper = sleeper)),
+    internal val musicBrainzHttp: OkHttpClient = http.clientWith(
+        RateLimitInterceptor(
+            RateLimiter(ProviderRateLimits.MUSICBRAINZ_MIN_INTERVAL_MS, clock, sleeper),
+        ),
+    )
+
+    internal val acoustIdHttp: OkHttpClient = http.clientWith(
+        RateLimitInterceptor(
+            RateLimiter(ProviderRateLimits.ACOUSTID_MIN_INTERVAL_MS, clock, sleeper),
+        ),
     )
 
     private val coverArtHttp = MetadataHttp(
@@ -60,7 +81,7 @@ class MetadataClients(
     )
 
     val acoustId: AcoustIdClient = AcoustIdClient(
-        api = http.api(MetadataEndpoints.ACOUSTID, AcoustIdApi::class.java),
+        api = http.api(MetadataEndpoints.ACOUSTID, AcoustIdApi::class.java, acoustIdHttp),
         defaultApiKey = policy.acoustIdKey,
         networkGate = gate,
     )

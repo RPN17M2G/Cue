@@ -236,6 +236,42 @@ class AcoustIdClientTest {
     }
 
     @Test
+    fun `consecutive lookups are spaced by the acoustid pacing window`() = runTest {
+        server.enqueue(jsonResponse(RESPONSE))
+        server.enqueue(jsonResponse(RESPONSE))
+        var now = 0L
+        val sleeps = mutableListOf<Long>()
+        val clock = WallClock { now }
+        val sleeper = Sleeper { millis ->
+            sleeps += millis
+            now += millis
+        }
+        val limited = AcoustIdClient(
+            api = MetadataHttp(sleeper = Sleeper.None).api(
+                server.url("/").toString(),
+                AcoustIdApi::class.java,
+                okhttp3.OkHttpClient.Builder()
+                    .addInterceptor(
+                        RateLimitInterceptor(
+                            RateLimiter(
+                                ProviderRateLimits.ACOUSTID_MIN_INTERVAL_MS,
+                                clock,
+                                sleeper,
+                            ),
+                        ),
+                    )
+                    .build(),
+            ),
+        )
+
+        limited.lookup(FingerprintInput("chromaprint", 30), apiKey = "test-key")
+        limited.lookup(FingerprintInput("chromaprint", 30), apiKey = "test-key")
+
+        assertEquals(2, server.requestCount)
+        assertEquals(ProviderRateLimits.ACOUSTID_MIN_INTERVAL_MS, sleeps.sum())
+    }
+
+    @Test
     fun `network gate blocks requests even with a key`() = runTest {
         val gated = AcoustIdClient(
             api = MetadataHttp(sleeper = Sleeper.None).api(
