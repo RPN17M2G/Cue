@@ -11,6 +11,7 @@ import io.github.rpn17m2g.cue.domain.ocr.FrameExtractor
 import io.github.rpn17m2g.cue.domain.ocr.OcrEngine
 import io.github.rpn17m2g.cue.domain.ocr.OcrFrame
 import io.github.rpn17m2g.cue.domain.ocr.OcrFrameText
+import io.github.rpn17m2g.cue.domain.ocr.OcrLine
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.tags.TagField as StoreField
 import io.github.rpn17m2g.cue.tags.TagStore
@@ -263,7 +264,7 @@ class IdentifySongUseCaseTest {
         private val lines: List<String>,
     ) : OcrEngine {
         override suspend fun recognize(frames: List<OcrFrame>): List<OcrFrameText> =
-            frames.map { frame -> OcrFrameText(frame.timestampMs, lines) }
+            frames.map { frame -> OcrFrameText(frame.timestampMs, lines.map(::OcrLine)) }
     }
 
     private class FakeTagStore(private val tag: TagDraft?) : TagStore {
@@ -274,3 +275,4 @@ class IdentifySongUseCaseTest {
         }
     }
 }
+

@@ -9,10 +9,39 @@ data class OcrFrame(
     val file: File,
 )
 
-/** The lines an engine read from one frame, in reading order. */
+/**
+ * Where a line sits in its frame, as fractions of the frame size so the
+ * aggregator does not care about the recording's resolution.
+ */
+data class OcrBox(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+) {
+    val width: Float get() = (right - left).coerceAtLeast(0f)
+    val height: Float get() = (bottom - top).coerceAtLeast(0f)
+    val centerX: Float get() = (left + right) / 2f
+
+    /** Shared width as a fraction of the narrower line, `0f` when they miss. */
+    fun horizontalOverlap(other: OcrBox): Float {
+        val shared = (minOf(right, other.right) - maxOf(left, other.left)).coerceAtLeast(0f)
+        val narrower = minOf(width, other.width)
+        return if (narrower <= 0f) 0f else (shared / narrower).coerceIn(0f, 1f)
+    }
+}
+
+/** One line an engine read, with its position when the engine reports one. */
+data class OcrLine(
+    val text: String,
+    val box: OcrBox? = null,
+    val confidence: Float? = null,
+)
+
+/** The lines an engine read from one frame. */
 data class OcrFrameText(
     val timestampMs: Long,
-    val lines: List<String>,
+    val lines: List<OcrLine>,
 )
 
 /**

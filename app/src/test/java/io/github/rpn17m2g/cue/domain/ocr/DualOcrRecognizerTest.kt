@@ -17,7 +17,7 @@ class DualOcrRecognizerTest {
 
     @Test
     fun `latin reading is used without a Hebrew pass when it is plausible`() = runTest {
-        val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(listOf("דפט פאנק - גט לאקי")))
+        val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(listOf(OcrLine("דפט פאנק - גט לאקי"))))
         val recognition = DualOcrRecognizer(
             latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
             hebrew = hebrew,
@@ -42,6 +42,20 @@ class DualOcrRecognizerTest {
         assertEquals("גט לאקי", recognition.candidates.first().title)
         assertEquals("דפט פאנק", recognition.candidates.first().artist)
         assertTrue(recognition.hebrewUsed)
+    }
+
+    @Test
+    fun `a Hebrew UI keeps a clearly better Latin reading`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            hebrew = FakeEngine(
+                IdentificationSource.OCR_HEBREW,
+                listOf(listOf(OcrLine("גט לאקי")), emptyList()),
+            ),
+        ).recognize(frames, preferHebrew = true)
+
+        assertEquals("Get Lucky", recognition.candidates.first().title)
+        assertFalse(recognition.hebrewUsed)
     }
 
     @Test
@@ -122,12 +136,12 @@ class DualOcrRecognizerTest {
         assertEquals(listOf("Daft Punk - Get Lucky"), recognition.rawLines)
     }
 
-    private fun repeated(line: String): List<List<String>> =
-        frames.map { listOf(line) }
+    private fun repeated(line: String): List<List<OcrLine>> =
+        frames.map { listOf(OcrLine(line)) }
 
     private class FakeEngine(
         override val source: IdentificationSource,
-        private val lines: List<List<String>>,
+        private val lines: List<List<OcrLine>>,
         private val failure: Exception? = null,
     ) : OcrEngine {
         var calls: Int = 0
@@ -142,3 +156,5 @@ class DualOcrRecognizerTest {
         }
     }
 }
+
+
