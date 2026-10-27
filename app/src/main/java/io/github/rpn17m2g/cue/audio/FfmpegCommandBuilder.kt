@@ -98,7 +98,17 @@ object FfmpegCommandBuilder {
                 "-t", FfmpegTime.formatSeconds(sliceDurationMs),
             )
         }
-        args += listOf("-i", inputPath, "-vn", "-f", "chromaprint", outputPath)
+        args += listOf(
+            "-i",
+            inputPath,
+            "-vn",
+            "-f",
+            "chromaprint",
+            // AcoustID expects the base64 form; make the muxer default explicit.
+            "-fp_format",
+            "base64",
+            outputPath,
+        )
         return args
     }
 

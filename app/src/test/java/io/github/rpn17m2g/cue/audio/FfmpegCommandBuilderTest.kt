@@ -119,7 +119,7 @@ class FfmpegCommandBuilderTest {
                 "-hide_banner", "-nostdin", "-y",
                 "-ss", "20.000", "-t", "30.000",
                 "-i", input,
-                "-vn", "-f", "chromaprint", "fingerprint.tmp",
+                "-vn", "-f", "chromaprint", "-fp_format", "base64", "fingerprint.tmp",
             ),
             args,
         )
@@ -145,7 +145,7 @@ class FfmpegCommandBuilderTest {
                 "-hide_banner", "-nostdin", "-y",
                 "-ss", "0.000",
                 "-i", input,
-                "-vn", "-f", "chromaprint", "fingerprint.tmp",
+                "-vn", "-f", "chromaprint", "-fp_format", "base64", "fingerprint.tmp",
             ),
             args,
         )
@@ -177,7 +177,7 @@ class FfmpegCommandBuilderTest {
                 "-hide_banner", "-nostdin", "-y",
                 "-ss", "5.000", "-t", "10.500",
                 "-i", input,
-                "-vn", "-f", "chromaprint", "fingerprint.tmp",
+                "-vn", "-f", "chromaprint", "-fp_format", "base64", "fingerprint.tmp",
             ),
             args,
         )
