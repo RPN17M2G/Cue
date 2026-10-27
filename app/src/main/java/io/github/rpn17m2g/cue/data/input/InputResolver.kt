@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.provider.MediaStore
 import android.provider.OpenableColumns
 import java.io.BufferedInputStream
 import java.io.File
@@ -83,12 +82,12 @@ class InputResolver(
     /**
      * SAF pickers grant transient read access plus, for editable documents, a
      * persistable read/write grant. MediaStore rows created by Cue are writable
-     * without a persisted grant.
+     * without a persisted grant, but a shared media URI may carry only a read
+     * grant, so write access is probed instead of inferred from the authority.
      */
     private fun requestWriteAccess(uri: Uri): Boolean {
         if (uri.scheme == ContentResolver.SCHEME_FILE) return true
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
-        if (uri.authority == MediaStore.AUTHORITY) return true
         val resolver = context.contentResolver
         val readWrite = runCatching {
             resolver.takePersistableUriPermission(
@@ -100,8 +99,17 @@ class InputResolver(
         runCatching {
             resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        return resolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
+        return canWrite(resolver, uri)
     }
+
+    /**
+     * Opens a non-truncating read/write descriptor. Providers reject the open
+     * when the caller only holds a read grant, which is the only reliable check
+     * for MediaStore rows owned by another app.
+     */
+    private fun canWrite(resolver: ContentResolver, uri: Uri): Boolean = runCatching {
+        resolver.openAssetFileDescriptor(uri, WRITE_PROBE)?.use { true } ?: false
+    }.getOrDefault(false)
 
     private fun copyTo(uri: Uri, target: File): ByteArray {
         val stream = context.contentResolver.openInputStream(uri)
@@ -164,6 +172,7 @@ class InputResolver(
         const val SNIFF_BYTES = 12
         const val MAX_SAFE_NAME = 80
         const val FALLBACK_NAME = "input"
+        const val WRITE_PROBE = "rw"
         val ILLEGAL = Regex("[<>:\"/\\\\|?*\\p{Cntrl}\\s]+")
     }
 }
