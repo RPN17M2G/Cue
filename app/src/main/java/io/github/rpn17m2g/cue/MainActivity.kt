@@ -49,7 +49,12 @@ class MainActivity : AppCompatActivity() {
                 CueNavHost()
             }
         }
-        handleIntent(intent)
+        if (savedInstanceState == null) {
+            // Only the launching intent describes where to go. A recreation
+            // (language change, theme, rotation) keeps the nav state instead of
+            // replaying the original VIEW intent.
+            handleIntent(intent)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
