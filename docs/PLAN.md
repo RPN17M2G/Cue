@@ -130,10 +130,14 @@ The cascade, in order. Each stage may be skipped when it cannot help.
    search stays one tap away). Otherwise the tags seed the lookup.
 2. **OCR (video only).** Extract frames from the **first 15 seconds** (configurable
    5–120 s) at one frame every **2 seconds** (configurable). Run **ML Kit Text
-   Recognition v2** (Latin). If the app language is Hebrew, or no plausible title
-   emerges, also run a **Tesseract4Android** pass with Hebrew traineddata on the
-   same frames. Aggregate candidates across frames by frequency and stability,
-   filtering status-bar/clock noise.
+   Recognition v2** (Latin) and a **Tesseract4Android** pass with Hebrew
+   traineddata on the same frames, then keep the better reading: the Hebrew
+   engine only reports lines it trusts, so a Latin screen leaves it with
+   nothing, and a Hebrew screen scores higher than ML Kit's guesses at the
+   same pixels. Aggregate candidates across frames by on-screen geometry —
+   size inside the frame, stability across frames, centering and the line that
+   sits directly under the title — after dropping chrome by pattern (dates,
+   clocks, battery, domains, status bar) and by a noise phrase list.
 3. **Online lookup.** Search **iTunes Search API** first (no key, 600×600 artwork,
    strong mainstream coverage), then **MusicBrainz** (User-Agent required, no
    artwork; artwork via Cover Art Archive). Auto-select the top match, list the
