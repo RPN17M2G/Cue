@@ -41,10 +41,13 @@
     <string name="review_field_track">מספר רצועה</string>
     <string name="review_field_artwork">עטיפה</string>
     <string name="review_search_online">חיפוש מקוון</string>
+    <string name="review_refresh">רענון</string>
     <string name="review_other_matches_count">התאמות נוספות (%1$d)</string>
+    <string name="review_apply">החלה</string>
     <string name="review_quality">איכות</string>
     <string name="review_identifying">קורא טקסט ומחפש את השיר…</string>
     <string name="review_lookup">פרטי השיר</string>
+    <string name="review_section_online">חיפוש מקוון</string>
     <string name="review_searching">מחפש…</string>
     <string name="review_search_hint">חיפוש לפי כותרת או אמן</string>
     <string name="review_search_action">חיפוש</string>
@@ -105,6 +108,7 @@
     <string name="settings_quality">איכות ברירת מחדל</string>
     <string name="settings_output_folder">תיקיית פלט</string>
     <string name="settings_network">חיפושים מקוונים</string>
+    <string name="settings_identification">זיהוי</string>
     <string name="settings_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="settings_acoustid_key">מפתח API של AcoustID</string>
     <string name="settings_acoustid_missing">זיהוי לפי טביעת אצבע מושבת עד להזנת מפתח AcoustID חינמי מ־acoustid.org.</string>

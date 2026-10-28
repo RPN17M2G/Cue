@@ -1,13 +1,16 @@
 package io.github.rpn17m2g.cue.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,10 +22,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.rpn17m2g.cue.R
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
@@ -51,6 +58,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.settings_title)) },
@@ -62,6 +70,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
             )
         },
     ) { padding ->
@@ -70,8 +82,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 20.dp)
+                .padding(top = 4.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             SettingsBody(
                 settings = settings,
@@ -108,110 +121,152 @@ private fun SettingsBody(
     onHttpTimeout: (Long) -> Unit,
     onHttpRetries: (Int) -> Unit,
 ) {
-    SectionTitle(R.string.settings_quality)
-    ChoiceChips(
-        options = QualityPreset.entries,
-        selected = settings.defaultQuality,
-        labelRes = QualityPreset::labelRes,
-        onSelect = onQuality,
-    )
-    OutlinedTextField(
-        value = settings.outputFolder,
-        onValueChange = onOutputFolder,
-        label = { Text(stringResource(R.string.settings_output_folder)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    HorizontalDivider()
+    SettingsSection(R.string.settings_quality) {
+        ChoiceChips(
+            options = QualityPreset.entries,
+            selected = settings.defaultQuality,
+            labelRes = QualityPreset::labelRes,
+            onSelect = onQuality,
+        )
+        OutlinedTextField(
+            value = settings.outputFolder,
+            onValueChange = onOutputFolder,
+            label = { Text(stringResource(R.string.settings_output_folder)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = settingsFieldColors(),
+        )
+    }
 
-    SectionTitle(R.string.settings_language)
-    ChoiceChips(
-        options = AppLanguage.entries,
-        selected = settings.language,
-        labelRes = AppLanguage::labelRes,
-        onSelect = onLanguage,
-    )
-    SectionTitle(R.string.settings_theme)
-    ChoiceChips(
-        options = AppTheme.entries,
-        selected = settings.theme,
-        labelRes = AppTheme::labelRes,
-        onSelect = onTheme,
-    )
-    HorizontalDivider()
+    SettingsSection(R.string.settings_language) {
+        ChoiceChips(
+            options = AppLanguage.entries,
+            selected = settings.language,
+            labelRes = AppLanguage::labelRes,
+            onSelect = onLanguage,
+        )
+    }
 
-    ToggleRow(
-        label = stringResource(R.string.settings_network),
-        checked = settings.networkLookups,
-        onCheckedChange = onNetwork,
-    )
-    ToggleRow(
-        label = stringResource(R.string.settings_fingerprint),
-        checked = settings.fingerprintEnabled,
-        onCheckedChange = onFingerprint,
-    )
-    OutlinedTextField(
-        value = settings.acoustIdKey,
-        onValueChange = onAcoustIdKey,
-        label = { Text(stringResource(R.string.settings_acoustid_key)) },
-        supportingText = {
-            Text(
-                stringResource(
-                    if (settings.acoustIdKey.isBlank()) {
-                        R.string.settings_acoustid_missing
-                    } else {
-                        R.string.settings_acoustid_hint
-                    },
-                ),
-            )
-        },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    HorizontalDivider()
+    SettingsSection(R.string.settings_theme) {
+        ChoiceChips(
+            options = AppTheme.entries,
+            selected = settings.theme,
+            labelRes = AppTheme::labelRes,
+            onSelect = onTheme,
+        )
+    }
 
-    SectionTitle(R.string.settings_advanced)
-    OutlinedTextField(
-        value = settings.filenameTemplate,
-        onValueChange = onTemplate,
-        label = { Text(stringResource(R.string.settings_filename_template)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    IntSettingField(
-        value = settings.scanWindowSeconds,
-        label = stringResource(R.string.settings_scan_window),
-        range = AppSettings.SCAN_WINDOW_RANGE,
-        onValue = onScanWindow,
-    )
-    LongSettingField(
-        value = settings.ocrIntervalMs,
-        label = stringResource(R.string.settings_ocr_interval),
-        range = AppSettings.OCR_INTERVAL_RANGE,
-        onValue = onOcrInterval,
-    )
-    LongSettingField(
-        value = settings.httpTimeoutMs,
-        label = stringResource(R.string.settings_http_timeout),
-        range = AppSettings.HTTP_TIMEOUT_RANGE,
-        onValue = onHttpTimeout,
-    )
-    IntSettingField(
-        value = settings.httpRetries,
-        label = stringResource(R.string.settings_http_retries),
-        range = AppSettings.HTTP_RETRIES_RANGE,
-        onValue = onHttpRetries,
-    )
+    SettingsSection(R.string.settings_identification) {
+        ToggleRow(
+            label = stringResource(R.string.settings_network),
+            checked = settings.networkLookups,
+            onCheckedChange = onNetwork,
+        )
+        SettingsDivider()
+        ToggleRow(
+            label = stringResource(R.string.settings_fingerprint),
+            checked = settings.fingerprintEnabled,
+            onCheckedChange = onFingerprint,
+        )
+        SettingsDivider()
+        OutlinedTextField(
+            value = settings.acoustIdKey,
+            onValueChange = onAcoustIdKey,
+            label = { Text(stringResource(R.string.settings_acoustid_key)) },
+            supportingText = {
+                Text(
+                    stringResource(
+                        if (settings.acoustIdKey.isBlank()) {
+                            R.string.settings_acoustid_missing
+                        } else {
+                            R.string.settings_acoustid_hint
+                        },
+                    ),
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = settingsFieldColors(),
+        )
+    }
+
+    SettingsSection(R.string.settings_advanced) {
+        OutlinedTextField(
+            value = settings.filenameTemplate,
+            onValueChange = onTemplate,
+            label = { Text(stringResource(R.string.settings_filename_template)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = settingsFieldColors(),
+        )
+        IntSettingField(
+            value = settings.scanWindowSeconds,
+            label = stringResource(R.string.settings_scan_window),
+            range = AppSettings.SCAN_WINDOW_RANGE,
+            onValue = onScanWindow,
+        )
+        LongSettingField(
+            value = settings.ocrIntervalMs,
+            label = stringResource(R.string.settings_ocr_interval),
+            range = AppSettings.OCR_INTERVAL_RANGE,
+            onValue = onOcrInterval,
+        )
+        LongSettingField(
+            value = settings.httpTimeoutMs,
+            label = stringResource(R.string.settings_http_timeout),
+            range = AppSettings.HTTP_TIMEOUT_RANGE,
+            onValue = onHttpTimeout,
+        )
+        IntSettingField(
+            value = settings.httpRetries,
+            label = stringResource(R.string.settings_http_retries),
+            range = AppSettings.HTTP_RETRIES_RANGE,
+            onValue = onHttpRetries,
+        )
+    }
 }
 
 @Composable
-private fun SectionTitle(resId: Int) {
-    Text(
-        text = stringResource(resId),
-        style = MaterialTheme.typography.titleLarge,
-    )
+private fun SettingsSection(
+    titleRes: Int,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column {
+        Text(
+            text = stringResource(titleRes),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 0.6.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                content = content,
+            )
+        }
+    }
 }
 
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+}
+
+@Composable
+private fun settingsFieldColors() = OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> ChoiceChips(
     options: List<T>,
@@ -219,9 +274,9 @@ private fun <T> ChoiceChips(
     labelRes: (T) -> Int,
     onSelect: (T) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         options.forEach { option ->
             FilterChip(
@@ -254,7 +309,9 @@ private fun IntSettingField(
         },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        shape = RoundedCornerShape(12.dp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = settingsFieldColors(),
     )
 }
 
@@ -279,7 +336,9 @@ private fun LongSettingField(
         },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        shape = RoundedCornerShape(12.dp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = settingsFieldColors(),
     )
 }
 
@@ -290,7 +349,9 @@ private fun ToggleRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

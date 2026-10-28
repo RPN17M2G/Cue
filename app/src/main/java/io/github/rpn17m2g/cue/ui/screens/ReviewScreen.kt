@@ -7,11 +7,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +22,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,12 +31,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -48,12 +56,16 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.RangeSliderState
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -65,18 +77,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import io.github.rpn17m2g.cue.R
@@ -108,6 +128,7 @@ fun ReviewScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.review_title)) },
@@ -119,7 +140,20 @@ fun ReviewScreen(
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
             )
+        },
+        bottomBar = {
+            if (!state.loading && state.input != null) {
+                ReviewActionBar(
+                    tagOnlyEdit = state.tagOnlyEdit,
+                    saving = state.saving,
+                    onSave = { viewModel.save { onProcessing() } },
+                )
+            }
         },
     ) { padding ->
         when {
@@ -152,7 +186,6 @@ fun ReviewScreen(
                 onUpdate = viewModel::updateDraft,
                 onTrim = viewModel::setTrim,
                 onQuality = viewModel::setQuality,
-                onSave = { viewModel.save { onProcessing() } },
                 onRetry = viewModel::retryIdentification,
                 onSearch = viewModel::search,
                 onApplyMatch = viewModel::applyMatch,
@@ -174,7 +207,6 @@ private fun ReviewContent(
     onUpdate: (TagField, (TagDraft) -> TagDraft) -> Unit,
     onTrim: (Long, Long) -> Unit,
     onQuality: (QualityPreset) -> Unit,
-    onSave: () -> Unit,
     onRetry: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
@@ -196,22 +228,29 @@ private fun ReviewContent(
             .fillMaxSize()
             .padding(padding)
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 20.dp)
+            .padding(top = 8.dp, bottom = 24.dp),
     ) {
         MediaPreview(
             input = input,
             trimStartMs = state.trimStartMs,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp),
+                .height(200.dp),
         )
-        Text(
-            text = input.displayName,
-            style = MaterialTheme.typography.titleLarge,
-        )
-        if (state.identifying) IdentificationBanner()
+        Spacer(Modifier.height(12.dp))
+        FileSummary(input = input, durationMs = state.durationMs)
+        if (state.identifying) {
+            Spacer(Modifier.height(12.dp))
+            IdentificationBanner()
+        }
+
+        Spacer(Modifier.height(28.dp))
+        SectionHeader(R.string.review_lookup)
+        Spacer(Modifier.height(12.dp))
         TagFields(state = state, onUpdate = onUpdate)
+
+        Spacer(Modifier.height(28.dp))
         ArtworkSection(
             artwork = state.draft.artwork,
             applying = state.artworkApplying,
@@ -223,17 +262,23 @@ private fun ReviewContent(
             },
             onRemove = onRemoveArtwork,
         )
+
+        Spacer(Modifier.height(28.dp))
         LookupSection(
             state = state,
             onRetry = onRetry,
             onSearch = onSearch,
             onApplyMatch = onApplyMatch,
         )
+        Spacer(Modifier.height(8.dp))
         OcrDetails(state = state)
+
         if (state.hasTrim) {
+            Spacer(Modifier.height(28.dp))
             TrimSection(state = state, onTrim = onTrim)
         }
         if (!state.tagOnlyEdit) {
+            Spacer(Modifier.height(28.dp))
             QualitySection(
                 state = state,
                 onQuality = onQuality,
@@ -244,21 +289,11 @@ private fun ReviewContent(
             )
         }
         state.errorRes?.let {
+            Spacer(Modifier.height(16.dp))
             Text(
                 text = stringResource(it),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        Button(
-            onClick = onSave,
-            enabled = !state.saving,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                stringResource(
-                    if (state.tagOnlyEdit) R.string.review_save_tags else R.string.review_save,
-                ),
             )
         }
     }
@@ -269,6 +304,104 @@ private fun ReviewContent(
             onSearch = onSearchArtwork,
             onChoose = onChooseArtwork,
         )
+    }
+}
+
+@Composable
+private fun FileSummary(
+    input: ResolvedInput,
+    durationMs: Long?,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = if (input.kind == InputKind.VIDEO) {
+                Icons.Default.Movie
+            } else {
+                Icons.Default.MusicNote
+            },
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = input.displayName,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (durationMs != null && durationMs > 0L) {
+            Text(
+                text = DateUtils.formatElapsedTime(durationMs / 1_000),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Small, quiet label that separates the form's sections. */
+@Composable
+private fun SectionHeader(resId: Int) {
+    Text(
+        text = stringResource(resId),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        letterSpacing = 0.6.sp,
+    )
+}
+
+/** Sticky primary action, so Process is always reachable. */
+@Composable
+private fun ReviewActionBar(
+    tagOnlyEdit: Boolean,
+    saving: Boolean,
+    onSave: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.imePadding(),
+    ) {
+        Column {
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                Button(
+                    onClick = onSave,
+                    enabled = !saving,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                ) {
+                    if (saving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    Text(
+                        text = stringResource(
+                            if (tagOnlyEdit) R.string.review_save_tags else R.string.review_save,
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -299,69 +432,89 @@ private fun TagFields(
     onUpdate: (TagField, (TagDraft) -> TagDraft) -> Unit,
 ) {
     val draft = state.draft
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TagField(
+            labelRes = R.string.review_field_title,
+            value = draft.title,
+            source = state.sourceFor(TagField.TITLE, draft.title.isNotBlank()),
+            onValueChange = { value -> onUpdate(TagField.TITLE) { it.copy(title = value) } },
+        )
+        TagField(
+            labelRes = R.string.review_field_artist,
+            value = draft.artist,
+            source = state.sourceFor(TagField.ARTIST, draft.artist.isNotBlank()),
+            onValueChange = { value -> onUpdate(TagField.ARTIST) { it.copy(artist = value) } },
+        )
+        TagField(
+            labelRes = R.string.review_field_album,
+            value = draft.album,
+            source = state.sourceFor(TagField.ALBUM, draft.album.isNotBlank()),
+            onValueChange = { value -> onUpdate(TagField.ALBUM) { it.copy(album = value) } },
+        )
+        TagField(
+            labelRes = R.string.review_field_album_artist,
+            value = draft.albumArtist,
+            source = state.sourceFor(TagField.ALBUM_ARTIST, draft.albumArtist.isNotBlank()),
+            onValueChange = { value ->
+                onUpdate(TagField.ALBUM_ARTIST) { it.copy(albumArtist = value) }
+            },
+        )
+        TagField(
+            labelRes = R.string.review_field_year,
+            value = draft.year.orEmpty(),
+            source = state.sourceFor(TagField.YEAR, !draft.year.isNullOrBlank()),
+            onValueChange = { value -> onUpdate(TagField.YEAR) { it.copy(year = value) } },
+            keyboardType = KeyboardType.Number,
+        )
+        TagField(
+            labelRes = R.string.review_field_genre,
+            value = draft.genre.orEmpty(),
+            source = state.sourceFor(TagField.GENRE, !draft.genre.isNullOrBlank()),
+            onValueChange = { value -> onUpdate(TagField.GENRE) { it.copy(genre = value) } },
+        )
+        TagField(
+            labelRes = R.string.review_field_track,
+            value = draft.trackNumber?.toString().orEmpty(),
+            source = state.sourceFor(TagField.TRACK_NUMBER, draft.trackNumber != null),
+            onValueChange = { value ->
+                onUpdate(TagField.TRACK_NUMBER) {
+                    it.copy(trackNumber = value.filter(Char::isDigit).take(3).toIntOrNull())
+                }
+            },
+            keyboardType = KeyboardType.Number,
+        )
+    }
+}
+
+@Composable
+private fun TagField(
+    labelRes: Int,
+    value: String,
+    source: IdentificationSource?,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType = KeyboardType.Text,
+) {
     OutlinedTextField(
-        value = draft.title,
-        onValueChange = { value -> onUpdate(TagField.TITLE) { it.copy(title = value) } },
-        label = { Text(stringResource(R.string.review_field_title)) },
-        supportingText = state.sourceFor(TagField.TITLE, draft.title.isNotBlank()),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    OutlinedTextField(
-        value = draft.artist,
-        onValueChange = { value -> onUpdate(TagField.ARTIST) { it.copy(artist = value) } },
-        label = { Text(stringResource(R.string.review_field_artist)) },
-        supportingText = state.sourceFor(TagField.ARTIST, draft.artist.isNotBlank()),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    OutlinedTextField(
-        value = draft.album,
-        onValueChange = { value -> onUpdate(TagField.ALBUM) { it.copy(album = value) } },
-        label = { Text(stringResource(R.string.review_field_album)) },
-        supportingText = state.sourceFor(TagField.ALBUM, draft.album.isNotBlank()),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    OutlinedTextField(
-        value = draft.albumArtist,
-        onValueChange = { value -> onUpdate(TagField.ALBUM_ARTIST) { it.copy(albumArtist = value) } },
-        label = { Text(stringResource(R.string.review_field_album_artist)) },
-        supportingText = state.sourceFor(TagField.ALBUM_ARTIST, draft.albumArtist.isNotBlank()),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    OutlinedTextField(
-        value = draft.year.orEmpty(),
-        onValueChange = { value -> onUpdate(TagField.YEAR) { it.copy(year = value) } },
-        label = { Text(stringResource(R.string.review_field_year)) },
-        supportingText = state.sourceFor(TagField.YEAR, !draft.year.isNullOrBlank()),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-    )
-    OutlinedTextField(
-        value = draft.genre.orEmpty(),
-        onValueChange = { value -> onUpdate(TagField.GENRE) { it.copy(genre = value) } },
-        label = { Text(stringResource(R.string.review_field_genre)) },
-        supportingText = state.sourceFor(TagField.GENRE, !draft.genre.isNullOrBlank()),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    OutlinedTextField(
-        value = draft.trackNumber?.toString().orEmpty(),
-        onValueChange = { value ->
-            onUpdate(TagField.TRACK_NUMBER) {
-                it.copy(trackNumber = value.filter(Char::isDigit).take(3).toIntOrNull())
-            }
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(labelRes)) },
+        supportingText = if (source != null) {
+            { SourceLabel(source) }
+        } else {
+            null
         },
-        label = { Text(stringResource(R.string.review_field_track)) },
-        supportingText = state.sourceFor(TagField.TRACK_NUMBER, draft.trackNumber != null),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(12.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        colors = cueOutlinedFieldColors(),
     )
 }
+
+@Composable
+private fun cueOutlinedFieldColors() = OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+)
 
 @Composable
 private fun ArtworkSection(
@@ -371,11 +524,8 @@ private fun ArtworkSection(
     onPickGallery: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.review_artwork),
-            style = MaterialTheme.typography.titleLarge,
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader(R.string.review_artwork)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -397,16 +547,22 @@ private fun ArtworkSection(
                     }
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(onClick = onSearchCovers, enabled = !applying) {
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                TextButton(onClick = onSearchCovers, enabled = !applying) {
                     Text(stringResource(R.string.review_artwork_search))
                 }
-                OutlinedButton(onClick = onPickGallery, enabled = !applying) {
-                    Text(stringResource(R.string.review_artwork_gallery))
+                TextButton(onClick = onPickGallery, enabled = !applying) {
+                    Text(
+                        text = stringResource(R.string.review_artwork_gallery),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 if (artwork != null) {
                     TextButton(onClick = onRemove, enabled = !applying) {
-                        Text(stringResource(R.string.review_artwork_remove))
+                        Text(
+                            text = stringResource(R.string.review_artwork_remove),
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -586,23 +742,27 @@ private fun decodeArtwork(bytes: ByteArray): Bitmap? = runCatching {
 private fun ReviewUiState.sourceFor(
     field: TagField,
     hasValue: Boolean,
-): (@Composable () -> Unit)? {
+): IdentificationSource? {
     if (!hasValue) return null
-    val source = sources[field] ?: return null
-    return { SourceBadge(source) }
+    return sources[field]
 }
 
+/** Where a field's value came from, as a quiet dot and label. */
 @Composable
-private fun SourceBadge(source: IdentificationSource) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = MaterialTheme.shapes.extraSmall,
+private fun SourceLabel(source: IdentificationSource) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+        )
         Text(
             text = stringResource(source.labelRes()),
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -614,24 +774,23 @@ private fun LookupSection(
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
 ) {
-    HorizontalDivider()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = stringResource(R.string.review_lookup),
-            style = MaterialTheme.typography.titleLarge,
-        )
+        SectionHeader(R.string.review_section_online)
         TextButton(onClick = onRetry, enabled = !state.identifying) {
             Icon(
                 imageVector = Icons.Default.Refresh,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
             )
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.review_search_online))
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = stringResource(R.string.review_refresh),
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
     }
     if (state.searchOffline) {
@@ -718,34 +877,48 @@ private fun MatchList(
 @Composable
 private fun MatchRow(match: MetadataMatch, onApply: () -> Unit) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        onClick = onApply,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onApply),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = match.title,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            val subtitle = listOfNotNull(
-                match.artist.takeIf { it.isNotBlank() },
-                match.album?.takeIf { it.isNotBlank() },
-            ).joinToString(" · ")
-            if (subtitle.isNotEmpty()) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = match.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val subtitle = listOfNotNull(
+                    match.artist.takeIf { it.isNotBlank() },
+                    match.album?.takeIf { it.isNotBlank() },
+                ).joinToString(" · ")
+                if (subtitle.isNotEmpty()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = stringResource(match.source.labelRes()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Text(
-                text = stringResource(match.source.labelRes()),
-                style = MaterialTheme.typography.labelSmall,
+                text = stringResource(R.string.review_apply),
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
@@ -758,17 +931,24 @@ private fun ManualSearch(
     onSearch: (String) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val submit: () -> Unit = {
+        onSearch(query)
+        keyboard?.hide()
+    }
     OutlinedTextField(
         value = query,
         onValueChange = { query = it },
         label = { Text(stringResource(R.string.review_search_hint)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        shape = RoundedCornerShape(12.dp),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
+        keyboardActions = KeyboardActions(onSearch = { submit() }),
+        colors = cueOutlinedFieldColors(),
         trailingIcon = {
             IconButton(
-                onClick = { onSearch(query) },
+                onClick = submit,
                 enabled = query.isNotBlank() && !state.searching,
             ) {
                 Icon(
@@ -784,11 +964,16 @@ private fun ManualSearch(
 private fun OcrDetails(state: ReviewUiState) {
     if (!state.hasOcrDetails) return
     var expanded by remember { mutableStateOf(false) }
-    TextButton(onClick = { expanded = !expanded }) {
+    TextButton(
+        onClick = { expanded = !expanded },
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+    ) {
         Text(
-            stringResource(
+            text = stringResource(
                 if (expanded) R.string.review_ocr_hide else R.string.review_ocr_details,
             ),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     if (expanded) {
@@ -824,6 +1009,7 @@ private fun OcrDetails(state: ReviewUiState) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrimSection(
     state: ReviewUiState,
@@ -832,16 +1018,19 @@ private fun TrimSection(
     val durationMs = state.durationMs ?: return
     val maxSeconds = durationMs / 1_000f
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = stringResource(R.string.review_trim),
-            style = MaterialTheme.typography.titleLarge,
-        )
+        SectionHeader(R.string.review_trim)
         RangeSlider(
             value = (state.trimStartMs / 1_000f)..(state.trimEndMs / 1_000f),
             onValueChange = { range ->
                 onTrim((range.start * 1_000).toLong(), (range.endInclusive * 1_000).toLong())
             },
             valueRange = 0f..maxSeconds,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            track = { sliderState -> TrimTrack(sliderState) },
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -853,6 +1042,7 @@ private fun TrimSection(
                     DateUtils.formatElapsedTime(state.trimStartMs / 1_000),
                 ),
                 style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
                 text = stringResource(
@@ -860,25 +1050,64 @@ private fun TrimSection(
                     DateUtils.formatElapsedTime(state.trimEndMs / 1_000),
                 ),
                 style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
+/** A slim two-handle track; the stock slider's 16dp bar reads as a progress bar. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrimTrack(state: RangeSliderState) {
+    val inactiveColor = MaterialTheme.colorScheme.surfaceVariant
+    val activeColor = MaterialTheme.colorScheme.primary
+    val range = state.valueRange
+    val span = range.endInclusive - range.start
+    val startFraction = if (span > 0f) {
+        ((state.activeRangeStart - range.start) / span).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val endFraction = if (span > 0f) {
+        ((state.activeRangeEnd - range.start) / span).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(TRIM_TRACK_HEIGHT),
+    ) {
+        val rtl = layoutDirection == LayoutDirection.Rtl
+        fun position(fraction: Float): Float =
+            if (rtl) size.width * (1f - fraction) else size.width * fraction
+
+        val radius = CornerRadius(size.height / 2f)
+        drawRoundRect(color = inactiveColor, cornerRadius = radius, size = size)
+        val from = position(startFraction)
+        val to = position(endFraction)
+        drawRoundRect(
+            color = activeColor,
+            topLeft = Offset(minOf(from, to), 0f),
+            size = Size(kotlin.math.abs(to - from), size.height),
+            cornerRadius = radius,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QualitySection(
     state: ReviewUiState,
     onQuality: (QualityPreset) -> Unit,
     estimatedBytes: Long,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = stringResource(R.string.review_quality),
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionHeader(R.string.review_quality)
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             QualityPreset.entries.forEach { preset ->
                 FilterChip(
@@ -893,7 +1122,7 @@ private fun QualitySection(
                 R.string.review_estimated_size_value,
                 android.text.format.Formatter.formatShortFileSize(LocalContext.current, estimatedBytes),
             ),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -917,25 +1146,87 @@ private fun MediaPreview(
     }
 
     when (input.kind) {
-        InputKind.VIDEO -> Surface(
+        InputKind.VIDEO -> VideoPreview(
+            player = player,
+            trimStartMs = trimStartMs,
             modifier = modifier,
-            color = Color.Black,
-        ) {
-            AndroidView(
-                factory = { viewContext ->
-                    PlayerView(viewContext).apply {
-                        this.player = player
-                    }
-                },
-                update = { view -> view.player = player },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        )
         InputKind.MP3 -> AudioPreview(
             player = player,
             trimStartMs = trimStartMs,
             modifier = modifier,
         )
+    }
+}
+
+/**
+ * The default Media3 controller fills the card with transport chrome, so the
+ * preview uses none of it and draws its own single play button over the frame.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun VideoPreview(
+    player: ExoPlayer,
+    trimStartMs: Long,
+    modifier: Modifier,
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+    LaunchedEffect(player) {
+        player.pause()
+    }
+    val toggle = {
+        if (player.isPlaying) {
+            player.pause()
+        } else {
+            if (player.currentPosition < trimStartMs) player.seekTo(trimStartMs)
+            player.play()
+        }
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .clickable(onClick = toggle),
+    ) {
+        AndroidView(
+            factory = { viewContext ->
+                PlayerView(viewContext).apply {
+                    useController = false
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    this.player = player
+                }
+            },
+            update = { view -> view.player = player },
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (!isPlaying) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.55f),
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(64.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = stringResource(R.string.review_play),
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -961,10 +1252,10 @@ private fun AudioPreview(
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(20.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            IconButton(
+            Surface(
                 onClick = {
                     if (player.isPlaying) {
                         player.pause()
@@ -973,14 +1264,24 @@ private fun AudioPreview(
                         player.play()
                     }
                 },
-                modifier = Modifier.fillMaxSize(0.3f),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CircleShape,
+                modifier = Modifier.size(64.dp),
             ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = stringResource(
-                        if (isPlaying) R.string.review_pause else R.string.review_play,
-                    ),
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isPlaying) {
+                            Icons.Default.Pause
+                        } else {
+                            Icons.Default.PlayArrow
+                        },
+                        contentDescription = stringResource(
+                            if (isPlaying) R.string.review_pause else R.string.review_play,
+                        ),
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
             }
         }
     }
@@ -1004,3 +1305,5 @@ private fun IdentificationSource.labelRes(): Int = when (this) {
     IdentificationSource.FINGERPRINT -> R.string.source_fingerprint
     IdentificationSource.MANUAL -> R.string.source_manual
 }
+
+private val TRIM_TRACK_HEIGHT = 6.dp
