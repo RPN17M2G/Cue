@@ -46,7 +46,10 @@ class FfmpegRuntimeTest {
         val path = runtime.verify()
 
         assertEquals(binary.absolutePath, path)
-        assertEquals(folder.root.absolutePath, environment["LD_LIBRARY_PATH"])
+        assertEquals(
+            "/system/lib64:${folder.root.absolutePath}",
+            environment["LD_LIBRARY_PATH"],
+        )
     }
 
     @Test
