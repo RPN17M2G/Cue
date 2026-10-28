@@ -10,9 +10,13 @@ data class OcrRecognition(
 )
 
 /**
- * Runs the Latin engine first and only spends a Hebrew pass when the app is in
- * Hebrew or the Latin reading is weak. The pass with the better reading wins; a
- * missing or failing engine degrades to the other one.
+ * Runs the Latin engine, then the Hebrew one, and keeps the better reading.
+ *
+ * The passes are always both run. A shortcut that trusted a strong Latin score
+ * was wrong in practice: ML Kit reads a Hebrew drawing of a date in the status
+ * bar as Latin text ("יום ד׳ 28" became "vIN 28"), which is a confident but
+ * meaningless line. Both readings are cheap next to frame extraction and the
+ * online lookup, so the scores decide.
  */
 class DualOcrRecognizer(
     private val latin: OcrEngine,
@@ -30,15 +34,6 @@ class DualOcrRecognizer(
         val latinText = readSafely(latin, frames)
         val latinCandidates = candidates(frames, latinText)
         val latinScore = strongScore(latinCandidates)
-
-        if (!preferHebrew && latinScore >= STRONG_LATIN_READING) {
-            return OcrRecognition(
-                candidates = latinCandidates,
-                rawLines = rawLines(latinText, null),
-                hebrewUsed = false,
-                failed = false,
-            )
-        }
 
         val hebrewText = readSafely(hebrew, frames)
         val hebrewCandidates = candidates(frames, hebrewText)
@@ -136,9 +131,6 @@ class DualOcrRecognizer(
     private companion object {
         const val MIN_TITLE_LETTERS = 2
         const val MAX_RAW_LINES = 60
-
-        /** A Latin reading this good does not need the Hebrew pass. */
-        const val STRONG_LATIN_READING = 0.50
 
         /** The Hebrew pass must be at least this close to win for a Hebrew app. */
         const val HEBREW_MARGIN = 0.92

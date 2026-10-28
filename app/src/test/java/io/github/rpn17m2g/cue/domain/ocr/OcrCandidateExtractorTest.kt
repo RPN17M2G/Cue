@@ -329,6 +329,39 @@ class OcrCandidateExtractorTest {
         assertEquals(listOf("Alpha", "Beta"), candidates.map { it.title })
     }
 
+    @Test
+    fun `status bar text never becomes a candidate`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("vIN 28", 0.35f, 0.004f, 0.52f, 0.018f),
+                line("\u05e4\u05e0\u05ea\u05e8\u05d4", 0.35f, 0.48f, 0.65f, 0.530f),
+                line("Noa Kirel", 0.38f, 0.545f, 0.62f, 0.575f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("\u05e4\u05e0\u05ea\u05e8\u05d4", candidates.first().title)
+        assertTrue(candidates.none { it.title.contains("vIN") })
+    }
+
+    @Test
+    fun `a title drawn at the top of the frame is kept`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("Get Lucky", 0.10f, 0.010f, 0.90f, 0.055f),
+                line("Daft Punk", 0.20f, 0.065f, 0.80f, 0.100f),
+            )
+        }
+
+        val candidate = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("Get Lucky", candidate.title)
+        assertEquals("Daft Punk", candidate.artist)
+    }
+
     private fun frame(timestamp: Int, vararg lines: String): OcrFrameText =
         OcrFrameText(timestamp.toLong(), lines.map { OcrLine(it) })
 

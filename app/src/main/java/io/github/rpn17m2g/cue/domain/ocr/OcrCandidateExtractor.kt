@@ -261,6 +261,7 @@ object OcrCandidateExtractor {
             else -> box.height
         }
         if (isChrome(text, noiseKeys, hasStatusClock, prominence, frameLargest)) return null
+        if (isStatusBarLine(box, prominence, frameLargest)) return null
 
         val inline = splitInline(text)
         return KeptLine(
@@ -291,6 +292,23 @@ object OcrCandidateExtractor {
         if (DATE_WITH_MONTH.matches(text)) return true
         if (NUMERIC_DATE.matches(text)) return true
         return false
+    }
+
+    /**
+     * The status bar is the one strip every screen recording carries. Its text
+     * is a clock, a date and connectivity badges: in Hebrew that is "יום ד׳ 28",
+     * which no locale-independent date pattern catches. Anything small that
+     * sits entirely inside the top band of the frame is therefore chrome, while
+     * a title the player draws near the top edge is large enough to survive.
+     */
+    private fun isStatusBarLine(
+        box: OcrBox?,
+        prominence: Float,
+        frameLargest: Float,
+    ): Boolean {
+        if (box == null || box.bottom > STATUS_BAR_BAND) return false
+        if (frameLargest <= 0f) return true
+        return prominence < frameLargest * STATUS_BAR_MAX_PROMINENCE
     }
 
     /**
@@ -414,6 +432,12 @@ object OcrCandidateExtractor {
 
     /** Single-word chrome is dropped unless it is at least this big. */
     private const val SINGLE_WORD_TITLE_RATIO = 0.6f
+
+    /** Lines that end above this fraction of the frame are in the status bar. */
+    private const val STATUS_BAR_BAND = 0.06f
+
+    /** A status-bar line is never the big text of its frame. */
+    private const val STATUS_BAR_MAX_PROMINENCE = 0.45f
 
     /** Scores are compared at this precision, so near-ties fall to the layout. */
     private const val SCORE_TIE_PRECISION = 1000.0

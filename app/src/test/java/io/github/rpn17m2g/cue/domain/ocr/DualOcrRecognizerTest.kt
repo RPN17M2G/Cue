@@ -16,14 +16,14 @@ class DualOcrRecognizerTest {
     )
 
     @Test
-    fun `latin reading is used without a Hebrew pass when it is plausible`() = runTest {
+    fun `a plausible Latin reading still wins when the Hebrew pass agrees`() = runTest {
         val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(listOf(OcrLine("דפט פאנק - גט לאקי"))))
         val recognition = DualOcrRecognizer(
             latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
             hebrew = hebrew,
         ).recognize(frames, preferHebrew = false)
 
-        assertEquals(0, hebrew.calls)
+        assertEquals(1, hebrew.calls)
         assertEquals("Get Lucky", recognition.candidates.first().title)
         assertFalse(recognition.hebrewUsed)
         assertFalse(recognition.failed)
