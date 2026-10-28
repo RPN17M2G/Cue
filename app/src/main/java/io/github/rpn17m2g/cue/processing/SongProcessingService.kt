@@ -7,10 +7,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -239,12 +239,16 @@ class SongProcessingService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun foregroundServiceType(): Int =
-        if (Build.VERSION.SDK_INT >= 35) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
-        } else {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        }
+    /**
+     * The manifest declares dataSync (copy and tag-only edits) as well as
+     * mediaProcessing (transcoding). Passing the declared value keeps the
+     * service valid: requesting mediaProcessing on its own is refused by
+     * Android 16 (API 36) for a targetSdk 35 app with
+     * InvalidForegroundServiceTypeException "type none".
+     */
+    private fun foregroundServiceType(): Int = packageManager
+        .getServiceInfo(ComponentName(this, SongProcessingService::class.java), 0)
+        .foregroundServiceType
 
     private fun failureReason(e: Exception): String = when (e) {
         is FfmpegUnavailableException -> getString(R.string.error_ffmpeg_unavailable)
