@@ -124,7 +124,7 @@ class AcoustIdClientTest {
     }
 
     @Test
-    fun `invalid key response maps to missing key`() = runTest {
+    fun `invalid key response maps to a rejected key`() = runTest {
         server.enqueue(
             jsonResponse(
                 """{"status":"error","error":{"code":4,"message":"invalid API key"}}""",
@@ -136,11 +136,11 @@ class AcoustIdClientTest {
             apiKey = "bad-key",
         )
 
-        assertEquals(LookupError.MissingKey, (result as LookupResult.Failure).error)
+        assertEquals(LookupError.RejectedKey, (result as LookupResult.Failure).error)
     }
 
     @Test
-    fun `http 400 invalid key body maps to missing key`() = runTest {
+    fun `http 400 invalid key body maps to a rejected key`() = runTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(400)
@@ -153,7 +153,7 @@ class AcoustIdClientTest {
             apiKey = "bad-key",
         )
 
-        assertEquals(LookupError.MissingKey, (result as LookupResult.Failure).error)
+        assertEquals(LookupError.RejectedKey, (result as LookupResult.Failure).error)
     }
 
     @Test

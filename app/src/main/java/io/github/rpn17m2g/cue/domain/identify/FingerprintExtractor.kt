@@ -5,6 +5,10 @@ import java.io.File
 /** A Chromaprint fingerprint and the duration of the audio it was computed over. */
 data class AudioFingerprint(
     val value: String,
+    /**
+     * Length of the whole clip the fingerprint was sampled from, not of the
+     * sampled slice: AcoustID compares it against recording lengths.
+     */
     val durationSeconds: Int,
 )
 

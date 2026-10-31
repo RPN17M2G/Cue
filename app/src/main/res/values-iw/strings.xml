@@ -55,6 +55,7 @@
     <string name="review_no_matches">לא נמצאו התאמות.</string>
     <string name="review_search_offline">חיפושים מקוונים כבויים בהגדרות.</string>
     <string name="review_fingerprint_unavailable">לא נמצא טקסט קריא. הוסיפו מפתח AcoustID בהגדרות כדי לזהות שירים לפי טביעת אצבע של האודיו.</string>
+    <string name="review_fingerprint_key_rejected">AcoustID דחה את המפתח בהגדרות, ולכן זיהוי לפי טביעת אצבע כבוי. צריך מפתח אפליקציה מ־acoustid.org/new-application.</string>
     <string name="review_ocr_details">טקסט מההקלטה</string>
     <string name="review_ocr_hide">הסתרת טקסט</string>
     <string name="review_ocr_failed">זיהוי הטקסט נכשל במכשיר הזה.</string>
@@ -112,7 +113,7 @@
     <string name="settings_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="settings_acoustid_key">מפתח API של AcoustID</string>
     <string name="settings_acoustid_missing">זיהוי לפי טביעת אצבע מושבת עד להזנת מפתח AcoustID חינמי מ־acoustid.org.</string>
-    <string name="settings_acoustid_hint">משמש לזיהוי לפי טביעת אצבע כשאין טקסט קריא.</string>
+    <string name="settings_acoustid_hint">משמש לזיהוי לפי טביעת אצבע כשאין טקסט קריא. נדרש מפתח אפליקציה מ־acoustid.org/new-application.</string>
     <string name="settings_advanced">מתקדם</string>
     <string name="settings_filename_template">תבנית שם קובץ</string>
     <string name="settings_ocr_interval">מרווח פריימים ל־OCR (מילישניות)</string>
@@ -131,6 +132,17 @@
     <string name="settings_theme_system">לפי המערכת</string>
     <string name="settings_theme_light">בהיר</string>
     <string name="settings_theme_dark">כהה</string>
+
+    <string name="settings_appearance">מראה</string>
+    <string name="settings_palette">ערכת צבעים</string>
+    <string name="settings_palette_hint">חלה על כל המסכים. הקשה מציגה תצוגה מקדימה מיידית.</string>
+    <string name="settings_mode">מצב</string>
+    <string name="palette_mint">מנטה</string>
+    <string name="palette_lagoon">לגונה</string>
+    <string name="palette_navy">נייבי</string>
+    <string name="palette_deep_teal">טורקיז עמוק</string>
+    <string name="palette_style_cheerful">עליז</string>
+    <string name="palette_style_professional">מקצועי</string>
 
     <string name="notification_channel_processing">עיבוד אודיו</string>
     <string name="notification_channel_processing_description">מציג התקדמות המרה ומאפשר ביטול</string>

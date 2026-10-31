@@ -26,7 +26,7 @@ class FfmpegFingerprintExtractor(
 
     override suspend fun extract(input: File, clipDurationMs: Long?): AudioFingerprint? =
         withContext(ioDispatcher) {
-            val durationSeconds = fingerprintDurationSeconds(clipDurationMs)
+            val durationSeconds = acoustIdDurationSeconds(clipDurationMs)
                 ?: return@withContext null
             outputDirectory.mkdirs()
             val output = File(outputDirectory, "${UUID.randomUUID()}.fingerprint")
@@ -55,21 +55,23 @@ class FfmpegFingerprintExtractor(
         private const val MIN_DURATION_SECONDS = 1
 
         /**
-         * The duration AcoustID should be told about. FFmpeg fingerprints the whole
-         * clip when it is shorter than the standard slice window, and the standard
-         * slice otherwise, so the reported duration must follow the same rule.
+         * The duration AcoustID has to be told about: the length of the whole clip
+         * the fingerprint came from, not the length of the sampled slice. AcoustID
+         * narrows candidate recordings by duration, so reporting the 30 second
+         * slice for a four minute track filters out the very recording being
+         * looked up. Measured: the same fingerprint matched at 0.94 with the real
+         * duration and returned no results at all with the slice length.
+         *
+         * An unknown clip length falls back to the slice length. That is only
+         * correct when the clip really is that short, but the probe normally
+         * knows the length and a lookup is still worth attempting.
          */
-        fun fingerprintDurationSeconds(clipDurationMs: Long?): Int? {
+        fun acoustIdDurationSeconds(clipDurationMs: Long?): Int? {
             if (clipDurationMs == null) {
                 return (FfmpegCommandBuilder.DEFAULT_FINGERPRINT_DURATION_MS / 1_000L).toInt()
             }
             if (clipDurationMs < MIN_DURATION_MS) return null
-            val sampledMs = if (clipDurationMs < FfmpegCommandBuilder.SHORT_CLIP_THRESHOLD_MS) {
-                clipDurationMs
-            } else {
-                minOf(FfmpegCommandBuilder.DEFAULT_FINGERPRINT_DURATION_MS, clipDurationMs)
-            }
-            return (sampledMs / 1_000L).toInt().coerceAtLeast(MIN_DURATION_SECONDS)
+            return (clipDurationMs / 1_000L).toInt().coerceAtLeast(MIN_DURATION_SECONDS)
         }
     }
 }

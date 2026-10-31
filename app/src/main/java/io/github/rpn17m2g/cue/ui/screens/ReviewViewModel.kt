@@ -60,6 +60,7 @@ data class ReviewUiState(
     val ocrAttempted: Boolean = false,
     val ocrFailed: Boolean = false,
     val fingerprintAvailable: Boolean = false,
+    val fingerprintKeyRejected: Boolean = false,
     val artworkPickerOpen: Boolean = false,
     val artworkResults: List<ArtworkCandidate> = emptyList(),
     val artworkSearching: Boolean = false,
@@ -419,6 +420,7 @@ class ReviewViewModel(
             it.copy(
                 identifying = true,
                 ocrFailed = false,
+                fingerprintKeyRejected = false,
                 searchOffline = !settings.networkLookups,
                 fingerprintAvailable = settings.fingerprintAvailable,
             )
@@ -464,6 +466,7 @@ class ReviewViewModel(
                 rawOcrLines = result.outcome.rawOcrLines,
                 ocrAttempted = current.input?.kind == InputKind.VIDEO,
                 ocrFailed = result.ocrFailed,
+                fingerprintKeyRejected = result.outcome.fingerprintKeyRejected,
                 identifying = false,
             )
         }

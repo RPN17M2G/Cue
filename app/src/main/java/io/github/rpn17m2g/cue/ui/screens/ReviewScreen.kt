@@ -32,7 +32,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -505,7 +504,7 @@ private fun TagField(
         },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         colors = cueOutlinedFieldColors(),
     )
@@ -536,7 +535,7 @@ private fun ArtworkSection(
                 Surface(
                     modifier = Modifier.size(96.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -583,14 +582,14 @@ private fun ArtworkThumbnail(
         Surface(
             modifier = modifier,
             color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(12.dp),
+            shape = MaterialTheme.shapes.medium,
         ) {}
     } else {
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = stringResource(R.string.review_field_artwork),
             contentScale = ContentScale.Crop,
-            modifier = modifier.clip(RoundedCornerShape(12.dp)),
+            modifier = modifier.clip(MaterialTheme.shapes.medium),
         )
     }
 }
@@ -700,7 +699,7 @@ private fun CoverCell(
             .aspectRatio(1f)
             .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         when (val current = preview) {
             PreviewState.Loading -> Box(
@@ -796,6 +795,13 @@ private fun LookupSection(
     if (state.searchOffline) {
         Text(
             text = stringResource(R.string.review_search_offline),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (state.fingerprintKeyRejected) {
+        Text(
+            text = stringResource(R.string.review_fingerprint_key_rejected),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
         )
@@ -942,7 +948,7 @@ private fun ManualSearch(
         label = { Text(stringResource(R.string.review_search_hint)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { submit() }),
         colors = cueOutlinedFieldColors(),
@@ -1193,7 +1199,7 @@ private fun VideoPreview(
     }
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(onClick = toggle),
     ) {
@@ -1252,7 +1258,7 @@ private fun AudioPreview(
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Surface(

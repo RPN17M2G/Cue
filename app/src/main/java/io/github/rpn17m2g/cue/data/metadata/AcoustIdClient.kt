@@ -127,7 +127,10 @@ class AcoustIdClient internal constructor(
     }
 
     private fun AcoustIdError?.toLookupError(httpCode: Int?): LookupError = when (this?.code) {
-        INVALID_API_KEY, INVALID_API_KEY_ALT -> LookupError.MissingKey
+        // The service rejects unregistered keys (and revoked ones) this way. That
+        // is not the same as having no key at all: the user did enter one, so the
+        // UI has to say it was refused instead of asking for a key again.
+        INVALID_API_KEY, INVALID_API_KEY_ALT -> LookupError.RejectedKey
         TOO_MANY_REQUESTS -> LookupError.RateLimited
         SERVICE_UNAVAILABLE -> LookupError.Http(HTTP_SERVICE_UNAVAILABLE)
         else -> when {

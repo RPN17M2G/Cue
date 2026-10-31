@@ -5,7 +5,12 @@ sealed interface LookupError {
     data class Network(val cause: Throwable? = null) : LookupError
     data class Http(val code: Int) : LookupError
     data object RateLimited : LookupError
+
+    /** No key is configured, so the provider was never called. */
     data object MissingKey : LookupError
+
+    /** A key was configured but the provider refused it. */
+    data object RejectedKey : LookupError
     data class Parse(val cause: Throwable? = null) : LookupError
 }
 

@@ -22,6 +22,16 @@ data class FingerprintSeed(
     val durationMs: Long? = null,
 )
 
+/**
+ * What the fingerprint stage produced, and why it produced nothing when it did
+ * not. An empty [matches] with [keyRejected] means the provider refused the
+ * configured key, which is a fixable setup problem rather than an unknown song.
+ */
+data class FingerprintAttempt(
+    val matches: List<MetadataMatch> = emptyList(),
+    val keyRejected: Boolean = false,
+)
+
 data class IdentificationOutcome(
     val tag: TagDraft,
     val sources: Map<TagField, IdentificationSource>,
@@ -29,6 +39,7 @@ data class IdentificationOutcome(
     val rawOcrLines: List<String>,
     val usedFingerprint: Boolean,
     val usedEmbeddedTags: Boolean,
+    val fingerprintKeyRejected: Boolean = false,
 )
 
 /**
@@ -41,7 +52,7 @@ data class IdentificationOutcome(
  */
 class IdentificationCascade(
     private val lookup: suspend (LookupSeed) -> List<MetadataMatch>,
-    private val fingerprintLookup: suspend (FingerprintSeed) -> List<MetadataMatch>,
+    private val fingerprintLookup: suspend (FingerprintSeed) -> FingerprintAttempt,
 ) {
 
     suspend fun identify(
@@ -86,10 +97,21 @@ class IdentificationCascade(
                 artist = seed.tag.artist.takeIf { it.isNotBlank() },
                 durationMs = durationMs,
             )
-            val matches = lookupSafely { fingerprintLookup(fingerprintSeed) }
-            val ranked = MetadataMatcher.rank(seed.tag, matches)
+            val attempt = fingerprintSafely { fingerprintLookup(fingerprintSeed) }
+            val ranked = MetadataMatcher.rank(seed.tag, attempt.matches)
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = true)
+            }
+            if (attempt.keyRejected) {
+                return IdentificationOutcome(
+                    tag = seed.tag,
+                    sources = seed.sources,
+                    alternatives = emptyList(),
+                    rawOcrLines = rawOcrLines,
+                    usedFingerprint = false,
+                    usedEmbeddedTags = seed.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
+                    fingerprintKeyRejected = true,
+                )
             }
         }
 
@@ -110,6 +132,17 @@ class IdentificationCascade(
             throw cancelled
         } catch (_: Exception) {
             emptyList()
+        }
+
+    private suspend fun fingerprintSafely(
+        block: suspend () -> FingerprintAttempt,
+    ): FingerprintAttempt =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            FingerprintAttempt()
         }
 
     private fun outcome(

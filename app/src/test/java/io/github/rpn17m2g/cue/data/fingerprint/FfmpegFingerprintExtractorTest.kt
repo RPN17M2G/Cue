@@ -30,9 +30,9 @@ class FfmpegFingerprintExtractorTest {
         val result = extractor(runner).extract(input, clipDurationMs = 240_000)
 
         assertEquals(FINGERPRINT, result?.value)
-        assertEquals(30, result?.durationSeconds)
+        assertEquals(240, result?.durationSeconds)
         val args = runner.invocations.single()
-        assertTrue(args.containsAll(listOf("-ss", "20.000", "-t", "30.000")))
+        assertTrue(args.containsAll(listOf("-ss", "105.000", "-t", "30.000")))
         assertTrue(args.containsAll(listOf("-f", "chromaprint", "-fp_format", "base64")))
         assertEquals(emptyList<String>(), outputDirectory.list()?.toList())
     }
@@ -70,9 +70,16 @@ class FfmpegFingerprintExtractorTest {
 
     @Test
     fun `durations are floored to whole seconds`() {
-        assertEquals(45, FfmpegFingerprintExtractor.fingerprintDurationSeconds(45_900))
-        assertEquals(30, FfmpegFingerprintExtractor.fingerprintDurationSeconds(120_000))
-        assertEquals(30, FfmpegFingerprintExtractor.fingerprintDurationSeconds(50_000))
+        assertEquals(45, FfmpegFingerprintExtractor.acoustIdDurationSeconds(45_900))
+        assertEquals(50, FfmpegFingerprintExtractor.acoustIdDurationSeconds(50_000))
+    }
+
+    @Test
+    fun `long clips report their own length rather than the sampled slice`() {
+        // The sampled slice is always 30 seconds, but AcoustID compares this
+        // number against the recording length, so a 120 second clip has to say so.
+        assertEquals(120, FfmpegFingerprintExtractor.acoustIdDurationSeconds(120_000))
+        assertEquals(235, FfmpegFingerprintExtractor.acoustIdDurationSeconds(235_000))
     }
 
     @Test

@@ -111,7 +111,7 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
-    fun `fingerprintCommand uses a twenty second slice thirty seconds long`() {
+    fun `fingerprintCommand falls back to a twenty second offset when the clip length is unknown`() {
         val args = FfmpegCommandBuilder.fingerprintCommand(input, outputPath = "fingerprint.tmp")
 
         assertEquals(
@@ -159,7 +159,18 @@ class FfmpegCommandBuilderTest {
             clipDurationMs = 50_000,
         )
 
-        assertTrue(args.containsAll(listOf("-ss", "20.000", "-t", "30.000")))
+        assertTrue(args.containsAll(listOf("-ss", "10.000", "-t", "30.000")))
+    }
+
+    @Test
+    fun `fingerprintCommand samples a long clip from its middle`() {
+        val args = FfmpegCommandBuilder.fingerprintCommand(
+            input,
+            outputPath = "fingerprint.tmp",
+            clipDurationMs = 235_000,
+        )
+
+        assertTrue(args.containsAll(listOf("-ss", "102.500", "-t", "30.000")))
     }
 
     @Test

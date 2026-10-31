@@ -51,7 +51,7 @@ class IdentificationCascadeTest {
             },
             fingerprintLookup = {
                 fingerprintCalls += 1
-                listOf(cachedMatch)
+                FingerprintAttempt(listOf(cachedMatch))
             },
         ).identify(
             ocrCandidates = listOf(getLucky),
@@ -83,7 +83,7 @@ class IdentificationCascadeTest {
             },
             fingerprintLookup = {
                 fingerprintCalls += 1
-                listOf(cachedMatch)
+                FingerprintAttempt(listOf(cachedMatch))
             },
         ).identify(
             ocrCandidates = listOf(getLucky),
@@ -159,7 +159,7 @@ class IdentificationCascadeTest {
             },
             fingerprintLookup = {
                 fingerprintCalls += 1
-                listOf(cachedMatch)
+                FingerprintAttempt(listOf(cachedMatch))
             },
         ).identify(
             ocrCandidates = listOf(getLucky),
@@ -195,7 +195,7 @@ class IdentificationCascadeTest {
         )
 
         val outcome = cascade(
-            fingerprintLookup = { listOf(lowScore, highScore) },
+            fingerprintLookup = { FingerprintAttempt(listOf(lowScore, highScore)) },
         ).identify(
             ocrCandidates = emptyList(),
             embeddedTags = null,
@@ -216,7 +216,7 @@ class IdentificationCascadeTest {
         val outcome = cascade(
             fingerprintLookup = { seed ->
                 fingerprintSeed = seed
-                listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT))
+                FingerprintAttempt(listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT)))
             },
         ).identify(
             ocrCandidates = listOf(getLucky),
@@ -241,7 +241,7 @@ class IdentificationCascadeTest {
         val cascade = cascade(
             fingerprintLookup = {
                 fingerprintCalls += 1
-                listOf(cachedMatch)
+                FingerprintAttempt(listOf(cachedMatch))
             },
         )
 
@@ -288,7 +288,7 @@ class IdentificationCascadeTest {
     fun `resolver failure falls through to the fingerprint`() = runTest {
         val outcome = cascade(
             lookup = { throw IllegalStateException("network down") },
-            fingerprintLookup = { listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT)) },
+            fingerprintLookup = { FingerprintAttempt(listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT))) },
         ).identify(
             ocrCandidates = listOf(getLucky),
             embeddedTags = null,
@@ -317,6 +317,38 @@ class IdentificationCascadeTest {
         assertEquals("Daft Punk", outcome.tag.artist)
         assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.TITLE])
         assertFalse(outcome.usedFingerprint)
+    }
+
+    @Test
+    fun `a rejected fingerprint key is reported instead of looking like an unknown song`() = runTest {
+        val outcome = cascade(
+            fingerprintLookup = { FingerprintAttempt(keyRejected = true) },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+        )
+
+        assertTrue(outcome.fingerprintKeyRejected)
+        assertFalse(outcome.usedFingerprint)
+        assertEquals("Get Lucky", outcome.tag.title)
+    }
+
+    @Test
+    fun `an accepted key with no match is not reported as rejected`() = runTest {
+        val outcome = cascade(
+            fingerprintLookup = { FingerprintAttempt(emptyList()) },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+        )
+
+        assertFalse(outcome.fingerprintKeyRejected)
     }
 
     @Test
@@ -439,6 +471,6 @@ class IdentificationCascadeTest {
 
     private fun cascade(
         lookup: suspend (LookupSeed) -> List<MetadataMatch> = { emptyList() },
-        fingerprintLookup: suspend (FingerprintSeed) -> List<MetadataMatch> = { emptyList() },
+        fingerprintLookup: suspend (FingerprintSeed) -> FingerprintAttempt = { FingerprintAttempt() },
     ): IdentificationCascade = IdentificationCascade(lookup, fingerprintLookup)
 }

@@ -211,7 +211,7 @@ class IdentifySongUseCaseTest {
     private fun cascade(lookup: suspend (LookupSeed) -> List<MetadataMatch>) =
         IdentificationCascade(
             lookup = lookup,
-            fingerprintLookup = { emptyList() },
+            fingerprintLookup = { FingerprintAttempt() },
         )
 
     private fun videoInput(): ResolvedInput = ResolvedInput(

@@ -7,7 +7,11 @@ import java.io.IOException
 
 object FfmpegCommandBuilder {
 
-    const val DEFAULT_FINGERPRINT_START_MS = 20_000L
+    /**
+     * Offset used when the clip length is unknown, so the sample cannot be
+     * centered. It stays past the usual intro, which is the best guess available.
+     */
+    const val FALLBACK_FINGERPRINT_START_MS = 20_000L
     const val DEFAULT_FINGERPRINT_DURATION_MS = 30_000L
     const val SHORT_CLIP_THRESHOLD_MS = 50_000L
     const val PROBE_EXPECTED_EXIT = 1
@@ -69,9 +73,14 @@ object FfmpegCommandBuilder {
     ): List<String> = convertToMp3(inputPath, outputPath, trim, quality)
 
     /**
-     * Chromaprint needs roughly 30 seconds of audio. The default slice starts 20
-     * seconds in, past intros and UI sounds. Clips shorter than 50 seconds use the
-     * whole clip instead, because a 20 second offset would leave too little audio.
+     * Chromaprint needs roughly 30 seconds of audio. Long clips are sampled from
+     * their middle: the opening of a recording is the worst part to ask AcoustID
+     * about, because songs start with a repetitive intro, players are often still
+     * paused, and UI sounds leak in. Measured on one track, the opening loop
+     * matched nothing while the centered window matched at 0.99.
+     *
+     * Clips shorter than 50 seconds use the whole clip instead, because a 30
+     * second window would leave nothing to skip.
      *
      * [outputPath] must be a real file: the process runner drains stdout, and
      * overwriting a stale temporary file is expected.
@@ -80,7 +89,7 @@ object FfmpegCommandBuilder {
         inputPath: String,
         outputPath: String,
         clipDurationMs: Long? = null,
-        sliceStartMs: Long = DEFAULT_FINGERPRINT_START_MS,
+        sliceStartMs: Long = fingerprintStartMs(clipDurationMs),
         sliceDurationMs: Long = DEFAULT_FINGERPRINT_DURATION_MS,
     ): List<String> {
         requireFileOutput(outputPath)
@@ -110,6 +119,16 @@ object FfmpegCommandBuilder {
             outputPath,
         )
         return args
+    }
+
+    /**
+     * Where to start sampling a clip of [clipDurationMs]. Centered so the slice
+     * sits in the middle of the recording, where a song is most recognisable.
+     */
+    fun fingerprintStartMs(clipDurationMs: Long?): Long {
+        if (clipDurationMs == null) return FALLBACK_FINGERPRINT_START_MS
+        if (clipDurationMs < SHORT_CLIP_THRESHOLD_MS) return 0L
+        return ((clipDurationMs - DEFAULT_FINGERPRINT_DURATION_MS) / 2).coerceAtLeast(0L)
     }
 
     /**
