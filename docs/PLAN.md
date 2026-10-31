@@ -2,7 +2,8 @@
 
 Status: agreed design; Phase 1 walking skeleton, Phase 2 recognition, Phase 3
 fingerprint fallback, Phase 4 MP3 tag editing & trimming, and Phase 5 bilingual
-UI, settings & polish implemented.
+UI, settings & polish implemented. The approved UI redesign and four-palette
+theme work is specified in `docs/UI-REDESIGN-PLAN.md`.
 Owner: Omer Gindi (`RPN17M2G`).
 App id: `io.github.rpn17m2g.cue`.
 
@@ -313,6 +314,8 @@ No storage permissions (SAF + MediaStore).
 ---
 
 ## 13. Related documents
+- `docs/UI-REDESIGN-PLAN.md` — approved UI redesign, four selectable palettes,
+  and the phased delivery plan for it.
 - `docs/PHASES.md` — implementation phases.
 - `docs/STANDARDS.md` — coding and project standards.
 - `docs/ADR/` — architecture decision records.

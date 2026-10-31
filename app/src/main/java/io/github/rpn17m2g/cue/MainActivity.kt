@@ -45,7 +45,7 @@ class MainActivity : AppCompatActivity() {
             val settings by container.settingsRepository.settings.collectAsStateWithLifecycle(
                 initialValue = AppSettings(),
             )
-            CueTheme(theme = settings.theme) {
+            CueTheme(palette = settings.palette, theme = settings.theme) {
                 CueNavHost()
             }
         }
