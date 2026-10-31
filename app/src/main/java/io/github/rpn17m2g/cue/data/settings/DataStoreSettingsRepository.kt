@@ -14,9 +14,9 @@ import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.AppTheme
+import io.github.rpn17m2g.cue.settings.CuePalette
 import io.github.rpn17m2g.cue.settings.SettingsRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.cueDataStore: DataStore<Preferences> by preferencesDataStore(name = "cue_settings")
@@ -29,9 +29,16 @@ class DataStoreSettingsRepository(
 
     override val settings: Flow<AppSettings> = settingsFlow
 
+    /**
+     * Reads and writes inside the same [edit] block. Reading the current value
+     * outside it made this a read-modify-write race: two updates in flight (fast
+     * typing in Settings fires one per keystroke) both started from the same
+     * snapshot, so the later write put back the older text and the field visibly
+     * jumped backwards. DataStore serializes [edit] calls, which removes the race.
+     */
     override suspend fun update(transform: (AppSettings) -> AppSettings) {
-        val next = transform(settingsFlow.first())
         context.cueDataStore.edit { preferences ->
+            val next = transform(mapPreferences(preferences))
             preferences[Keys.SCAN_WINDOW] = next.scanWindowSeconds
             preferences[Keys.QUALITY] = next.defaultQuality.name
             preferences[Keys.OUTPUT_FOLDER] = next.outputFolder
@@ -40,6 +47,7 @@ class DataStoreSettingsRepository(
             preferences[Keys.ACOUSTID_KEY] = next.acoustIdKey
             preferences[Keys.LANGUAGE] = next.language.name
             preferences[Keys.THEME] = next.theme.name
+            preferences[Keys.PALETTE] = next.palette.name
             preferences[Keys.FILENAME_TEMPLATE] = next.filenameTemplate
             preferences[Keys.OCR_INTERVAL] = next.ocrIntervalMs
             preferences[Keys.HTTP_TIMEOUT] = next.httpTimeoutMs
@@ -75,6 +83,11 @@ internal fun mapPreferences(preferences: Preferences): AppSettings = AppSettings
     theme = preferences[Keys.THEME]
         ?.let { name -> AppTheme.entries.firstOrNull { it.name == name } }
         ?: AppTheme.SYSTEM,
+    // An unknown or missing value falls back to Mint, so this key needs no
+    // migration and a downgrade cannot break the theme.
+    palette = preferences[Keys.PALETTE]
+        ?.let { name -> CuePalette.entries.firstOrNull { it.name == name } }
+        ?: CuePalette.MINT,
     filenameTemplate = preferences[Keys.FILENAME_TEMPLATE]
         ?: AppSettings.DEFAULT_FILENAME_TEMPLATE,
     ocrIntervalMs = preferences[Keys.OCR_INTERVAL] ?: AppSettings.DEFAULT_OCR_INTERVAL_MS,
@@ -92,6 +105,7 @@ private object Keys {
     val ACOUSTID_KEY = stringPreferencesKey("acoustid_key")
     val LANGUAGE = stringPreferencesKey("language")
     val THEME = stringPreferencesKey("theme")
+    val PALETTE = stringPreferencesKey("palette")
     val FILENAME_TEMPLATE = stringPreferencesKey("filename_template")
     val OCR_INTERVAL = longPreferencesKey("ocr_interval_ms")
     val HTTP_TIMEOUT = longPreferencesKey("http_timeout_ms")

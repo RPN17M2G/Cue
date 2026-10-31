@@ -1,15 +1,24 @@
 package io.github.rpn17m2g.cue.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -36,9 +45,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,8 +63,11 @@ import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.AppTheme
+import io.github.rpn17m2g.cue.settings.CuePalette
 import io.github.rpn17m2g.cue.ui.cueViewModel
 import io.github.rpn17m2g.cue.ui.navigation.appContainer
+import io.github.rpn17m2g.cue.ui.theme.CueStyle
+import io.github.rpn17m2g.cue.ui.theme.spec
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,6 +110,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onQuality = { quality -> viewModel.update { it.copy(defaultQuality = quality) } },
                 onOutputFolder = { folder -> viewModel.update { it.copy(outputFolder = folder) } },
                 onLanguage = { language -> viewModel.update { it.copy(language = language) } },
+                onPalette = { palette -> viewModel.update { it.copy(palette = palette) } },
                 onTheme = { theme -> viewModel.update { it.copy(theme = theme) } },
                 onNetwork = { enabled -> viewModel.update { it.copy(networkLookups = enabled) } },
                 onFingerprint = { enabled -> viewModel.update { it.copy(fingerprintEnabled = enabled) } },
@@ -111,6 +131,7 @@ private fun SettingsBody(
     onQuality: (QualityPreset) -> Unit,
     onOutputFolder: (String) -> Unit,
     onLanguage: (AppLanguage) -> Unit,
+    onPalette: (CuePalette) -> Unit,
     onTheme: (AppTheme) -> Unit,
     onNetwork: (Boolean) -> Unit,
     onFingerprint: (Boolean) -> Unit,
@@ -134,7 +155,7 @@ private fun SettingsBody(
             label = { Text(stringResource(R.string.settings_output_folder)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            shape = MaterialTheme.shapes.medium,
             colors = settingsFieldColors(),
         )
     }
@@ -148,7 +169,28 @@ private fun SettingsBody(
         )
     }
 
-    SettingsSection(R.string.settings_theme) {
+    SettingsSection(R.string.settings_appearance) {
+        Text(
+            text = stringResource(R.string.settings_palette),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(start = 2.dp),
+        )
+        PalettePicker(
+            selected = settings.palette,
+            dark = settings.theme.resolvesDark(),
+            onSelect = onPalette,
+        )
+        Text(
+            text = stringResource(R.string.settings_palette_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SettingsDivider()
+        Text(
+            text = stringResource(R.string.settings_mode),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(start = 2.dp),
+        )
         ChoiceChips(
             options = AppTheme.entries,
             selected = settings.theme,
@@ -187,7 +229,7 @@ private fun SettingsBody(
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            shape = MaterialTheme.shapes.medium,
             colors = settingsFieldColors(),
         )
     }
@@ -199,7 +241,7 @@ private fun SettingsBody(
             label = { Text(stringResource(R.string.settings_filename_template)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            shape = MaterialTheme.shapes.medium,
             colors = settingsFieldColors(),
         )
         IntSettingField(
@@ -244,7 +286,7 @@ private fun SettingsSection(
         )
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
@@ -259,6 +301,133 @@ private fun SettingsSection(
 @Composable
 private fun SettingsDivider() {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+}
+
+/**
+ * Two columns of real miniatures, not swatches: each card draws the palette's
+ * hero gradient, its ink and its primary exactly as the details screen would.
+ * Tapping applies the palette immediately, so the card that is no longer
+ * selected is itself the proof that the change took.
+ */
+@Composable
+private fun PalettePicker(
+    selected: CuePalette,
+    dark: Boolean,
+    onSelect: (CuePalette) -> Unit,
+) {
+    Column(
+        modifier = Modifier.selectableGroup(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CuePalette.entries.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                row.forEach { palette ->
+                    PaletteCard(
+                        palette = palette,
+                        selected = palette == selected,
+                        dark = dark,
+                        onSelect = { onSelect(palette) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaletteCard(
+    palette: CuePalette,
+    selected: Boolean,
+    dark: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val spec = palette.spec
+    val preview = if (dark) spec.dark else spec.light
+    val label = stringResource(palette.labelRes())
+    val character = stringResource(spec.style.labelRes())
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .semantics { contentDescription = "$label, $character" }
+            .background(preview.surface)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                },
+                shape = RoundedCornerShape(16.dp),
+            )
+            .padding(9.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Brush.linearGradient(spec.heroGradient)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Bar(widthFraction = 0.62f, height = 5.dp, color = Color.White.copy(alpha = 0.95f))
+                Bar(widthFraction = 0.40f, height = 3.dp, color = Color.White.copy(alpha = 0.72f))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Bar(0.78f, 5.dp, preview.onSurface.copy(alpha = 0.85f))
+        Spacer(Modifier.height(5.dp))
+        Bar(0.52f, 4.dp, preview.onSurfaceVariant.copy(alpha = 0.75f))
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .size(width = 44.dp, height = 12.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(preview.primary),
+        )
+        Spacer(Modifier.height(9.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = preview.onSurface,
+            maxLines = 1,
+        )
+        Text(
+            text = character,
+            style = MaterialTheme.typography.labelSmall,
+            color = preview.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun Bar(widthFraction: Float, height: Dp, color: Color) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(widthFraction)
+            .height(height)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(color),
+    )
+}
+
+@Composable
+private fun AppTheme.resolvesDark(): Boolean = when (this) {
+    AppTheme.SYSTEM -> isSystemInDarkTheme()
+    AppTheme.LIGHT -> false
+    AppTheme.DARK -> true
 }
 
 @Composable
@@ -309,7 +478,7 @@ private fun IntSettingField(
         },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         colors = settingsFieldColors(),
     )
@@ -336,7 +505,7 @@ private fun LongSettingField(
         },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         colors = settingsFieldColors(),
     )
@@ -381,4 +550,16 @@ private fun AppTheme.labelRes(): Int = when (this) {
     AppTheme.SYSTEM -> R.string.settings_theme_system
     AppTheme.LIGHT -> R.string.settings_theme_light
     AppTheme.DARK -> R.string.settings_theme_dark
+}
+
+private fun CuePalette.labelRes(): Int = when (this) {
+    CuePalette.MINT -> R.string.palette_mint
+    CuePalette.LAGOON -> R.string.palette_lagoon
+    CuePalette.NAVY -> R.string.palette_navy
+    CuePalette.DEEP_TEAL -> R.string.palette_deep_teal
+}
+
+private fun CueStyle.labelRes(): Int = when (this) {
+    CueStyle.CHEERFUL -> R.string.palette_style_cheerful
+    CueStyle.PROFESSIONAL -> R.string.palette_style_professional
 }

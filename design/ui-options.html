@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cue — UI options</title>
+<style>
+/* ---------- page chrome ---------- */
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(900px 520px at 12% -12%, rgba(124,92,255,.16), transparent 62%),
+    radial-gradient(760px 420px at 92% -4%, rgba(255,107,74,.13), transparent 58%),
+    #0E1015;
+  color:#E8ECF3;
+  font-family:"Segoe UI Variable Display","Segoe UI",Inter,-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:120px;
+}
+.page-head{max-width:1160px;margin:0 auto;padding:66px 28px 6px}
+.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#7D8798;font-weight:700}
+h1{font-size:46px;line-height:1.04;letter-spacing:-.035em;margin:16px 0 14px;font-weight:700}
+h1 em{font-style:normal;background:linear-gradient(92deg,#FF8A5C 0%,#FFC93C 42%,#7C5CFF 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{max-width:660px;color:#A3ABBC;font-size:15.5px;line-height:1.62;margin:0}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:30px 0 0;max-width:900px}
+.legend-card{display:flex;gap:14px;align-items:flex-start;background:#151922;border:1px solid #232935;border-radius:16px;padding:15px 16px}
+.swatches{display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:none}
+.swatches i{width:17px;height:17px;border-radius:5px;display:block;box-shadow:0 0 0 1px rgba(255,255,255,.07) inset}
+.legend-card b{display:block;font-size:13.5px;margin-bottom:3px;letter-spacing:-.01em}
+.legend-card span{display:block;font-size:12px;line-height:1.5;color:#8F98A9}
+.page-tools{display:flex;gap:10px;margin-top:22px}
+.tool-btn{font:inherit;font-size:12.5px;font-weight:650;color:#C6CEDA;background:#1A1F29;border:1px solid #2A3140;border-radius:999px;padding:9px 15px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.tool-btn:hover{border-color:#3B4250}
+.tool-btn[aria-pressed="true"]{background:linear-gradient(135deg,#FF8A5C,#7C5CFF);border-color:transparent;color:#fff}
+
+/* ---------- sections ---------- */
+.section{max-width:1160px;margin:0 auto;padding:46px 28px 0}
+.section-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+.section-num{font-size:12px;letter-spacing:.18em;color:#6C7689;font-weight:700;font-variant-numeric:tabular-nums}
+h2{font-size:26px;letter-spacing:-.025em;margin:0;font-weight:680}
+.section-desc{color:#98A2B3;font-size:14px;line-height:1.6;max-width:760px;margin:8px 0 0}
+.layout-block{margin-top:34px}
+.layout-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:20px}
+.layout-letter{width:36px;height:36px;border-radius:11px;background:#1A1E27;border:1px solid #2B3240;display:grid;place-items:center;font-weight:800;font-size:14px;color:#C9D2E0;flex:none}
+.layout-head h3{font-size:17px;margin:0 0 4px;letter-spacing:-.02em}
+.layout-head p{margin:0;color:#8B93A5;font-size:13px;line-height:1.55;max-width:580px}
+.pair{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+
+/* ---------- phone frame ---------- */
+.option{margin:0;display:flex;flex-direction:column;gap:0}
+.phone{width:318px;height:658px;border-radius:46px;background:#04060A;padding:9px;position:relative;
+  box-shadow:0 42px 84px -34px rgba(0,0,0,.92), 0 0 0 1px rgba(255,255,255,.07), 0 1px 0 rgba(255,255,255,.06) inset;}
+.phone::before{content:"";position:absolute;left:-2px;top:132px;width:2px;height:34px;border-radius:2px;background:#1A1F27}
+.phone::after{content:"";position:absolute;left:-2px;top:186px;width:2px;height:56px;border-radius:2px;background:#1A1F27}
+.opt-meta{width:318px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}
+.opt-skin{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;letter-spacing:-.01em}
+.opt-skin .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.opt-skin .dot.cheer{background:linear-gradient(135deg,#FF8A5C,#FFC93C 45%,#7C5CFF)}
+.opt-skin .dot.pro{background:linear-gradient(135deg,#111A2E,#4F46E5)}
+.opt-desc{font-size:11.5px;color:#7F8899;text-align:right}
+.choose{width:318px;margin-top:11px;font:inherit;font-size:12.5px;font-weight:700;padding:11px;border-radius:12px;
+  border:1px solid #2B3240;background:#171B23;color:#C9D2E0;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease}
+.choose:hover{border-color:#4A5263;background:#1D222C}
+.choose.is-selected{background:linear-gradient(135deg,#FF8A5C,#7C5CFF);border-color:transparent;color:#fff}
+.follow-note{width:318px;margin-top:11px;font-size:11px;color:#6C7689;text-align:center;padding:11px;border-radius:12px;border:1px dashed #2B3240;font-weight:600}
+.option.is-selected .phone{box-shadow:0 42px 84px -30px rgba(124,92,255,.5), 0 0 0 2px rgba(124,92,255,.65)}
+
+/* ---------- skin tokens ---------- */
+.screen{position:relative;width:100%;height:100%;border-radius:38px;overflow:hidden;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--ink);font-size:13px;line-height:1.35;font-family:inherit}
+.skin-pro{
+  --bg:#F7F8FA; --surface:#FFFFFF; --ink:#0E1526; --muted:#6B7A90; --line:#E6EAF0;
+  --primary:#111A2E; --primary-ink:#FFFFFF; --accent:#4F46E5; --accent-soft:#EEF0FF;
+  --radius:14px; --card-radius:14px; --thumb-radius:10px;
+  --shadow:0 1px 2px rgba(14,21,38,.05), 0 6px 18px rgba(14,21,38,.06);
+  --tab-bg:#EDF0F5; --tab-active-bg:#FFFFFF; --tab-active-ink:#0E1526; --tab-ink:#6B7A90;
+  --tab-shadow:0 1px 3px rgba(14,21,38,.14);
+  --fab-bg:#111A2E; --fab-ink:#FFFFFF;
+  --chip-bg:#F2F4F8; --chip-active-bg:#111A2E; --chip-active-ink:#FFFFFF;
+  --nav-active:#0E1526; --brand-weight:660;
+  --title-weight:660; --title-tracking:-.02em;
+}
+.skin-cheer{
+  --bg:#FFF7F0; --surface:#FFFFFF; --ink:#241A2E; --muted:#94839C; --line:#F6E3D6;
+  --primary:#FF6B4A; --primary-ink:#FFFFFF; --accent:#7C5CFF; --accent-soft:#F1ECFF;
+  --radius:22px; --card-radius:22px; --thumb-radius:18px;
+  --shadow:0 8px 24px rgba(255,107,74,.16), 0 2px 6px rgba(36,26,46,.06);
+  --tab-bg:#FFEDE3; --tab-active-bg:linear-gradient(135deg,#FF8A5C,#FF5C3C); --tab-active-ink:#FFFFFF; --tab-ink:#B0776A;
+  --tab-shadow:0 4px 10px rgba(255,92,60,.3);
+  --fab-bg:linear-gradient(135deg,#FF8A5C,#FF5C3C); --fab-ink:#FFFFFF;
+  --chip-bg:#FFF0E8; --chip-active-bg:#FF6B4A; --chip-active-ink:#FFFFFF;
+  --nav-active:#FF6B4A; --brand-weight:820;
+  --title-weight:800; --title-tracking:-.03em;
+  background:radial-gradient(520px 200px at 88% -8%, rgba(255,201,60,.22), transparent 70%), var(--bg);
+}
+
+/* ---------- status bar ---------- */
+.island{position:absolute;top:7px;left:50%;transform:translateX(-50%);width:82px;height:22px;border-radius:12px;background:#05070B;z-index:8}
+.statusbar{height:36px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:11.5px;font-weight:650;position:relative;z-index:7}
+.status-icons{display:flex;gap:5px;align-items:center;opacity:.9}
+.home-bar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:112px;height:4px;border-radius:2px;background:rgba(20,20,30,.26);z-index:9}
+.skin-cheer .home-bar{background:rgba(120,70,50,.22)}
+/* ---------- app bar ---------- */
+.appbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 18px 10px}
+.appbar-detail{padding:2px 12px 10px}
+.appbar-title{flex:1;text-align:center;font-size:13px;font-weight:700;letter-spacing:-.01em}
+.appbar-actions{display:flex;gap:2px}
+.brand{font-size:20px;font-weight:var(--brand-weight);letter-spacing:-.035em;line-height:1}
+.spark{display:none}
+.skin-cheer .spark{display:inline;margin-left:5px;font-size:12px;color:var(--primary);vertical-align:2px}
+.icon-btn{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:transparent;border:0;color:var(--ink);cursor:default;padding:0;opacity:.82}
+.icon-btn svg{width:18px;height:18px}
+
+/* ---------- tabs ---------- */
+.tabs{flex:none;display:flex;gap:5px;margin:2px 18px 12px;padding:4px;border-radius:999px;background:var(--tab-bg)}
+.tab{flex:1;min-width:0;border:0;background:transparent;color:var(--tab-ink);font:inherit;font-size:11px;font-weight:650;letter-spacing:-.01em;
+  padding:8px 3px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:4px;cursor:default;white-space:nowrap;overflow:hidden}
+.tab.is-active{background:var(--tab-active-bg);color:var(--tab-active-ink);box-shadow:var(--tab-shadow)}
+.count{font-size:8.5px;font-weight:750;padding:1px 4px;border-radius:999px;background:rgba(14,21,38,.08);color:inherit;flex:none}
+.skin-cheer .count{background:rgba(255,255,255,.28)}
+.tabs-seg{border-radius:13px;margin:2px 18px 10px}
+.skin-cheer .tabs-seg{border-radius:17px}
+.tabs-seg .tab{border-radius:10px}
+.skin-cheer .tabs-seg .tab{border-radius:13px}
+
+/* ---------- content ---------- */
+.content{flex:1;min-height:0;overflow:hidden;padding:0 18px 96px}
+.content.scroll{overflow-y:auto;scrollbar-width:none}
+.content.scroll::-webkit-scrollbar{display:none}
+[data-layout="B"] .content{padding-bottom:8px}
+[data-layout="A"] .content,[data-layout="C"] .content{padding-bottom:84px}
+[data-layout="F1"] .content,[data-layout="F2"] .content{padding-bottom:16px}
+[data-layout="P"] .content,[data-layout="R"] .content{padding:0}
+.date-label{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:750;margin:8px 2px 6px}
+.skin-cheer .date-label{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--primary);display:flex;align-items:center;gap:6px;font-weight:800}
+.skin-cheer .date-label::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--primary);flex:none}
+
+/* ---------- grid ---------- */
+.grid{display:grid;gap:12px}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.cell{display:flex;flex-direction:column;gap:4px;min-width:0}
+.thumb{position:relative;aspect-ratio:1/1;border-radius:var(--thumb-radius);overflow:hidden;
+  box-shadow:0 0 0 1px rgba(14,21,38,.06) inset}
+.skin-cheer .thumb{box-shadow:0 6px 14px rgba(255,107,74,.18)}
+.thumb::before,.row-thumb::before,.hero-art::before,.cover::before,.result-cover::before,.cover-hero::before,.card-art::before{
+  content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 16% 6%,rgba(255,255,255,.36),transparent 56%);z-index:1}
+.cell-title{font-size:11px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+.cell-sub{font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dur{position:absolute;right:5px;bottom:5px;z-index:3;background:rgba(6,9,16,.62);color:#fff;font-size:8.5px;font-weight:700;
+  padding:2px 5px;border-radius:6px;letter-spacing:.02em}
+.kind{position:absolute;left:5px;top:5px;z-index:3;width:17px;height:17px;border-radius:6px;background:rgba(6,9,16,.55);color:#fff;display:grid;place-items:center}
+.kind svg{width:9px;height:9px}
+
+/* ---------- artwork gradients ---------- */
+.art-1{background:linear-gradient(150deg,#6C8CFF 0%,#8B5CF6 46%,#2A1B5C 100%)}
+.art-2{background:linear-gradient(150deg,#7DD3FC 0%,#BAE6FD 38%,#FDE68A 100%)}
+.art-3{background:linear-gradient(150deg,#334155 0%,#1E293B 55%,#0B1220 100%)}
+.art-4{background:linear-gradient(150deg,#FF3D71 0%,#FF8A3D 58%,#3B0A1F 100%)}
+.art-5{background:linear-gradient(150deg,#1E3A8A 0%,#0F172A 60%,#05080F 100%)}
+.art-6{background:linear-gradient(150deg,#F5D0FE 0%,#A78BFA 52%,#312E81 100%)}
+.art-7{background:linear-gradient(150deg,#34D399 0%,#22D3EE 55%,#0E7490 100%)}
+.art-8{background:linear-gradient(150deg,#FB923C 0%,#F43F5E 62%,#4C0519 100%)}
+
+.screen[data-layout="A"]::after{content:"";position:absolute;left:0;right:0;bottom:0;height:88px;z-index:5;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,0),var(--bg) 62%)}
+
+/* ---------- fab ---------- */
+.fab{position:absolute;right:18px;bottom:30px;z-index:6;display:flex;align-items:center;gap:7px;border:0;cursor:default;
+  background:var(--fab-bg);color:var(--fab-ink);font:inherit;font-size:12.5px;font-weight:750;padding:13px 18px;border-radius:16px;
+  box-shadow:0 12px 26px rgba(17,26,46,.3)}
+.fab svg{width:15px;height:15px}
+.skin-cheer .fab{border-radius:999px;box-shadow:0 12px 24px rgba(255,92,60,.4)}
+[data-layout="B"] .fab{bottom:92px}
+
+/* ---------- cinematic ---------- */
+.hero{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:16/10;margin-top:2px;box-shadow:var(--shadow)}
+.hero-art{position:absolute;inset:0}
+.hero-scrim{position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(5,7,12,0) 34%,rgba(5,7,12,.84) 100%)}
+.hero-text{position:absolute;left:14px;right:52px;bottom:12px;z-index:3;color:#fff}
+.kicker{font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;font-weight:750;opacity:.78}
+.hero-title{font-size:21px;font-weight:800;letter-spacing:-.03em;margin-top:3px;line-height:1.1}
+.hero-sub{font-size:10.5px;opacity:.84;margin-top:3px}
+.hero-play{position:absolute;right:12px;bottom:12px;z-index:3;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.94);color:#0B1220;display:grid;place-items:center;border:0}
+.hero-play svg{width:14px;height:14px;margin-left:1px}
+.section-label{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:750;margin:14px 2px 8px}
+.skin-cheer .section-label{text-transform:none;letter-spacing:0;font-size:12px;color:var(--primary);font-weight:800}
+.card-art{position:relative;border-radius:var(--thumb-radius);overflow:hidden;aspect-ratio:1/1;box-shadow:var(--shadow)}
+.card-scrim{position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(5,7,12,0) 42%,rgba(5,7,12,.8) 100%)}
+.card-text{position:absolute;left:9px;right:9px;bottom:8px;z-index:3;color:#fff}
+.card-title{font-size:11.5px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-sub{font-size:9px;opacity:.82;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- bottom nav ---------- */
+.bottom-nav{flex:none;display:flex;align-items:center;justify-content:space-around;padding:9px 8px 24px;background:var(--surface);border-top:1px solid var(--line);position:relative;z-index:5}
+.skin-cheer .bottom-nav{border-top-color:transparent;border-radius:24px 24px 0 0;box-shadow:0 -10px 26px rgba(255,107,74,.12)}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8.5px;font-weight:700;color:var(--muted);
+  border:0;background:0;font-family:inherit;cursor:default;padding:5px 12px;border-radius:12px;letter-spacing:.01em}
+.nav-item svg{width:17px;height:17px}
+.nav-item.is-active{color:var(--nav-active)}
+.skin-cheer .nav-item.is-active{background:var(--accent-soft)}
+
+/* ---------- timeline rows ---------- */
+.row-item{display:flex;gap:11px;align-items:center;padding:7px 0}
+.row-thumb{position:relative;width:56px;height:56px;border-radius:var(--thumb-radius);overflow:hidden;flex:none;box-shadow:0 0 0 1px rgba(14,21,38,.06) inset}
+.skin-cheer .row-thumb{box-shadow:0 5px 12px rgba(255,107,74,.18)}
+.row-body{min-width:0;flex:1}
+.row-title{font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+.row-sub{font-size:10.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.source-chip{display:inline-flex;align-items:center;gap:4px;margin-top:5px;font-size:8.5px;font-weight:750;padding:2px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.source-chip svg{width:8px;height:8px}
+.skin-cheer .source-chip{background:#FFF0E8;color:#E2542F}
+.row-chev{color:var(--muted);opacity:.5;flex:none;display:grid;place-items:center}
+.row-chev svg{width:14px;height:14px}
+/* ---------- song details ---------- */
+.identity{display:flex;gap:13px;margin-top:4px;align-items:center}
+.cover{position:relative;width:86px;height:86px;border-radius:var(--card-radius);overflow:hidden;flex:none;box-shadow:var(--shadow)}
+.cover-edit{position:absolute;right:5px;bottom:5px;z-index:4;width:23px;height:23px;border-radius:50%;background:rgba(255,255,255,.94);
+  color:#0B1220;display:grid;place-items:center;border:0;padding:0}
+.cover-edit svg{width:12px;height:12px}
+.identity-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.inline-field{border-bottom:1px solid var(--line);padding-bottom:4px}
+.if-label{font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:750}
+.if-value{font-size:13.5px;font-weight:var(--title-weight);letter-spacing:var(--title-tracking);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.source-line{display:flex;align-items:center;gap:5px;margin-top:10px;font-size:10px;font-weight:700;color:var(--accent)}
+.source-line svg{width:10px;height:10px}
+.skin-cheer .source-line{color:#E2542F}
+
+.match-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--card-radius);padding:11px 12px;box-shadow:var(--shadow);margin-top:13px}
+.skin-cheer .match-card{border-color:transparent;background:linear-gradient(180deg,#FFFFFF,#FFF6EF)}
+.match-head{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:750;color:var(--accent)}
+.match-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);flex:none}
+.match-src{margin-left:auto;color:var(--muted);font-weight:650}
+.match-title{font-size:11.5px;font-weight:600;margin-top:7px;color:var(--ink);letter-spacing:-.01em}
+.match-actions{display:flex;gap:7px;margin-top:9px}
+.btn-tiny{font:inherit;font-size:10.5px;font-weight:750;padding:6px 13px;border-radius:999px;border:0;background:var(--primary);color:var(--primary-ink);cursor:default}
+.btn-tiny.ghost{background:var(--chip-bg);color:var(--ink)}
+.skin-cheer .btn-tiny{border-radius:999px}
+
+.collapse-row{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:650;padding:13px 2px 9px;color:var(--muted)}
+.collapse-row svg{width:15px;height:15px;opacity:.75}
+
+.block{padding-top:4px}
+.block-title{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:800;color:var(--muted);margin-bottom:8px}
+.skin-cheer .block-title{letter-spacing:.08em;color:var(--primary)}
+.slider{padding:10px 5px 6px}
+.track{position:relative;height:6px;border-radius:3px;background:var(--line)}
+.skin-cheer .track{background:#FFE1D3}
+.range{position:absolute;left:6%;right:14%;top:0;bottom:0;border-radius:3px;background:var(--primary)}
+.handle{position:absolute;top:50%;width:15px;height:15px;border-radius:50%;background:#fff;border:2.5px solid var(--primary);
+  transform:translate(-50%,-50%);box-shadow:0 2px 6px rgba(0,0,0,.16);z-index:2}
+.h-start{left:6%}
+.h-end{left:86%}
+.clip-inputs{display:flex;align-items:center;gap:7px;margin-top:9px}
+.clip-inputs label{flex:1;display:flex;flex-direction:column;gap:1px;font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);font-weight:750;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:6px 8px}
+.skin-cheer .clip-inputs label{border-color:transparent;box-shadow:0 3px 8px rgba(255,107,74,.1)}
+.clip-inputs b{font-size:12.5px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums;font-weight:700;text-transform:none}
+.clip-len{font-size:9.5px;color:var(--muted);font-weight:700;white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:10.5px;font-weight:700;padding:7px 11px;border-radius:999px;background:var(--chip-bg);color:var(--muted);border:0;cursor:default;letter-spacing:-.01em}
+.chip.is-active{background:var(--chip-active-bg);color:var(--chip-active-ink)}
+.skin-pro .chip{border:1px solid var(--line)}
+.skin-pro .chip.is-active{border-color:transparent}
+.hint{font-size:9.5px;color:var(--muted);margin-top:7px;font-weight:600}
+.check-row{display:flex;align-items:center;gap:9px;font-size:11.5px;font-weight:650;margin-top:15px;color:var(--ink)}
+.checkbox{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line);display:grid;place-items:center;flex:none;
+  background:var(--surface);color:transparent;padding:0}
+.checkbox svg{width:10px;height:10px}
+.checkbox.is-on{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}
+.sticky-cta{flex:none;padding:10px 18px 26px;background:var(--bg)}
+.skin-cheer .sticky-cta{background:transparent}
+.btn-primary{width:100%;border:0;font:inherit;font-size:13px;font-weight:750;padding:14px;border-radius:16px;background:var(--primary);
+  color:var(--primary-ink);cursor:default;box-shadow:0 10px 22px rgba(17,26,46,.2);letter-spacing:-.01em}
+.skin-cheer .btn-primary{background:linear-gradient(135deg,#FF8A5C,#FF5C3C);border-radius:999px;box-shadow:0 12px 24px rgba(255,92,60,.36)}
+
+/* cover-first */
+.cover-hero{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3;box-shadow:var(--shadow)}
+.cover-scrim{position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(5,7,12,.05) 30%,rgba(5,7,12,.78) 100%)}
+.cover-text{position:absolute;left:14px;right:14px;bottom:13px;z-index:3;color:#fff}
+.cover-title{font-size:23px;font-weight:800;letter-spacing:-.03em;line-height:1.08}
+.cover-artist{font-size:11.5px;opacity:.86;margin-top:2px}
+.cover-change{position:absolute;right:11px;top:11px;z-index:4;display:flex;align-items:center;gap:5px;border:0;cursor:default;
+  font:inherit;font-size:9.5px;font-weight:750;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.92);color:#0B1220}
+.cover-change svg{width:10px;height:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--card-radius);padding:13px;box-shadow:var(--shadow);margin-top:12px}
+.skin-cheer .card{border-color:transparent}
+.match-line{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:750;color:var(--accent);margin-bottom:9px}
+.field-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;font-size:11px;color:var(--muted);font-weight:600}
+.field-row + .field-row{border-top:1px solid var(--line)}
+.field-row b{color:var(--ink);font-weight:650;font-size:11.5px;letter-spacing:-.01em}
+
+/* ---------- processing ---------- */
+.processing{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 26px 56px;text-align:center}
+.ring{width:154px;height:154px;border-radius:50%;position:relative;display:grid;place-items:center;margin-bottom:22px;
+  background:conic-gradient(var(--primary) 0 62%, var(--line) 62% 100%)}
+.skin-cheer .ring{background:conic-gradient(#FF6B4A 0 62%, #FFE3D6 62% 100%);box-shadow:0 16px 34px rgba(255,107,74,.22)}
+.ring::before{content:"";position:absolute;inset:13px;border-radius:50%;background:var(--bg)}
+.skin-cheer .ring::before{background:#FFF7F0}
+.ring-inner{position:relative;z-index:2;text-align:center}
+.ring-pct{font-size:32px;font-weight:800;letter-spacing:-.04em;line-height:1}
+.ring-pct span{font-size:17px;font-weight:700;letter-spacing:0;opacity:.55}
+.ring-label{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:800;margin-top:5px}
+.p-title{font-size:16px;font-weight:var(--title-weight);letter-spacing:var(--title-tracking)}
+.p-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.steps{display:flex;gap:11px;margin-top:24px;font-size:9px;font-weight:750;color:var(--muted);flex-wrap:wrap;justify-content:center}
+.step{display:flex;align-items:center;gap:4px}
+.step i{width:14px;height:14px;border-radius:50%;background:var(--line);display:grid;place-items:center;color:#fff;flex:none}
+.step i svg{width:8px;height:8px}
+.step.is-done{color:var(--ink)}
+.step.is-done i{background:var(--primary)}
+.step.is-now{color:var(--primary)}
+.step.is-now i{background:var(--primary);box-shadow:0 0 0 3px var(--accent-soft)}
+.btn-soft{font:inherit;font-size:11.5px;font-weight:700;padding:11px 18px;border-radius:12px;background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);cursor:default;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.skin-cheer .btn-soft{border-color:transparent;border-radius:999px;box-shadow:0 5px 14px rgba(255,107,74,.12)}
+.btn-soft svg{width:12px;height:12px}
+.cancel{margin-top:26px;padding:11px 30px;color:var(--muted)}
+
+/* ---------- result ---------- */
+.result{display:flex;flex-direction:column;align-items:center;text-align:center;padding:20px 22px 0}
+.result-cover{width:134px;height:134px;border-radius:var(--card-radius);position:relative;overflow:hidden;
+  box-shadow:0 24px 44px -20px rgba(0,0,0,.55)}
+.skin-cheer .result-cover{box-shadow:0 22px 40px -16px rgba(255,92,60,.55)}
+.result-title{font-size:22px;font-weight:var(--title-weight);letter-spacing:var(--title-tracking);margin-top:16px}
+.result-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.result-path{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:750;color:var(--accent);background:var(--accent-soft);
+  padding:5px 11px;border-radius:999px;margin-top:11px}
+.result-path svg{width:10px;height:10px}
+.skin-cheer .result-path{color:#E2542F;background:#FFF0E8}
+.result-actions{display:flex;gap:8px;margin-top:11px;width:100%}
+.result-actions .btn-soft{flex:1}
+.wide{width:100%;margin-top:9px}
+.done{margin-top:9px}
+.result-note{font-size:9.5px;color:var(--muted);margin-top:9px;font-weight:600}
+
+/* ---------- settings ---------- */
+.section-title{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:800;color:var(--muted);margin:16px 2px 7px}
+.skin-cheer .section-title{color:var(--primary);letter-spacing:.08em}
+.toggle-row{display:flex;align-items:center;gap:12px}
+.toggle-label{font-size:12px;font-weight:650;letter-spacing:-.01em}
+.toggle-hint{font-size:9.5px;color:var(--muted);margin-top:2px;line-height:1.4;font-weight:600}
+.switch{width:38px;height:22px;border-radius:999px;background:var(--line);position:relative;flex:none;margin-left:auto}
+.switch.is-on{background:var(--primary)}
+.skin-cheer .switch{background:#FFE1D3}
+.skin-cheer .switch.is-on{background:var(--primary)}
+.switch span{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch.is-on span{left:19px}
+.divider{height:1px;background:var(--line);margin:11px 0}
+
+/* ---------- choice bar ---------- */
+.choice-bar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(11,13,18,.9);backdrop-filter:blur(16px);border-top:1px solid #232936}
+.choice-inner{max-width:1160px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.choice-label{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#6C7689;font-weight:800}
+.choice-summary{font-size:13px;color:#C6CEDA;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.choice-summary b{color:#fff;font-weight:700}
+.choice-summary i{color:#4B5364;font-style:normal}
+.copy-btn{margin-left:auto;font:inherit;font-size:12px;font-weight:700;padding:9px 16px;border-radius:10px;border:1px solid #2B3240;
+  background:#1A1F29;color:#D9E0EC;cursor:pointer}
+.copy-btn:hover{border-color:#4A5263}
+.copy-btn.done{background:#1F7A4D;border-color:transparent;color:#fff}
+
+/* ---------- dark app theme preview ---------- */
+body.dark-app .skin-pro{
+  --bg:#0E1117;--surface:#161B23;--ink:#F1F5F9;--muted:#8A95A8;--line:#242B36;
+  --primary:#F8FAFC;--primary-ink:#0E1117;--accent:#8B8CFF;--accent-soft:#232743;
+  --tab-bg:#171C25;--tab-active-bg:#252C38;--tab-active-ink:#FFFFFF;--tab-ink:#8A95A8;
+  --fab-bg:#F8FAFC;--fab-ink:#0E1117;--chip-bg:#1B212B;--chip-active-bg:#F8FAFC;--chip-active-ink:#0E1117;
+  --nav-active:#F8FAFC;--shadow:0 1px 2px rgba(0,0,0,.45);
+}
+body.dark-app .skin-cheer{
+  --bg:#17111C;--surface:#211826;--ink:#FDF7FF;--muted:#A08FA9;--line:#332537;
+  --primary:#FF7A5C;--accent:#A78BFF;--accent-soft:#2B2140;
+  --tab-bg:#251A2B;--chip-bg:#2A1E31;--chip-active-bg:#FF7A5C;--chip-active-ink:#FFFFFF;
+  --nav-active:#FF8A6B;
+  background:radial-gradient(520px 200px at 88% -8%, rgba(255,201,60,.13), transparent 70%), var(--bg);
+}
+body.dark-app .skin-pro .match-card,body.dark-app .skin-pro .card{background:var(--surface)}
+body.dark-app .skin-cheer .match-card{background:linear-gradient(180deg,#241A2C,#2A1E31)}
+body.dark-app .skin-cheer .sticky-cta{background:transparent}
+body.dark-app .skin-cheer .ring::before{background:#17111C}
+
+/* ---------- responsive ---------- */
+@media (max-width:700px){
+  h1{font-size:34px}
+  .legend{grid-template-columns:1fr}
+  .pair{flex-wrap:nowrap;overflow-x:auto;padding-bottom:14px;scrollbar-width:thin}
+  .section,.page-head{padding-left:18px;padding-right:18px}
+  .choice-inner{padding:12px 18px}
+  .choice-summary{font-size:12px}
+}
+
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div class="eyebrow">Cue · design review</div>
+  <h1>Pick the look.<br><em>Same app, two personalities.</em></h1>
+  <p class="lede">Every layout below is drawn twice from the same structure. The cheerful skin warms the palette, rounds the corners and lifts the shadows; the professional skin cools the palette, tightens the type and flattens the surfaces. Nothing moves except the mood — so you are choosing a tone, not a different app.</p>
+  <div class="legend">
+    <div class="legend-card">
+      <div class="swatches"><i style="background:#FF6B4A"></i><i style="background:#FFC93C"></i><i style="background:#7C5CFF"></i><i style="background:#FFF7F0"></i></div>
+      <div><b>Cheerful</b><span>Cream background, coral + violet, 22–24 px radii, coloured shadows, heavier headings, gradient pills and a little sparkle.</span></div>
+    </div>
+    <div class="legend-card">
+      <div class="swatches"><i style="background:#111A2E"></i><i style="background:#4F46E5"></i><i style="background:#E6EAF0"></i><i style="background:#F7F8FA"></i></div>
+      <div><b>Professional</b><span>Cool grey, ink + indigo, 12–14 px radii, neutral shadows, tighter type, flat pills, borders instead of glow.</span></div>
+    </div>
+  </div>
+  <div class="page-tools">
+    <button class="tool-btn" id="themeToggle" aria-pressed="false">◐&nbsp; Preview dark app theme</button>
+  </div>
+</header>
+
+<section class="section">
+  <div class="section-head"><span class="section-num">01</span><h2>Gallery — three layouts</h2></div>
+  <p class="section-desc">The home screen after the redesign: Recent, Screen recordings and MP3 music in one place. Same content in all three; what changes is density and where the tabs live.</p>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">A</div>
+      <div><h3>Library</h3><p>Three-column grid with counts in the tab strip and an extended Add button. Densest, most familiar, and the music tab becomes a real library.</p></div>
+    </div>
+    <div class="pair" id="pairA"></div>
+  </div>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">B</div>
+      <div><h3>Cinematic</h3><p>A hero card for the last song and two-column artwork cards with a bottom navigation bar. The most expressive, the least information per screen.</p></div>
+    </div>
+    <div class="pair" id="pairB"></div>
+  </div>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">C</div>
+      <div><h3>Timeline</h3><p>Date-grouped rows with wide thumbnails and a source chip, plus search in the header. The easiest to scan, with the fewest items visible at once.</p></div>
+    </div>
+    <div class="pair" id="pairC"></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><span class="section-num">02</span><h2>Song details — two forms</h2></div>
+  <p class="section-desc">One set of inputs, no repeated search boxes. The cover is the artwork entry point, secondary fields collapse, and the clip and quality controls stay in reach of the Create button.</p>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">F1</div>
+      <div><h3>Details-first</h3><p>Compact cover beside inline title and artist, a single match card, then clip and quality. The whole form fits with barely any scrolling.</p></div>
+    </div>
+    <div class="pair" id="pairF1"></div>
+  </div>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">F2</div>
+      <div><h3>Cover-first</h3><p>A large cover with the title over it, then tidy cards for fields, clip and quality. More scroll, more of a “now playing” feel.</p></div>
+    </div>
+    <div class="pair" id="pairF2"></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><span class="section-num">03</span><h2>Shared screens</h2></div>
+  <p class="section-desc">Processing, the saved result and the new delete-source setting. These look the same in every layout, so they only depend on the skin.</p>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">P</div>
+      <div><h3>Processing</h3><p>One ring, one stage, one cancel. The delete-source promise is visible in the steps, not hidden in Settings.</p></div>
+    </div>
+    <div class="pair" id="pairP"></div>
+  </div>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">R</div>
+      <div><h3>Saved</h3><p>The new MP3 with its cover, where it landed, and the actions you actually use. It confirms when the source recording was removed.</p></div>
+    </div>
+    <div class="pair" id="pairR"></div>
+  </div>
+
+  <div class="layout-block">
+    <div class="layout-head">
+      <div class="layout-letter">S</div>
+      <div><h3>Settings — after processing</h3><p>Delete-source lives here with a confirm switch, next to the identification toggles it depends on.</p></div>
+    </div>
+    <div class="pair" id="pairS"></div>
+  </div>
+</section>
+
+<div class="choice-bar">
+  <div class="choice-inner">
+    <span class="choice-label">Your pick</span>
+    <span class="choice-summary" id="summary"></span>
+    <button class="copy-btn" id="copyBtn">Copy choice</button>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.4v13.2L19 12z"/></svg>',
+  music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="M15 10.5l5-3v9l-5-3z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.4V12l3 2"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M5 14v5h14v-5"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.4L19 9.2l-5.2 1.8L12 16.4l-1.8-5.4L5 9.2l5.2-1.8z"/></svg>'
+};
+
+const STATUS = '<span class="status-icons">'
+  + '<svg width="15" height="10" viewBox="0 0 15 10" fill="currentColor"><rect x="0" y="6" width="2.4" height="4" rx=".6"/><rect x="4" y="4" width="2.4" height="6" rx=".6"/><rect x="8" y="2" width="2.4" height="8" rx=".6"/><rect x="12" y="0" width="2.4" height="10" rx=".6"/></svg>'
+  + '<svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor"><path d="M7 9.4 1 3.6A8.5 8.5 0 0 1 13 3.6z"/></svg>'
+  + '<svg width="21" height="10" viewBox="0 0 21 10" fill="none" stroke="currentColor" stroke-width="1"><rect x=".6" y=".6" width="16.4" height="8.8" rx="2.2"/><rect x="2.2" y="2.2" width="11.4" height="5.6" rx="1.2" fill="currentColor" stroke="none"/><path d="M18.6 3.4v3.2" stroke-linecap="round"/></svg>'
+  + '</span>';
+
+const recent = [
+  { t: 'Believer', s: 'Imagine Dragons', d: '3:21', a: 'art-1', kind: 'music' },
+  { t: 'Mr. Blue Sky', s: 'Electric Light Orchestra', d: '5:03', a: 'art-2', kind: 'music' },
+  { t: 'Screen_Recording_1204', s: 'Screen recording', d: '0:42', a: 'art-3', kind: 'video' },
+  { t: 'Blinding Lights', s: 'The Weeknd', d: '3:20', a: 'art-4', kind: 'music' },
+  { t: 'Screen_Recording_1130', s: 'Screen recording', d: '1:10', a: 'art-5', kind: 'video' },
+  { t: 'Dreams', s: 'Fleetwood Mac', d: '4:17', a: 'art-6', kind: 'music' },
+  { t: 'Levitating', s: 'Dua Lipa', d: '3:23', a: 'art-7', kind: 'music' },
+  { t: 'Screen_Recording_1028', s: 'Screen recording', d: '0:58', a: 'art-5', kind: 'video' },
+  { t: 'Heat Waves', s: 'Glass Animals', d: '3:58', a: 'art-8', kind: 'music' }
+];
+
+const statusbar = () => '<div class="island"></div><div class="statusbar"><span>9:41</span>' + STATUS + '</div>';
+const homeBar = () => '<div class="home-bar"></div>';
+const brand = () => '<div class="brand">Cue<span class="spark">✦</span></div>';
+
+const cell = (it) => '<div class="cell">'
+  + '<div class="thumb ' + it.a + '">'
+  + (it.kind === 'video' ? '<span class="kind">' + ICON.play + '</span>' : '')
+  + '<span class="dur">' + it.d + '</span></div>'
+  + '<div class="cell-title">' + it.t + '</div>'
+  + '<div class="cell-sub">' + it.s + '</div>'
+  + '</div>';
+
+const rowItem = (it, chip) => '<div class="row-item">'
+  + '<div class="row-thumb ' + it.a + '">'
+  + (it.kind === 'video' ? '<span class="kind">' + ICON.play + '</span>' : '')
+  + '</div>'
+  + '<div class="row-body">'
+  + '<div class="row-title">' + it.t + '</div>'
+  + '<div class="row-sub">' + it.s + ' · ' + it.d + '</div>'
+  + (chip ? '<span class="source-chip">' + ICON.sparkle + chip + '</span>' : '')
+  + '</div>'
+  + '<span class="row-chev">' + ICON.chevron + '</span>'
+  + '</div>';
+
+/* ---------- layout A ---------- */
+const homeA = (skin) => '<div class="screen skin-' + skin + '" data-layout="A">'
+  + statusbar()
+  + '<header class="appbar">' + brand() + '<button class="icon-btn">' + ICON.gear + '</button></header>'
+  + '<div class="tabs">'
+  + '<button class="tab is-active">Recent</button>'
+  + '<button class="tab">Recordings <span class="count">12</span></button>'
+  + '<button class="tab">Music <span class="count">34</span></button>'
+  + '</div>'
+  + '<div class="content">'
+  + '<div class="date-label">Today</div>'
+  + '<div class="grid grid-3">' + recent.slice(0, 3).map(cell).join('') + '</div>'
+  + '<div class="date-label">Yesterday</div>'
+  + '<div class="grid grid-3">' + recent.slice(3, 6).map(cell).join('') + '</div>'
+  + '<div class="date-label">Earlier</div>'
+  + '<div class="grid grid-3">' + recent.slice(6, 9).map(cell).join('') + '</div>'
+  + '</div>'
+  + '<button class="fab">' + ICON.plus + '<span>Add</span></button>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- layout B ---------- */
+const homeB = (skin) => '<div class="screen skin-' + skin + '" data-layout="B">'
+  + statusbar()
+  + '<header class="appbar">' + brand() + '<button class="icon-btn">' + ICON.gear + '</button></header>'
+  + '<div class="content">'
+  + '<div class="hero">'
+  + '<div class="hero-art art-1"></div><div class="hero-scrim"></div>'
+  + '<div class="hero-text"><div class="kicker">Last song</div><div class="hero-title">Believer</div><div class="hero-sub">Imagine Dragons · 3:21</div></div>'
+  + '<button class="hero-play">' + ICON.play + '</button>'
+  + '</div>'
+  + '<div class="section-label">Recently made</div>'
+  + '<div class="grid grid-2">'
+  + recent.slice(1, 5).map((it) => '<div class="card-art ' + it.a + '">'
+      + '<div class="card-scrim"></div>'
+      + '<div class="card-text"><div class="card-title">' + it.t + '</div><div class="card-sub">' + it.s + ' · ' + it.d + '</div></div>'
+      + '</div>').join('')
+  + '</div>'
+  + '</div>'
+  + '<button class="fab">' + ICON.plus + '<span>Add</span></button>'
+  + '<nav class="bottom-nav">'
+  + '<button class="nav-item is-active">' + ICON.clock + 'Recent</button>'
+  + '<button class="nav-item">' + ICON.video + 'Recordings</button>'
+  + '<button class="nav-item">' + ICON.music + 'Music</button>'
+  + '</nav>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- layout C ---------- */
+const homeC = (skin) => '<div class="screen skin-' + skin + '" data-layout="C">'
+  + statusbar()
+  + '<header class="appbar">' + brand()
+  + '<div class="appbar-actions"><button class="icon-btn">' + ICON.search + '</button><button class="icon-btn">' + ICON.gear + '</button></div>'
+  + '</header>'
+  + '<div class="tabs tabs-seg">'
+  + '<button class="tab is-active">Recent</button>'
+  + '<button class="tab">Recordings</button>'
+  + '<button class="tab">Music</button>'
+  + '</div>'
+  + '<div class="content">'
+  + '<div class="date-label">Today</div>'
+  + rowItem(recent[0], 'From screen text')
+  + rowItem(recent[1], '')
+  + rowItem(recent[2], '')
+  + '<div class="date-label">Yesterday</div>'
+  + rowItem(recent[3], '')
+  + rowItem(recent[4], '')
+  + '</div>'
+  + '<button class="fab">' + ICON.plus + '<span>Add</span></button>'
+  + homeBar()
+  + '</div>';
+const slider = () => '<div class="slider"><div class="track"><div class="range"></div>'
+  + '<span class="handle h-start"></span><span class="handle h-end"></span></div></div>';
+
+const clipInputs = () => '<div class="clip-inputs">'
+  + '<label>Start<b>00:12</b></label>'
+  + '<label>End<b>03:41</b></label>'
+  + '<span class="clip-len">3:29</span>'
+  + '</div>';
+
+const qualityChips = () => '<div class="chips">'
+  + '<span class="chip is-active">Best</span>'
+  + '<span class="chip">Balanced</span>'
+  + '<span class="chip">256</span>'
+  + '<span class="chip">192</span>'
+  + '</div><div class="hint">≈ 6.2 MB · VBR ~245 kbps</div>';
+
+const checkRow = () => '<label class="check-row"><span class="checkbox is-on">' + ICON.check
+  + '</span>Delete the source recording</label>';
+
+/* ---------- form F1: details-first ---------- */
+const detailsF1 = (skin) => '<div class="screen skin-' + skin + '" data-layout="F1">'
+  + statusbar()
+  + '<header class="appbar appbar-detail"><button class="icon-btn">' + ICON.back + '</button>'
+  + '<div class="appbar-title">Song details</div><button class="icon-btn">' + ICON.more + '</button></header>'
+  + '<div class="content scroll">'
+  + '<div class="identity">'
+  + '<div class="cover art-1"><button class="cover-edit">' + ICON.refresh + '</button></div>'
+  + '<div class="identity-fields">'
+  + '<div class="inline-field"><div class="if-label">Title</div><div class="if-value">Believer</div></div>'
+  + '<div class="inline-field"><div class="if-label">Artist</div><div class="if-value">Imagine Dragons</div></div>'
+  + '<div class="inline-field"><div class="if-label">Album</div><div class="if-value">Evolve · 2017</div></div>'
+  + '</div></div>'
+  + '<div class="source-line">' + ICON.sparkle + 'Read from the screen</div>'
+  + '<div class="match-card">'
+  + '<div class="match-head"><span class="match-dot"></span>Matched · 98%<span class="match-src">iTunes</span></div>'
+  + '<div class="match-title">Believer — Imagine Dragons</div>'
+  + '<div class="match-actions"><button class="btn-tiny">Use this</button><button class="btn-tiny ghost">Other 3</button></div>'
+  + '</div>'
+  + '<div class="collapse-row"><span>More details</span>' + ICON.down + '</div>'
+  + '<div class="block"><div class="block-title">Clip</div>' + slider() + clipInputs() + '</div>'
+  + '<div class="block" style="margin-top:14px"><div class="block-title">Quality</div>' + qualityChips() + '</div>'
+  + checkRow()
+  + '</div>'
+  + '<footer class="sticky-cta"><button class="btn-primary">Create MP3</button></footer>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- form F2: cover-first ---------- */
+const detailsF2 = (skin) => '<div class="screen skin-' + skin + '" data-layout="F2">'
+  + statusbar()
+  + '<header class="appbar appbar-detail"><button class="icon-btn">' + ICON.back + '</button>'
+  + '<div class="appbar-title">Song details</div><button class="icon-btn">' + ICON.more + '</button></header>'
+  + '<div class="content scroll">'
+  + '<div class="cover-hero art-1">'
+  + '<div class="cover-scrim"></div>'
+  + '<div class="cover-text"><div class="cover-title">Believer</div><div class="cover-artist">Imagine Dragons</div></div>'
+  + '<button class="cover-change">' + ICON.refresh + 'Change cover</button>'
+  + '</div>'
+  + '<div class="card">'
+  + '<div class="match-line"><span class="match-dot"></span>Matched · 98%<span class="match-src">iTunes</span></div>'
+  + '<div class="field-row"><span>Album</span><b>Evolve</b></div>'
+  + '<div class="field-row"><span>Year</span><b>2017</b></div>'
+  + '<div class="field-row"><span>Genre</span><b>Pop Rock</b></div>'
+  + '<div class="field-row"><span>Track</span><b>1</b></div>'
+  + '</div>'
+  + '<div class="card"><div class="block-title">Clip</div>' + slider() + clipInputs() + '</div>'
+  + '<div class="card"><div class="block-title">Quality</div>' + qualityChips() + '</div>'
+  + checkRow()
+  + '</div>'
+  + '<footer class="sticky-cta"><button class="btn-primary">Create MP3</button></footer>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- processing ---------- */
+const processing = (skin) => '<div class="screen skin-' + skin + '" data-layout="P">'
+  + statusbar()
+  + '<header class="appbar appbar-detail"><div class="appbar-title">Creating MP3</div></header>'
+  + '<div class="content processing">'
+  + '<div class="ring"><div class="ring-inner"><div class="ring-pct">62<span>%</span></div><div class="ring-label">Converting</div></div></div>'
+  + '<div class="p-title">Believer</div>'
+  + '<div class="p-sub">Imagine Dragons · 3:29</div>'
+  + '<div class="steps">'
+  + '<span class="step is-done"><i>' + ICON.check + '</i>Prepare</span>'
+  + '<span class="step is-now"><i></i>Convert</span>'
+  + '<span class="step"><i></i>Tag</span>'
+  + '<span class="step"><i></i>Save</span>'
+  + '</div>'
+  + '<button class="btn-soft cancel">Cancel</button>'
+  + '</div>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- result ---------- */
+const result = (skin) => '<div class="screen skin-' + skin + '" data-layout="R">'
+  + statusbar()
+  + '<header class="appbar appbar-detail"><div class="appbar-title">Saved</div><button class="icon-btn">' + ICON.more + '</button></header>'
+  + '<div class="content result">'
+  + '<div class="result-cover art-1"></div>'
+  + '<div class="result-title">Believer</div>'
+  + '<div class="result-sub">Imagine Dragons · 3:29</div>'
+  + '<div class="result-path">' + ICON.folder + 'Music/Cue</div>'
+  + '<div class="result-actions"><button class="btn-soft">' + ICON.play + 'Play</button>'
+  + '<button class="btn-soft">' + ICON.share + 'Share</button></div>'
+  + '<button class="btn-soft wide">' + ICON.folder + 'Show folder</button>'
+  + '<button class="btn-soft wide">Edit tags</button>'
+  + '<button class="btn-primary done">Done — back to library</button>'
+  + '<div class="result-note">The source recording was deleted.</div>'
+  + '</div>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- settings ---------- */
+const settings = (skin) => '<div class="screen skin-' + skin + '" data-layout="S">'
+  + statusbar()
+  + '<header class="appbar appbar-detail"><button class="icon-btn">' + ICON.back + '</button>'
+  + '<div class="appbar-title">Settings</div><span style="width:32px"></span></header>'
+  + '<div class="content scroll">'
+  + '<div class="section-title">After processing</div>'
+  + '<div class="card">'
+  + '<div class="toggle-row"><div><div class="toggle-label">Delete the source recording</div>'
+  + '<div class="toggle-hint">Removes the video once the MP3 is saved.</div></div>'
+  + '<span class="switch is-on"><span></span></span></div>'
+  + '<div class="divider"></div>'
+  + '<div class="toggle-row"><div><div class="toggle-label">Always confirm first</div>'
+  + '<div class="toggle-hint">Ask before deleting anything.</div></div>'
+  + '<span class="switch is-on"><span></span></span></div>'
+  + '</div>'
+  + '<div class="section-title">Identification</div>'
+  + '<div class="card">'
+  + '<div class="toggle-row"><div><div class="toggle-label">Online lookups</div></div><span class="switch is-on"><span></span></span></div>'
+  + '<div class="divider"></div>'
+  + '<div class="toggle-row"><div><div class="toggle-label">Fingerprint matching</div></div><span class="switch is-on"><span></span></span></div>'
+  + '<div class="divider"></div>'
+  + '<div class="field-row"><span>AcoustID key</span><b>••••••••</b></div>'
+  + '</div>'
+  + '<div class="section-title">Appearance</div>'
+  + '<div class="card"><div class="chips">'
+  + '<span class="chip is-active">System</span><span class="chip">Light</span><span class="chip">Dark</span>'
+  + '</div></div>'
+  + '</div>'
+  + homeBar()
+  + '</div>';
+
+/* ---------- assembly ---------- */
+const SKINS = [
+  { id: 'cheer', label: 'Cheerful', desc: 'Warm · round · playful' },
+  { id: 'pro', label: 'Professional', desc: 'Cool · tight · precise' }
+];
+
+function option(kind, key, skin, html) {
+  const s = SKINS.find((x) => x.id === skin);
+  const action = kind === 'shared'
+    ? '<div class="follow-note">Follows your skin choice</div>'
+    : '<button class="choose" data-choose data-kind="' + kind + '" data-key="' + key + '" data-skin="' + skin
+      + '" aria-pressed="false">Choose this</button>';
+  return '<figure class="option" data-kind="' + kind + '" data-key="' + key + '" data-skin="' + skin + '">'
+    + '<div class="phone">' + html + '</div>'
+    + '<figcaption>'
+    + '<div class="opt-meta"><span class="opt-skin"><i class="dot ' + skin + '"></i>' + s.label + '</span>'
+    + '<span class="opt-desc">' + s.desc + '</span></div>'
+    + action
+    + '</figcaption>'
+    + '</figure>';
+}
+
+function pair(id, kind, key, render) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = SKINS.map((s) => option(kind, key, s.id, render(s.id))).join('');
+}
+
+pair('pairA', 'layout', 'A', homeA);
+pair('pairB', 'layout', 'B', homeB);
+pair('pairC', 'layout', 'C', homeC);
+pair('pairF1', 'form', 'F1', detailsF1);
+pair('pairF2', 'form', 'F2', detailsF2);
+pair('pairP', 'shared', 'P', processing);
+pair('pairR', 'shared', 'R', result);
+pair('pairS', 'shared', 'S', settings);
+
+/* ---------- selection ---------- */
+const LAYOUT_NAMES = { A: 'Library (A)', B: 'Cinematic (B)', C: 'Timeline (C)' };
+const FORM_NAMES = { F1: 'Details-first (F1)', F2: 'Cover-first (F2)' };
+const state = { layout: 'A', form: 'F1', skin: 'cheer' };
+
+function summaryText() {
+  return 'Gallery: ' + LAYOUT_NAMES[state.layout]
+    + ' · Skin: ' + (state.skin === 'cheer' ? 'Cheerful' : 'Professional')
+    + ' · Song details: ' + FORM_NAMES[state.form];
+}
+
+function sync() {
+  document.querySelectorAll('.option').forEach((fig) => {
+    const kind = fig.dataset.kind;
+    const key = fig.dataset.key;
+    const skin = fig.dataset.skin;
+    let on = false;
+    if (kind === 'layout') on = key === state.layout && skin === state.skin;
+    if (kind === 'form') on = key === state.form && skin === state.skin;
+    fig.classList.toggle('is-selected', on);
+    const btn = fig.querySelector('.choose');
+    if (btn) {
+      btn.classList.toggle('is-selected', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.textContent = on ? '✓ Selected' : 'Choose this';
+    }
+  });
+
+  const summary = document.getElementById('summary');
+  summary.innerHTML = '<b>' + LAYOUT_NAMES[state.layout] + '</b><i>·</i>'
+    + '<b>' + (state.skin === 'cheer' ? 'Cheerful' : 'Professional') + '</b><i>·</i>'
+    + '<b>' + FORM_NAMES[state.form] + '</b>';
+}
+
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-choose]');
+  if (!btn) return;
+  const kind = btn.dataset.kind;
+  state.skin = btn.dataset.skin;
+  if (kind === 'layout') state.layout = btn.dataset.key;
+  if (kind === 'form') state.form = btn.dataset.key;
+  sync();
+});
+
+const copyBtn = document.getElementById('copyBtn');
+copyBtn.addEventListener('click', () => {
+  const text = 'Cue UI choice — ' + summaryText();
+  const done = () => {
+    copyBtn.textContent = 'Copied ✓';
+    copyBtn.classList.add('done');
+    setTimeout(() => {
+      copyBtn.textContent = 'Copy choice';
+      copyBtn.classList.remove('done');
+    }, 1600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+});
+
+function fallbackCopy(text, done) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try { document.execCommand('copy'); done(); } catch (e) { /* ignore */ }
+  document.body.removeChild(area);
+}
+
+/* ---------- dark theme preview ---------- */
+const themeToggle = document.getElementById('themeToggle');
+themeToggle.addEventListener('click', () => {
+  const on = document.body.classList.toggle('dark-app');
+  themeToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  themeToggle.innerHTML = on ? '◑&nbsp; Dark app theme on' : '◐&nbsp; Preview dark app theme';
+});
+
+sync();
+document.querySelectorAll('.content').forEach((c) => { c.scrollTop = 0; });
+//NEXT_JS_END
+</script>
+</body>
+</html>

@@ -8,6 +8,13 @@ enum class AppLanguage { SYSTEM, ENGLISH, HEBREW }
 enum class AppTheme { SYSTEM, LIGHT, DARK }
 
 /**
+ * The colour axis of the theme, independent of [AppTheme]'s light/dark mode.
+ * Each palette also carries its shape and type personality; see
+ * `docs/UI-REDESIGN-PLAN.md` and ADR 0007.
+ */
+enum class CuePalette { MINT, LAGOON, NAVY, DEEP_TEAL }
+
+/**
  * Hebrew text cannot be read by ML Kit's Latin recognizer, so the Hebrew Tesseract
  * pass is mandatory for a Hebrew UI and a fallback otherwise.
  */
@@ -26,6 +33,7 @@ data class AppSettings(
     val acoustIdKey: String = "",
     val language: AppLanguage = AppLanguage.SYSTEM,
     val theme: AppTheme = AppTheme.SYSTEM,
+    val palette: CuePalette = CuePalette.MINT,
     val filenameTemplate: String = DEFAULT_FILENAME_TEMPLATE,
     val ocrIntervalMs: Long = DEFAULT_OCR_INTERVAL_MS,
     val httpTimeoutMs: Long = DEFAULT_HTTP_TIMEOUT_MS,

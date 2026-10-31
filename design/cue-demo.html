@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cue — Timeline + big cover (interactive)</title>
+<style>
+/* ================= page chrome ================= */
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(900px 520px at 8% -10%, rgba(255,107,74,.18), transparent 60%),
+    radial-gradient(760px 460px at 94% -2%, rgba(124,92,255,.16), transparent 58%),
+    #0E1015;
+  color:#E8ECF3;
+  font-family:"Segoe UI Variable Display","Segoe UI",Inter,-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+.wrap{max-width:1140px;margin:0 auto;padding:40px 28px 80px;display:flex;gap:52px;align-items:flex-start;flex-wrap:wrap}
+.stage{flex:none}
+.side{flex:1;min-width:300px;max-width:440px;padding-top:4px}
+.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#7D8798;font-weight:700}
+h1{font-size:34px;line-height:1.05;letter-spacing:-.032em;margin:12px 0 12px;font-weight:700}
+h1 em{font-style:normal;background:linear-gradient(92deg,#FF8A5C 0%,#FFC93C 45%,#7C5CFF 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{color:#A3ABBC;font-size:14.5px;line-height:1.62;margin:0}
+.picks{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 0}
+.pick{font-size:11.5px;font-weight:650;color:#B9C1CF;background:#171B23;border:1px solid #2A3140;border-radius:999px;padding:7px 12px}
+.pick b{color:#fff;font-weight:700}
+.panel{margin-top:26px;background:#151922;border:1px solid #232935;border-radius:18px;padding:18px 18px 6px}
+.panel h2{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:#7D8798;margin:0 0 13px;font-weight:800}
+.try{display:flex;gap:11px;padding:0 0 13px;font-size:13.5px;color:#C3CBDA;line-height:1.45;transition:color .2s ease}
+.try i{flex:none;width:19px;height:19px;border-radius:50%;border:1.5px solid #333B4A;display:grid;place-items:center;margin-top:1px;color:transparent;transition:background .2s ease,border-color .2s ease,color .2s ease}
+.try i svg{width:10px;height:10px}
+.try.ticked{color:#7F8899}
+.try.ticked i{background:linear-gradient(135deg,#FF8A5C,#7C5CFF);border-color:transparent;color:#fff}
+.try.ticked span{text-decoration:line-through;text-decoration-color:#3F4757}
+.note{margin:6px 0 0;font-size:12px;color:#6C7689;line-height:1.6}
+.kbd{display:inline-block;font-size:11px;font-weight:700;color:#C6CEDA;background:#20252F;border:1px solid #2E3543;border-bottom-width:2px;border-radius:5px;padding:0 5px;line-height:1.6}
+
+/* ================= phone ================= */
+.phone{position:relative;width:382px;height:794px;border-radius:54px;background:#04060A;padding:11px;
+  box-shadow:0 50px 90px -36px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.07), 0 1px 0 rgba(255,255,255,.06) inset}
+.phone::before,.phone::after{content:"";position:absolute;left:-2px;width:2px;border-radius:2px;background:#1A1F27}
+.phone::before{top:150px;height:34px}
+.phone::after{top:206px;height:58px}
+.screen{position:relative;width:360px;height:772px;border-radius:44px;overflow:hidden;display:flex;flex-direction:column;
+  background:#FFF7F0;color:#241A2E;font-size:14px;line-height:1.35;
+  background-image:radial-gradient(420px 180px at 88% -6%, rgba(255,201,60,.22), transparent 70%)}
+.island{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:86px;height:23px;border-radius:13px;background:#05070B;z-index:30}
+.statusbar{height:40px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:12px;font-weight:650;position:relative;z-index:20}
+.status-icons{display:flex;gap:5px;align-items:center;opacity:.9}
+.home-bar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:120px;height:4px;border-radius:2px;background:rgba(120,70,50,.24);z-index:35}
+#view{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* app bar */
+.appbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px 10px}
+.appbar-title{flex:1;text-align:center;font-size:14px;font-weight:750;letter-spacing:-.01em}
+.appbar-actions{display:flex;gap:0}
+.brand{font-size:24px;font-weight:820;letter-spacing:-.04em;line-height:1;display:flex;align-items:baseline;gap:4px}
+.brand em{font-style:normal;font-size:13px;color:#FF6B4A;transform:translateY(-3px)}
+.icon-btn{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:transparent;border:0;color:#241A2E;cursor:pointer;padding:0;opacity:.8;transition:background .15s ease,opacity .15s ease}
+.icon-btn:hover{background:#FFEDE3;opacity:1}
+.icon-btn svg{width:19px;height:19px}
+
+/* segmented tabs */
+.tabs{flex:none;display:flex;gap:4px;margin:2px 16px 10px;padding:4px;border-radius:18px;background:#FFEDE3}
+.tab{flex:1;border:0;background:transparent;color:#B0776A;font:inherit;font-size:12.5px;font-weight:700;letter-spacing:-.01em;
+  padding:9px 4px;border-radius:14px;cursor:pointer;white-space:nowrap;overflow:hidden;transition:background .18s ease,color .18s ease,box-shadow .18s ease}
+.tab.is-active{background:linear-gradient(135deg,#FF8A5C,#FF5C3C);color:#fff;box-shadow:0 4px 10px rgba(255,92,60,.3)}
+
+/* content */
+.content{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 16px 104px;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.date-label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#FF6B4A;font-weight:800;margin:12px 2px 6px}
+.date-label::before{content:"";width:6px;height:6px;border-radius:50%;background:#FF6B4A;flex:none}
+
+/* timeline row */
+.row{display:flex;gap:13px;align-items:center;padding:9px 0;border:0;background:transparent;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;border-radius:16px;transition:background .15s ease}
+.row:hover{background:#FFF0E6}
+.row:active{background:#FFE8DA}
+.row-thumb{position:relative;width:58px;height:58px;border-radius:18px;overflow:hidden;flex:none;box-shadow:0 6px 14px rgba(255,107,74,.18)}
+.row-thumb::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 16% 6%,rgba(255,255,255,.34),transparent 56%)}
+.kind{position:absolute;left:5px;top:5px;z-index:3;width:18px;height:18px;border-radius:6px;background:rgba(6,9,16,.55);color:#fff;display:grid;place-items:center}
+.kind svg{width:9px;height:9px}
+.row-body{min-width:0;flex:1}
+.row-title{font-size:14.5px;font-weight:650;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{font-size:12px;color:#94839C;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.source-chip{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:9.5px;font-weight:800;letter-spacing:.02em;
+  padding:3px 8px;border-radius:999px;background:#FFF0E8;color:#E2542F}
+.source-chip svg{width:9px;height:9px}
+.source-chip.muted{background:#F4EEE9;color:#9C8A93}
+.row-chev{color:#C3AFB8;flex:none;display:grid;place-items:center}
+.row-chev svg{width:15px;height:15px}
+
+/* fab */
+.fab{position:absolute;right:18px;bottom:28px;z-index:12;display:flex;align-items:center;gap:7px;border:0;cursor:pointer;
+  background:linear-gradient(135deg,#FF8A5C,#FF5C3C);color:#fff;font:inherit;font-size:13px;font-weight:750;
+  padding:14px 19px;border-radius:999px;box-shadow:0 12px 24px rgba(255,92,60,.4);transition:transform .15s ease,box-shadow .15s ease}
+.fab:hover{transform:translateY(-1px);box-shadow:0 16px 28px rgba(255,92,60,.46)}
+.fab svg{width:15px;height:15px}
+/* ================= details ================= */
+.detail{display:flex;flex-direction:column;height:100%;min-height:0}
+.detail .content{padding:0 16px 14px}
+.hero{position:relative;height:214px;border-radius:26px;overflow:hidden;flex:none;cursor:pointer;
+  box-shadow:0 20px 36px -18px rgba(255,92,60,.55);transition:transform .18s ease}
+.hero:active{transform:scale(.995)}
+.hero::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(120% 90% at 16% 6%,rgba(255,255,255,.34),transparent 56%)}
+.hero-scrim{position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(5,7,12,.02) 30%,rgba(5,7,12,.74) 100%)}
+.hero-text{position:absolute;left:16px;right:16px;bottom:15px;z-index:3;color:#fff}
+.hero-title{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.06;word-break:break-word}
+.hero-artist{font-size:13px;opacity:.88;margin-top:3px}
+.hero-edit{position:absolute;right:12px;top:12px;z-index:4;display:flex;align-items:center;gap:5px;border:0;cursor:pointer;
+  font:inherit;font-size:10.5px;font-weight:800;padding:7px 11px;border-radius:999px;background:rgba(255,255,255,.94);color:#0B1220;
+  box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.hero-edit svg{width:11px;height:11px}
+
+.banner{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:11px 12px;border-radius:18px;
+  background:#FFF1E6;border:1px solid #FFD9C6;animation:pop .3s ease}
+@keyframes pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.banner-ico{flex:none;width:24px;height:24px;border-radius:8px;display:grid;place-items:center;background:#FF6B4A;color:#fff;margin-top:1px}
+.banner-ico svg{width:13px;height:13px}
+.banner-body{flex:1;min-width:0}
+.banner-text{font-size:11.5px;line-height:1.45;color:#7A5346;font-weight:600}
+.banner-text b{color:#3A2A33;font-weight:800}
+.banner-fix{margin-top:8px;border:0;font:inherit;font-size:11px;font-weight:800;padding:6px 12px;border-radius:999px;
+  background:#FF6B4A;color:#fff;cursor:pointer}
+
+.card{margin-top:12px;background:#fff;border-radius:22px;padding:2px 15px;box-shadow:0 8px 22px rgba(255,107,74,.12)}
+.frow{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid #F6E3D6;cursor:pointer;transition:background .15s ease}
+.frow:last-child{border-bottom:0}
+.frow:hover .fedit{background:#FFF0E8;opacity:1}
+.flabel{width:62px;flex:none;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:#A08F98;font-weight:800}
+.fvalue{flex:1;min-width:0;font-size:15px;font-weight:650;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fvalue.empty{color:#C4AEB8;font-weight:600;font-style:italic}
+.flag{flex:none;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.01em;
+  padding:3px 7px;border-radius:999px;background:#FFE3D5;color:#D9502C}
+.flag svg{width:8px;height:8px}
+.fedit{flex:none;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:transparent;color:#B49BA6;opacity:.75;transition:all .15s ease}
+.fedit svg{width:14px;height:14px}
+.frow.editing{display:block;padding:11px 0 12px}
+.frow.editing .fhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.frow.editing .flabel{width:auto}
+.finput{width:100%;font:inherit;font-size:16px;font-weight:650;letter-spacing:-.01em;color:#241A2E;background:#FFF7F0;
+  border:2px solid #FF6B4A;border-radius:13px;padding:9px 11px;outline:none;box-shadow:0 0 0 4px rgba(255,107,74,.12)}
+.finput::placeholder{color:#C4AEB8;font-weight:500}
+.factions{display:flex;gap:8px;margin-top:9px;align-items:center}
+.fhint{margin-left:auto;font-size:10px;color:#A08F98;font-weight:600}
+
+.btn{border:0;font:inherit;font-weight:750;cursor:pointer;border-radius:999px;padding:11px 16px;font-size:12.5px;letter-spacing:-.01em;
+  transition:transform .12s ease,filter .12s ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(135deg,#FF8A5C,#FF5C3C);color:#fff;box-shadow:0 8px 18px rgba(255,92,60,.32)}
+.btn.ghost{background:#FFF0E8;color:#E2542F}
+.btn.plain{background:#F6F1EE;color:#6B5A63}
+.btn.sm{padding:8px 13px;font-size:11.5px}
+
+/* match */
+.match{display:flex;gap:10px;align-items:center;margin-top:12px;padding:12px 13px;border-radius:18px;background:#fff;
+  box-shadow:0 8px 22px rgba(255,107,74,.12)}
+.match-dot{width:7px;height:7px;border-radius:50%;background:#2EBB7A;box-shadow:0 0 0 3px #E4F7EE;flex:none}
+.match-main{flex:1;min-width:0}
+.match-head{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#2E9C68}
+.match-src{margin-left:auto;color:#A08F98;letter-spacing:.04em}
+.match-title{font-size:12.5px;font-weight:650;margin-top:3px;color:#241A2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-actions{display:flex;gap:7px;margin-top:9px}
+.linkish{border:0;background:transparent;font:inherit;font-size:11.5px;font-weight:750;color:#E2542F;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* collapsible clip + quality */
+.sum{display:flex;align-items:center;gap:9px;width:100%;background:#fff;border:0;font:inherit;color:inherit;text-align:left;
+  cursor:pointer;border-radius:22px;padding:14px 15px;margin-top:12px;box-shadow:0 8px 22px rgba(255,107,74,.12)}
+.sum-ico{width:32px;height:32px;border-radius:11px;background:#FFF0E8;color:#FF6B4A;display:grid;place-items:center;flex:none}
+.sum-ico svg{width:15px;height:15px}
+.sum-body{flex:1;min-width:0}
+.sum-title{font-size:12.5px;font-weight:750}
+.sum-sub{font-size:11px;color:#94839C;margin-top:1px}
+.sum-chev{color:#B49BA6;transition:transform .2s ease}
+.sum-chev svg{width:15px;height:15px}
+.sum.open .sum-chev{transform:rotate(180deg)}
+.panelbody{display:none;background:#fff;border-radius:0 0 22px 22px;padding:0 15px 15px;margin-top:-12px;box-shadow:0 8px 22px rgba(255,107,74,.12)}
+.panelbody.open{display:block}
+
+.slider{padding:16px 6px 6px;position:relative}
+.track{position:relative;height:7px;border-radius:4px;background:#FFE1D3;cursor:pointer}
+.range{position:absolute;top:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,#FF8A5C,#FF5C3C)}
+.handle{position:absolute;top:50%;width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #FF6B4A;
+  transform:translate(-50%,-50%);box-shadow:0 3px 8px rgba(0,0,0,.16);cursor:grab;z-index:2}
+.handle:active{cursor:grabbing}
+.clip-inputs{display:flex;align-items:center;gap:7px;margin-top:12px}
+.clip-inputs label{flex:1;display:flex;flex-direction:column;gap:1px;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:#A08F98;font-weight:800;background:#FFF7F0;border-radius:12px;padding:7px 9px}
+.clip-inputs b{font-size:13px;color:#241A2E;letter-spacing:0;font-variant-numeric:tabular-nums;font-weight:750;text-transform:none}
+.clip-len{font-size:10.5px;color:#94839C;font-weight:750;white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.chip{font-size:11px;font-weight:750;padding:8px 12px;border-radius:999px;background:#F8F1EC;color:#94839C;border:0;cursor:pointer;letter-spacing:-.01em;transition:all .15s ease}
+.chip.on{background:#FF6B4A;color:#fff;box-shadow:0 5px 12px rgba(255,92,60,.3)}
+.hint{font-size:10.5px;color:#94839C;margin-top:9px;font-weight:600}
+
+/* delete source */
+.del{display:flex;gap:11px;align-items:center;margin-top:12px;padding:13px 15px;border-radius:20px;background:#fff;
+  box-shadow:0 8px 22px rgba(255,107,74,.12);cursor:pointer}
+.del-body{flex:1;min-width:0}
+.del-title{font-size:12.5px;font-weight:750}
+.del-sub{font-size:10.5px;color:#94839C;margin-top:2px;line-height:1.4}
+.switch{width:44px;height:26px;border-radius:999px;background:#F0DCD3;position:relative;flex:none;transition:background .2s ease}
+.switch.on{background:#FF6B4A}
+.switch span{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.2);transition:left .2s cubic-bezier(.3,1.4,.5,1)}
+.switch.on span{left:21px}
+
+.cta{flex:none;padding:8px 16px 26px;background:linear-gradient(180deg,rgba(255,247,240,0) 0%,#FFF7F0 40%)}
+.cta .btn{width:100%;padding:16px;font-size:15px;border-radius:20px}
+.cta-note{text-align:center;font-size:10.5px;color:#A08F98;margin-top:8px;font-weight:600}
+
+/* ================= sheets ================= */
+.sheetwrap{position:absolute;inset:0;z-index:50;display:none}
+.sheetwrap.open{display:block}
+.scrim{position:absolute;inset:0;background:rgba(30,18,34,.44);opacity:0;transition:opacity .25s ease}
+.sheetwrap.open .scrim{opacity:1}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:28px 28px 0 0;padding:8px 18px 32px;
+  transform:translateY(103%);transition:transform .32s cubic-bezier(.22,.9,.24,1);box-shadow:0 -16px 44px rgba(40,20,30,.2);
+  max-height:90%;overflow-y:auto;scrollbar-width:none}
+.sheet::-webkit-scrollbar{display:none}
+.sheetwrap.open .sheet{transform:translateY(0)}
+.grabber{width:38px;height:4px;border-radius:2px;background:#EBD9D0;margin:6px auto 14px}
+.sheet h3{font-size:17px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+.sheet .sub{font-size:12px;color:#94839C;margin:0 0 14px;line-height:1.5}
+.opt{display:flex;gap:12px;align-items:center;width:100%;text-align:left;font:inherit;color:inherit;background:#FFF7F0;border:0;
+  border-radius:16px;padding:11px;margin-bottom:8px;cursor:pointer;transition:background .15s ease}
+.opt:hover{background:#FFEFE4}
+.opt-ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:#fff;color:#FF6B4A;flex:none;
+  box-shadow:0 4px 10px rgba(255,107,74,.14)}
+.opt-ico svg{width:17px;height:17px}
+.opt-body{min-width:0;flex:1}
+.opt-body b{display:block;font-size:13px;font-weight:750;letter-spacing:-.01em}
+.opt-body span{display:block;font-size:11px;color:#94839C;margin-top:1px}
+.opt-art{width:42px;height:42px;border-radius:12px;flex:none;position:relative;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.12)}
+.opt-art::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 16% 6%,rgba(255,255,255,.34),transparent 56%)}
+.conf{margin-left:auto;font-size:10px;font-weight:800;color:#2E9C68;background:#E9F8F0;padding:3px 7px;border-radius:999px;flex:none}
+
+.artgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:2px 0 14px}
+.artpick{aspect-ratio:1/1;border-radius:16px;border:0;padding:0;cursor:pointer;position:relative;overflow:hidden;
+  box-shadow:0 6px 14px rgba(0,0,0,.12);outline:3px solid transparent;outline-offset:2px;transition:outline-color .15s ease}
+.artpick.sel{outline-color:#FF6B4A}
+.artpick::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 16% 6%,rgba(255,255,255,.34),transparent 56%)}
+.artpick::after{content:"";position:absolute;inset:0;border-radius:16px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.artpick svg{position:absolute;right:6px;bottom:6px;width:13px;height:13px;color:#fff;z-index:3;opacity:0}
+.artpick.sel svg{opacity:1}
+
+.searchbox{display:flex;gap:8px;margin-bottom:12px}
+.searchbox input{flex:1;font:inherit;font-size:13.5px;font-weight:600;color:#241A2E;background:#FFF7F0;border:2px solid #F6E3D6;
+  border-radius:14px;padding:10px 12px;outline:none}
+.searchbox input:focus{border-color:#FF6B4A}
+.result{display:flex;gap:11px;align-items:center;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;
+  border:0;border-bottom:1px solid #F6E3D6;padding:10px 2px;cursor:pointer}
+.result:last-child{border-bottom:0}
+.result:hover{background:#FFF7F0}
+.result b{display:block;font-size:13px;font-weight:700}
+.result span{display:block;font-size:11px;color:#94839C;margin-top:1px}
+
+/* ================= toast ================= */
+.toast{position:absolute;left:50%;bottom:104px;transform:translate(-50%,10px);z-index:60;background:#2B2030;color:#fff;
+  font-size:12px;font-weight:650;padding:10px 16px;border-radius:999px;opacity:0;pointer-events:none;
+  transition:opacity .22s ease,transform .22s ease;box-shadow:0 12px 26px rgba(0,0,0,.32);max-width:88%;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ================= processing / done ================= */
+.proc{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:0 30px 50px;text-align:center}
+.ring{width:170px;height:170px;border-radius:50%;display:grid;place-items:center;position:relative;margin-bottom:26px;
+  background:conic-gradient(#FF6B4A 0deg,#FFE3D6 0deg);box-shadow:0 18px 36px rgba(255,107,74,.24)}
+.ring::before{content:"";position:absolute;inset:15px;border-radius:50%;background:#FFF7F0}
+.ring-inner{position:relative;z-index:2;text-align:center}
+.ring-pct{font-size:36px;font-weight:800;letter-spacing:-.045em;line-height:1}
+.ring-pct span{font-size:19px;opacity:.5;font-weight:700;letter-spacing:0}
+.ring-label{font-size:8.5px;letter-spacing:.17em;text-transform:uppercase;color:#A08F98;font-weight:800;margin-top:6px}
+.proc h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin:0}
+.proc p{font-size:12.5px;color:#94839C;margin:4px 0 0}
+.steps{display:flex;gap:12px;margin-top:26px;font-size:10px;font-weight:750;color:#B49BA6;flex-wrap:wrap;justify-content:center}
+.step{display:flex;align-items:center;gap:5px}
+.step i{width:16px;height:16px;border-radius:50%;background:#F0DCD3;display:grid;place-items:center;color:#fff;flex:none}
+.step i svg{width:9px;height:9px}
+.step.done{color:#241A2E}
+.step.done i{background:#FF6B4A}
+.step.now{color:#FF6B4A}
+.step.now i{background:#FF6B4A;box-shadow:0 0 0 3px #FFE3D5}
+
+.done{display:flex;flex-direction:column;align-items:center;text-align:center;flex:1;padding:26px 24px 0;overflow-y:auto;scrollbar-width:none}
+.done::-webkit-scrollbar{display:none}
+.done-cover{width:150px;height:150px;border-radius:26px;position:relative;overflow:hidden;box-shadow:0 26px 44px -20px rgba(255,92,60,.6)}
+.done-cover::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 16% 6%,rgba(255,255,255,.34),transparent 56%)}
+.done-title{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:18px}
+.done-sub{font-size:13px;color:#94839C;margin-top:2px}
+.done-path{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;color:#E2542F;background:#FFF0E8;
+  padding:6px 12px;border-radius:999px;margin-top:12px}
+.done-path svg{width:11px;height:11px}
+.done-note{font-size:11px;color:#94839C;margin-top:12px;font-weight:600;display:flex;align-items:center;gap:5px;justify-content:center}
+.done-note svg{width:11px;height:11px;color:#2E9C68}
+.done-actions{display:flex;gap:8px;width:100%;margin-top:16px}
+.done-actions .btn{flex:1}
+
+/* art gradients */
+.art-1{background:linear-gradient(150deg,#6C8CFF 0%,#8B5CF6 46%,#2A1B5C 100%)}
+.art-2{background:linear-gradient(150deg,#7DD3FC 0%,#BAE6FD 38%,#FDE68A 100%)}
+.art-3{background:linear-gradient(150deg,#334155 0%,#1E293B 55%,#0B1220 100%)}
+.art-4{background:linear-gradient(150deg,#FF3D71 0%,#FF8A3D 58%,#3B0A1F 100%)}
+.art-5{background:linear-gradient(150deg,#1E3A8A 0%,#0F172A 60%,#05080F 100%)}
+.art-6{background:linear-gradient(150deg,#F5D0FE 0%,#A78BFA 52%,#312E81 100%)}
+.art-7{background:linear-gradient(150deg,#34D399 0%,#22D3EE 55%,#0E7490 100%)}
+.art-8{background:linear-gradient(150deg,#FB923C 0%,#F43F5E 62%,#4C0519 100%)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <div class="phone">
+      <div class="screen" id="screen">
+        <div class="island"></div>
+        <div id="view"></div>
+        <div class="home-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="eyebrow">Cue · chosen direction</div>
+    <h1>Timeline, <em>with a big cover.</em></h1>
+    <p class="lede">Your pick from the review: the Timeline gallery in the cheerful skin, and a song-details form that keeps F1's compact fields but opens with F2's cover hero. Tap around the phone — the fixing flow is the point of this demo.</p>
+    <div class="picks">
+      <span class="pick">Gallery <b>Timeline (C)</b></span>
+      <span class="pick">Skin <b>Cheerful</b></span>
+      <span class="pick">Details <b>F1 + F2 cover</b></span>
+    </div>
+
+    <div class="panel">
+      <h2>Things to try</h2>
+      <div class="try" data-try="open"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i><span>Tap a song in the library to open it.</span></div>
+      <div class="try" data-try="title"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i><span>Tap the title and retype it — the cover updates as you type.</span></div>
+      <div class="try" data-try="flag"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i><span>Tap <b>Check this</b> on the artist, the field the OCR was unsure about.</span></div>
+      <div class="try" data-try="cover"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i><span>Tap the artwork to change or remove it.</span></div>
+      <div class="try" data-try="match"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i><span>Open <b>Other matches</b>, or search manually.</span></div>
+      <div class="try" data-try="create"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></i><span>Press <b>Create MP3</b> to see the save + delete-source ending.</span></div>
+    </div>
+    <p class="note">Recognition results, artwork and the file system are mocked — nothing is downloaded or converted. Every other interaction is the real thing, so this is the behaviour you would get in the app.</p>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  var ICON = {
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.4v13.2L19 12z"/></svg>',
+    video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="M15 10.5l5-3v9l-5-3z"/></svg>',
+    music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
+    pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5z"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5 22 20H2zM11 9h2v5h-2zm0 6.5h2v2h-2z"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.4L19 9.2l-5.2 1.8L12 16.4l-1.8-5.4L5 9.2l5.2-1.8z"/></svg>',
+    image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
+    scissor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.6 20 18M8.2 16.4 20 6"/></svg>',
+    wave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2l2-5 3 10 3-7 2 4h6"/></svg>',
+    sparkle: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.4L19 9.2l-5.2 1.8L12 16.4l-1.8-5.4L5 9.2l5.2-1.8z"/></svg>'
+  };
+
+  var STATUS = '<span class="status-icons">'
+    + '<svg width="16" height="11" viewBox="0 0 15 10" fill="currentColor"><rect x="0" y="6" width="2.4" height="4" rx=".6"/><rect x="4" y="4" width="2.4" height="6" rx=".6"/><rect x="8" y="2" width="2.4" height="8" rx=".6"/><rect x="12" y="0" width="2.4" height="10" rx=".6"/></svg>'
+    + '<svg width="15" height="11" viewBox="0 0 14 10" fill="currentColor"><path d="M7 9.4 1 3.6A8.5 8.5 0 0 1 13 3.6z"/></svg>'
+    + '<svg width="22" height="11" viewBox="0 0 21 10" fill="none" stroke="currentColor" stroke-width="1"><rect x=".6" y=".6" width="16.4" height="8.8" rx="2.2"/><rect x="2.2" y="2.2" width="11.4" height="5.6" rx="1.2" fill="currentColor" stroke="none"/><path d="M18.6 3.4v3.2" stroke-linecap="round"/></svg>'
+    + '</span>';
+
+  var bar = '<div class="statusbar"><span>9:41</span>' + STATUS + '</div>';
+
+  var LIB = {
+    recent: [
+      { t: 'Believer', s: 'Imagine Dragons', d: '3:21', art: 'art-1', kind: 'music', chip: 'From screen text', day: 'Today' },
+      { t: 'Mr. Blue Sky', s: 'Electric Light Orchestra', d: '5:03', art: 'art-2', kind: 'music', chip: 'Fingerprint match', day: 'Today' },
+      { t: 'Screen_Recording_1204', s: 'Screen recording', d: '0:42', art: 'art-3', kind: 'video', chip: 'Not converted', muted: true, day: 'Today' },
+      { t: 'Blinding Lights', s: 'The Weeknd', d: '3:20', art: 'art-4', kind: 'music', chip: 'Music/Cue', day: 'Yesterday' },
+      { t: 'Dreams', s: 'Fleetwood Mac', d: '4:17', art: 'art-6', kind: 'music', chip: 'Music/Cue', day: 'Yesterday' },
+      { t: 'Screen_Recording_1130', s: 'Screen recording', d: '1:10', art: 'art-5', kind: 'video', chip: 'Not converted', muted: true, day: 'Yesterday' },
+      { t: 'Levitating', s: 'Dua Lipa', d: '3:23', art: 'art-7', kind: 'music', chip: 'Music/Cue', day: 'Earlier' },
+      { t: 'Heat Waves', s: 'Glass Animals', d: '3:58', art: 'art-8', kind: 'music', chip: 'Music/Cue', day: 'Earlier' }
+    ],
+    rec: [
+      { t: 'Screen_Recording_1204', s: 'Screen recording', d: '0:42', art: 'art-3', kind: 'video', chip: 'Not converted', muted: true, day: 'Today' },
+      { t: 'Screen_Recording_1130', s: 'Screen recording', d: '1:10', art: 'art-5', kind: 'video', chip: 'Not converted', muted: true, day: 'Yesterday' },
+      { t: 'Screen_Recording_1028', s: 'Screen recording', d: '0:58', art: 'art-5', kind: 'video', chip: 'Converted', muted: true, day: 'Yesterday' },
+      { t: 'Screen_Recording_1002', s: 'Screen recording', d: '2:04', art: 'art-3', kind: 'video', chip: 'Not converted', muted: true, day: 'Earlier' }
+    ],
+    music: [
+      { t: 'Believer', s: 'Imagine Dragons', d: '3:21', art: 'art-1', kind: 'music', chip: 'Music/Cue', day: 'Today' },
+      { t: 'Blinding Lights', s: 'The Weeknd', d: '3:20', art: 'art-4', kind: 'music', chip: 'Music/Cue', day: 'Today' },
+      { t: 'Dreams', s: 'Fleetwood Mac', d: '4:17', art: 'art-6', kind: 'music', chip: 'Music/Cue', day: 'Yesterday' },
+      { t: 'Mr. Blue Sky', s: 'Electric Light Orchestra', d: '5:03', art: 'art-2', kind: 'music', chip: 'Music/Cue', day: 'Yesterday' },
+      { t: 'Levitating', s: 'Dua Lipa', d: '3:23', art: 'art-7', kind: 'music', chip: 'Music/Cue', day: 'Earlier' },
+      { t: 'Heat Waves', s: 'Glass Animals', d: '3:58', art: 'art-8', kind: 'music', chip: 'Music/Cue', day: 'Earlier' }
+    ]
+  };
+
+  var ART = ['art-1', 'art-2', 'art-4', 'art-6', 'art-7', 'art-8'];
+
+  var state = {
+    screen: 'home',
+    tab: 'recent',
+    editing: null,
+    sheet: null,
+    art: 'art-1',
+    title: 'Believer',
+    artist: 'Imagine Dragons',
+    album: 'Evolve',
+    year: '2017',
+    flagged: 'artist',
+    conf: 98,
+    src: 'iTunes',
+    quality: 'Best',
+    del: true,
+    panelOpen: false,
+    clip: { start: 12, end: 221, total: 221 },
+    search: '',
+    savedTitle: null
+  };
+
+  var view = document.getElementById('view');
+  var tried = {};
+
+  function mark(key) {
+    if (tried[key]) return;
+    tried[key] = true;
+    var el = document.querySelector('[data-try="' + key + '"]');
+    if (el) {
+      el.classList.add('ticked');
+      var i = el.querySelector('i');
+      if (i) i.innerHTML = ICON.check;
+    }
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function rowsFor(tab) {
+    var out = '';
+    var day = null;
+    LIB[tab].forEach(function (it, i) {
+      if (it.day !== day) {
+        day = it.day;
+        out += '<div class="date-label">' + day + '</div>';
+      }
+      var kindIcon = it.kind === 'video' ? '<span class="kind">' + ICON.play + '</span>' : '';
+      out += '<button class="row" data-act="open" data-tab="' + tab + '" data-idx="' + i + '">'
+        + '<div class="row-thumb ' + it.art + '">' + kindIcon + '</div>'
+        + '<div class="row-body"><div class="row-title">' + esc(it.t) + '</div>'
+        + '<div class="row-sub">' + esc(it.s) + ' · ' + it.d + '</div>'
+        + '<span class="source-chip' + (it.muted ? ' muted' : '') + '">' + ICON.spark + it.chip + '</span></div>'
+        + '<span class="row-chev">' + ICON.chev + '</span></button>';
+    });
+    return out;
+  }
+
+  function renderHome() {
+    var tabs = [['recent', 'Recent'], ['rec', 'Recordings'], ['music', 'Music']].map(function (t) {
+      return '<button class="tab' + (state.tab === t[0] ? ' is-active' : '') + '" data-act="tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
+    }).join('');
+
+    return '<div class="home" style="display:flex;flex-direction:column;height:100%;min-height:0">'
+      + bar
+      + '<header class="appbar"><div class="brand">Cue<em>✦</em></div>'
+      + '<div class="appbar-actions"><button class="icon-btn" data-act="toast" data-msg="Search is not in this demo">' + ICON.search + '</button>'
+      + '<button class="icon-btn" data-act="toast" data-msg="Settings is not in this demo">' + ICON.gear + '</button></div></header>'
+      + '<div class="tabs">' + tabs + '</div>'
+      + '<div class="content">'
+      + rowsFor(state.tab)
+      + '</div>'
+      + '<button class="fab" data-act="toast" data-msg="Pick a recording from the list">' + ICON.plus + '<span>Add</span></button>'
+      + '</div>';
+  }
+
+  function heroHtml() {
+    if (!state.art) {
+      return '<div class="hero" data-act="cover" style="background:repeating-linear-gradient(45deg,#F9EFE8,#F9EFE8 11px,#F4E6DD 11px,#F4E6DD 22px);box-shadow:none">'
+        + '<div class="hero-text" style="color:#8B6F66"><div class="hero-title" style="font-size:20px">No artwork</div>'
+        + '<div class="hero-artist">Tap to add a cover</div></div></div>';
+    }
+    return '<div class="hero ' + state.art + '" data-act="cover">'
+      + '<div class="hero-scrim"></div>'
+      + '<div class="hero-text"><div class="hero-title" id="heroTitle">' + esc(state.title || 'Untitled') + '</div>'
+      + '<div class="hero-artist" id="heroArtist">' + esc(state.artist || 'Unknown artist') + '</div></div>'
+      + '<button class="hero-edit" data-act="cover">' + ICON.image + 'Change cover</button>'
+      + '</div>';
+  }
+
+  function fieldHtml(k, label) {
+    var val = state[k];
+    if (state.editing === k) {
+      return '<div class="frow editing" data-field="' + k + '">'
+        + '<div class="fhead"><span class="flabel">' + label + '</span></div>'
+        + '<input class="finput" id="finput" value="' + esc(val) + '" placeholder="Add ' + label.toLowerCase() + '" autocomplete="off" spellcheck="false">'
+        + '<div class="factions"><button class="btn primary sm" data-act="save" data-field="' + k + '">Save</button>'
+        + '<button class="btn plain sm" data-act="cancel">Cancel</button>'
+        + '<span class="fhint">Enter saves · Esc cancels</span></div></div>';
+    }
+    var flag = state.flagged === k
+      ? '<span class="flag">' + ICON.warn + 'Check this</span>' : '';
+    var empty = !val ? ' empty' : '';
+    return '<div class="frow" data-act="edit" data-field="' + k + '">'
+      + '<span class="flabel">' + label + '</span>'
+      + '<span class="fvalue' + empty + '">' + (val ? esc(val) : 'Not found') + '</span>'
+      + flag
+      + '<span class="fedit">' + ICON.pencil + '</span></div>';
+  }
+
+  function renderDetails() {
+    var flagText = '';
+    if (state.flagged) {
+      var fl = state.flagged;
+      flagText = fl === 'artist'
+        ? '<b>Artist</b> was read with low confidence. Check it before saving.'
+        : '<b>' + fl.charAt(0).toUpperCase() + fl.slice(1) + '</b> needs a quick look.';
+    }
+
+    var banner = state.flagged
+      ? '<div class="banner"><span class="banner-ico">' + ICON.warn + '</span>'
+        + '<div class="banner-body"><div class="banner-text">' + flagText + '</div>'
+        + '<button class="banner-fix" data-act="fix">Fix it</button></div></div>'
+      : '';
+
+    var clipLen = state.clip.end - state.clip.start;
+    var open = state.panelOpen ? ' open' : '';
+
+    return '<div class="detail">'
+      + bar
+      + '<header class="appbar"><button class="icon-btn" data-act="home">' + ICON.back + '</button>'
+      + '<div class="appbar-title">Song details</div>'
+      + '<button class="icon-btn" data-act="toast" data-msg="More options are not in this demo">' + ICON.more + '</button></header>'
+      + '<div class="content">'
+      + heroHtml()
+      + banner
+      + '<div class="card">'
+      + fieldHtml('title', 'Title') + fieldHtml('artist', 'Artist') + fieldHtml('album', 'Album') + fieldHtml('year', 'Year')
+      + '</div>'
+      + '<div class="match"><span class="match-dot"></span><div class="match-main">'
+      + '<div class="match-head">Matched ' + state.conf + '%<span class="match-src">' + state.src + '</span></div>'
+      + '<div class="match-title">' + esc(state.title || 'Untitled') + (state.artist ? ' — ' + esc(state.artist) : '') + '</div>'
+      + '<div class="match-actions"><button class="btn ghost sm" data-act="other">Other matches</button>'
+      + '<button class="linkish" data-act="search">Search manually</button></div>'
+      + '</div></div>'
+      + '<button class="sum' + open + '" data-act="panel"><span class="sum-ico">' + ICON.scissor + '</span>'
+      + '<span class="sum-body"><span class="sum-title">Clip &amp; quality</span>'
+      + '<span class="sum-sub">' + fmt(state.clip.start) + '–' + fmt(state.clip.end) + ' · ' + fmt(clipLen) + ' · ' + state.quality + '</span></span>'
+      + '<span class="sum-chev">' + ICON.down + '</span></button>'
+      + '<div class="panelbody' + open + '">'
+      + '<div class="slider"><div class="track" id="track">'
+      + '<div class="range" id="range"></div>'
+      + '<span class="handle" id="hStart"></span><span class="handle" id="hEnd"></span></div></div>'
+      + '<div class="clip-inputs"><label>Start<b id="tStart">' + fmt(state.clip.start) + '</b></label>'
+      + '<label>End<b id="tEnd">' + fmt(state.clip.end) + '</b></label>'
+      + '<span class="clip-len" id="tLen">' + fmt(clipLen) + '</span></div>'
+      + '<div class="chips" style="margin-top:14px">'
+      + ['Best', 'Balanced', '256 kbps', '192 kbps'].map(function (q) {
+        return '<button class="chip' + (state.quality === q ? ' on' : '') + '" data-act="quality" data-q="' + q + '">' + q + '</button>';
+      }).join('')
+      + '</div><div class="hint">≈ 6.2 MB · VBR ~245 kbps · mono 44.1 kHz</div></div>'
+      + '<div class="del" data-act="del"><div class="del-body"><div class="del-title">Delete the source recording</div>'
+      + '<div class="del-sub">Only after the MP3 is saved and its tags are read back. You will be asked to confirm.</div></div>'
+      + '<span class="switch' + (state.del ? ' on' : '') + '"><span></span></span></div>'
+      + '</div>'
+      + '<div class="cta"><button class="btn primary" data-act="create">Create MP3</button>'
+      + '<div class="cta-note">' + (state.del ? 'The recording is deleted after saving' : 'The recording is kept') + '</div></div>'
+      + '</div>';
+  }
+
+  function artTiles() {
+    return ART.slice(0, 4).map(function (a) {
+      return '<button class="artpick ' + a + (state.art === a ? ' sel' : '') + '" data-act="art" data-art="' + a + '">' + ICON.check + '</button>';
+    }).join('');
+  }
+
+  var SEARCH_POOL = [
+    { t: 'Believer', a: 'Imagine Dragons', al: 'Evolve · 2017', y: '2017', c: 96, art: 'art-1' },
+    { t: 'Believer', a: 'American Authors', al: 'Single · 2017', y: '2017', c: 72, art: 'art-4' },
+    { t: 'Believer', a: 'The Score', al: 'Atlas · 2016', y: '2016', c: 58, art: 'art-6' }
+  ];
+
+  function resultsHtml() {
+    var q = state.search.trim().toLowerCase();
+    var out = '';
+    SEARCH_POOL.forEach(function (p, i) {
+      if (q && (p.t + ' ' + p.a).toLowerCase().indexOf(q) < 0) return;
+      out += '<button class="result" data-act="picksearch" data-i="' + i + '">'
+        + '<span class="opt-art ' + p.art + '"></span>'
+        + '<span class="opt-body"><b>' + esc(p.t) + '</b><span>' + esc(p.a) + ' · ' + esc(p.al) + '</span></span></button>';
+    });
+    return out || '<p class="sub" style="margin:18px 0">Nothing found. Try a shorter query.</p>';
+  }
+
+  function renderSheet() {
+    if (!state.sheet) return '<div class="sheetwrap" id="sheetwrap"></div>';
+
+    var inner = '';
+    if (state.sheet === 'cover') {
+      inner = '<div class="grabber"></div><h3>Cover artwork</h3>'
+        + '<p class="sub">Pick a suggestion, search online, or remove the cover.</p>'
+        + '<div class="artgrid">' + artTiles() + '</div>'
+        + '<button class="opt" data-act="online"><span class="opt-ico">' + ICON.search + '</span>'
+        + '<span class="opt-body"><b>Search online</b><span>iTunes, MusicBrainz, Deezer</span></span></button>'
+        + '<button class="opt" data-act="toast" data-msg="Opening the gallery is not in this demo"><span class="opt-ico">' + ICON.image + '</span>'
+        + '<span class="opt-body"><b>Pick from this device</b><span>Choose an image file</span></span></button>'
+        + '<button class="opt" data-act="noart"><span class="opt-ico">' + ICON.trash + '</span>'
+        + '<span class="opt-body"><b>Remove artwork</b><span>Save without a cover</span></span></button>';
+    }
+
+    if (state.sheet === 'match') {
+      var cands = [
+        { t: 'Believer', a: 'Imagine Dragons', al: 'Evolve · 2017', c: 98, art: 'art-1' },
+        { t: 'Believer (Live)', a: 'Imagine Dragons', al: 'Night Visions Live · 2016', c: 74, art: 'art-4' },
+        { t: 'Believer', a: 'Various Artists', al: 'Now That\'s Music · 2018', c: 61, art: 'art-6' }
+      ];
+      inner = '<div class="grabber"></div><h3>Other matches</h3>'
+        + '<p class="sub">Three candidates from iTunes and MusicBrainz. Choosing one overwrites the fields.</p>'
+        + cands.map(function (c, i) {
+          return '<button class="opt" data-act="pickmatch" data-i="' + i + '">'
+            + '<span class="opt-art ' + c.art + '"></span>'
+            + '<span class="opt-body"><b>' + esc(c.t) + '</b><span>' + esc(c.a) + ' · ' + esc(c.al) + '</span></span>'
+            + '<span class="conf">' + c.c + '%</span></button>';
+        }).join('');
+    }
+
+    if (state.sheet === 'search') {
+      inner = '<div class="grabber"></div><h3>Search manually</h3>'
+        + '<p class="sub">Type what you see on screen. Results come from the metadata providers.</p>'
+        + '<div class="searchbox"><input id="q" value="' + esc(state.search) + '" placeholder="Song or artist" autocomplete="off" spellcheck="false">'
+        + '<button class="btn primary sm" data-act="toast" data-msg="Search runs as you type">Search</button></div>'
+        + '<div id="results">' + resultsHtml() + '</div>';
+    }
+
+    return '<div class="sheetwrap" id="sheetwrap"><div class="scrim" data-act="closesheet"></div>'
+      + '<div class="sheet">' + inner + '</div></div>';
+  }
+
+  function renderProcessing() {
+    return '<div style="display:flex;flex-direction:column;height:100%">' + bar
+      + '<div class="proc">'
+      + '<div class="ring" id="ring"><div class="ring-inner"><div class="ring-pct" id="pct">0<span>%</span></div>'
+      + '<div class="ring-label">Converting</div></div></div>'
+      + '<h2>' + esc(state.title || 'Untitled') + '</h2>'
+      + '<p>' + esc(state.artist || 'Unknown artist') + ' · ' + fmt(state.clip.end - state.clip.start) + '</p>'
+      + '<div class="steps"><span class="step done"><i>' + ICON.check + '</i>Prepare</span>'
+      + '<span class="step now" id="stepConvert"><i></i>Convert</span>'
+      + '<span class="step" id="stepTag"><i></i>Tag</span>'
+      + '<span class="step" id="stepSave"><i></i>Save</span></div>'
+      + '</div></div>';
+  }
+
+  function renderDone() {
+    var cover = state.art
+      ? '<div class="done-cover ' + state.art + '"></div>'
+      : '<div class="done-cover" style="background:repeating-linear-gradient(45deg,#F9EFE8,#F9EFE8 11px,#F4E6DD 11px,#F4E6DD 22px)"></div>';
+    return '<div style="display:flex;flex-direction:column;height:100%">' + bar
+      + '<div class="done">' + cover
+      + '<div class="done-title">' + esc(state.title || 'Untitled') + '</div>'
+      + '<div class="done-sub">' + esc(state.artist || 'Unknown artist') + ' · ' + fmt(state.clip.end - state.clip.start) + '</div>'
+      + '<div class="done-path">' + ICON.folder + 'Music/Cue</div>'
+      + '<div class="done-note">' + (state.del
+        ? ICON.check + 'Source recording deleted'
+        : ICON.check + 'Source recording kept') + '</div>'
+      + '<div class="done-actions"><button class="btn plain" data-act="toast" data-msg="Playback is not in this demo">' + ICON.play + ' Play</button>'
+      + '<button class="btn plain" data-act="home">Back to library</button></div>'
+      + '</div></div>';
+  }
+
+  function render() {
+    var html;
+    if (state.screen === 'home') html = renderHome();
+    else if (state.screen === 'details') html = renderDetails();
+    else if (state.screen === 'processing') html = renderProcessing();
+    else html = renderDone();
+
+    var sc = document.querySelector('.content');
+    var keep = sc ? sc.scrollTop : 0;
+
+    view.innerHTML = html + renderSheet();
+
+    var nc = document.querySelector('.content');
+    if (nc && state.screen === 'details') nc.scrollTop = keep;
+
+    if (state.screen === 'details') initSlider();
+    if (state.sheet) {
+      var q = document.getElementById('q');
+      if (q) q.focus();
+    }
+  }
+
+  /* ---------- clip slider ---------- */
+  function initSlider() {
+    var track = document.getElementById('track');
+    if (!track) return;
+    var range = document.getElementById('range');
+    var hs = document.getElementById('hStart');
+    var he = document.getElementById('hEnd');
+    var total = state.clip.total;
+
+    function paint() {
+      var a = state.clip.start / total * 100;
+      var b = state.clip.end / total * 100;
+      range.style.left = a + '%';
+      range.style.right = (100 - b) + '%';
+      hs.style.left = a + '%';
+      he.style.left = b + '%';
+      document.getElementById('tStart').textContent = fmt(state.clip.start);
+      document.getElementById('tEnd').textContent = fmt(state.clip.end);
+      document.getElementById('tLen').textContent = fmt(state.clip.end - state.clip.start);
+    }
+    paint();
+
+    function drag(which) {
+      return function (e) {
+        e.preventDefault();
+        var rect = track.getBoundingClientRect();
+        function move(ev) {
+          var x = (ev.clientX - rect.left) / rect.width;
+          x = Math.min(1, Math.max(0, x));
+          var v = x * total;
+          if (which === 'start') state.clip.start = Math.min(v, state.clip.end - 5);
+          else state.clip.end = Math.max(v, state.clip.start + 5);
+          paint();
+        }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          var sub = document.querySelector('.sum-sub');
+          if (sub) sub.textContent = fmt(state.clip.start) + '–' + fmt(state.clip.end) + ' · ' + fmt(state.clip.end - state.clip.start) + ' · ' + state.quality;
+        }
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+      };
+    }
+    hs.addEventListener('pointerdown', drag('start'));
+    he.addEventListener('pointerdown', drag('end'));
+  }
+
+  /* ---------- actions ---------- */
+  function openSheet(kind) {
+    state.sheet = kind;
+    render();
+    requestAnimationFrame(function () {
+      var w = document.getElementById('sheetwrap');
+      if (w) w.classList.add('open');
+    });
+  }
+
+  function closeSheet() {
+    var w = document.getElementById('sheetwrap');
+    if (w) w.classList.remove('open');
+    setTimeout(function () {
+      state.sheet = null;
+      render();
+    }, 260);
+  }
+
+  function toast(msg) {
+    var old = document.querySelector('.toast');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.getElementById('screen').appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    setTimeout(function () {
+      el.classList.remove('show');
+      setTimeout(function () { el.remove(); }, 260);
+    }, 1700);
+  }
+
+  function openDetails(it) {
+    state.screen = 'details';
+    state.editing = null;
+    state.title = it.t;
+    state.artist = it.kind === 'video' ? '' : it.s;
+    state.album = it.kind === 'video' ? '' : state.album;
+    state.year = it.kind === 'video' ? '' : state.year;
+    state.art = it.art;
+    state.conf = it.kind === 'video' ? 0 : 98;
+    state.src = it.kind === 'video' ? '—' : 'iTunes';
+    state.flagged = it.kind === 'video' ? 'title' : 'artist';
+    state.panelOpen = false;
+    mark('open');
+    render();
+  }
+
+  function saveField(k) {
+    var input = document.getElementById('finput');
+    var v = input ? input.value.trim() : '';
+    var wasFlagged = state.flagged === k;
+    state[k] = v;
+    state.editing = null;
+    if (wasFlagged) state.flagged = null;
+    if (k === 'title') mark('title');
+    if (wasFlagged) mark('flag');
+    render();
+    toast(v ? 'Saved' : 'Cleared');
+  }
+
+  function pickMatch(i) {
+    var cands = [
+      { t: 'Believer', a: 'Imagine Dragons', al: 'Evolve', y: '2017', c: 98, art: 'art-1' },
+      { t: 'Believer (Live)', a: 'Imagine Dragons', al: 'Night Visions Live', y: '2016', c: 74, art: 'art-4' },
+      { t: 'Believer', a: 'Various Artists', al: 'Now That\'s Music', y: '2018', c: 61, art: 'art-6' }
+    ][i];
+    state.title = cands.t;
+    state.artist = cands.a;
+    state.album = cands.al;
+    state.year = cands.y;
+    state.conf = cands.c;
+    state.flagged = null;
+    state.sheet = null;
+    mark('match');
+    render();
+    toast('Applied ' + cands.c + '% match');
+  }
+
+  function startProcessing() {
+    mark('create');
+    state.screen = 'processing';
+    state.sheet = null;
+    state.editing = null;
+    render();
+
+    var start = Date.now();
+    var dur = 2600;
+    function tick() {
+      var t = Math.min(1, (Date.now() - start) / dur);
+      var pct = Math.round(t * 100);
+      var ring = document.getElementById('ring');
+      var pctEl = document.getElementById('pct');
+      if (!ring || !pctEl) return;
+      ring.style.background = 'conic-gradient(#FF6B4A 0 ' + (t * 360) + 'deg, #FFE3D6 ' + (t * 360) + 'deg)';
+      pctEl.innerHTML = pct + '<span>%</span>';
+      var conv = document.getElementById('stepConvert');
+      var tag = document.getElementById('stepTag');
+      var save = document.getElementById('stepSave');
+      if (conv && t > 0.55) {
+        conv.className = 'step done';
+        conv.querySelector('i').innerHTML = ICON.check;
+        if (tag) tag.className = 'step now';
+      }
+      if (tag && t > 0.82) {
+        tag.className = 'step done';
+        tag.querySelector('i').innerHTML = ICON.check;
+        if (save) save.className = 'step now';
+      }
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        if (save) { save.className = 'step done'; save.querySelector('i').innerHTML = ICON.check; }
+        setTimeout(function () {
+          state.screen = 'done';
+          render();
+        }, 340);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- delegation ---------- */
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-act]');
+    if (!el) return;
+    var act = el.dataset.act;
+
+    if (act === 'tab') { state.tab = el.dataset.tab; render(); return; }
+    if (act === 'open') {
+      openDetails(LIB[el.dataset.tab][Number(el.dataset.idx)]);
+      return;
+    }
+    if (act === 'home') { state.screen = 'home'; state.editing = null; state.sheet = null; render(); return; }
+    if (act === 'edit') { state.editing = el.dataset.field; render(); var i = document.getElementById('finput'); if (i) { i.focus(); i.select(); } return; }
+    if (act === 'save') { saveField(el.dataset.field); return; }
+    if (act === 'cancel') { state.editing = null; render(); return; }
+    if (act === 'fix') {
+      state.editing = state.flagged;
+      mark('flag');
+      render();
+      var inp = document.getElementById('finput');
+      if (inp) {
+        inp.focus();
+        inp.select();
+        inp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      return;
+    }
+    if (act === 'cover') { mark('cover'); openSheet('cover'); return; }
+    if (act === 'art') { state.art = el.dataset.art; closeSheet(); toast('Cover updated'); return; }
+    if (act === 'noart') { state.art = null; closeSheet(); toast('Artwork removed'); return; }
+    if (act === 'online') { closeSheet(); setTimeout(function () { openSheet('search'); }, 280); return; }
+    if (act === 'other') { mark('match'); openSheet('match'); return; }
+    if (act === 'search') { mark('match'); openSheet('search'); return; }
+    if (act === 'pickmatch') { pickMatch(Number(el.dataset.i)); return; }
+    if (act === 'picksearch') {
+      var pool = SEARCH_POOL[Number(el.dataset.i)];
+      state.title = pool.t; state.artist = pool.a; state.album = pool.al; state.year = pool.y;
+      state.conf = pool.c; state.art = pool.art; state.flagged = null; state.sheet = null;
+      render(); toast('Applied manual pick');
+      return;
+    }
+    if (act === 'panel') { state.panelOpen = !state.panelOpen; render(); return; }
+    if (act === 'quality') {
+      state.quality = el.dataset.q;
+      render();
+      var sub = document.querySelector('.sum-sub');
+      if (sub) sub.textContent = fmt(state.clip.start) + '–' + fmt(state.clip.end) + ' · ' + fmt(state.clip.end - state.clip.start) + ' · ' + state.quality;
+      return;
+    }
+    if (act === 'del') { state.del = !state.del; render(); return; }
+    if (act === 'create') { startProcessing(); return; }
+    if (act === 'closesheet') { closeSheet(); return; }
+    if (act === 'toast') { toast(el.dataset.msg || 'Not in this demo'); return; }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!state.editing) return;
+    if (e.key === 'Enter') { e.preventDefault(); saveField(state.editing); }
+    if (e.key === 'Escape') { state.editing = null; render(); }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'finput' && state.editing) {
+      var t = document.getElementById('heroTitle');
+      var a = document.getElementById('heroArtist');
+      if (state.editing === 'title' && t) t.textContent = e.target.value || 'Untitled';
+      if (state.editing === 'artist' && a) a.textContent = e.target.value || 'Unknown artist';
+    }
+    if (e.target.id === 'q') {
+      state.search = e.target.value;
+      var box = document.getElementById('results');
+      if (box) box.innerHTML = resultsHtml();
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
