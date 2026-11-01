@@ -8,6 +8,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
 
+    <!-- The gallery reads the device's own recordings and music. API 33 split
+         the single storage permission into per-media-type grants; API 31-32
+         still use READ_EXTERNAL_STORAGE, which the maxSdkVersion keeps from
+         being requested on newer releases. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <!-- localeConfig feeds the system per-app language picker from API 33 up;
          AppCompat's auto-store service below covers the older releases, so the
          attribute is deliberately declared on a minSdk 31 app. -->
