@@ -9,6 +9,8 @@ import io.github.rpn17m2g.cue.data.input.ContentResolverDocumentEditor
 import io.github.rpn17m2g.cue.data.input.DocumentEditor
 import io.github.rpn17m2g.cue.data.input.InputResolver
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
+import io.github.rpn17m2g.cue.data.library.MediaLibrary
+import io.github.rpn17m2g.cue.data.library.ThumbnailStore
 import io.github.rpn17m2g.cue.data.metadata.FingerprintInput
 import io.github.rpn17m2g.cue.data.metadata.LookupError
 import io.github.rpn17m2g.cue.data.metadata.LookupPolicy
@@ -53,6 +55,10 @@ class AppContainer(context: Context) {
     val settingsRepository: SettingsRepository by lazy { DataStoreSettingsRepository(appContext) }
 
     val inputResolver: InputResolver by lazy { InputResolver(appContext) }
+
+    val mediaLibrary: MediaLibrary by lazy { MediaLibrary(appContext) }
+
+    val thumbnailStore: ThumbnailStore by lazy { ThumbnailStore(appContext) }
 
     val ffmpegRuntime: FfmpegRuntime by lazy {
         FfmpegRuntime(appContext.applicationInfo.nativeLibraryDir)

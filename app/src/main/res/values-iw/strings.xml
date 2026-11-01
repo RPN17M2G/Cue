@@ -8,6 +8,35 @@
     <string name="home_settings">הגדרות</string>
     <string name="home_preparing">מכין את הקובץ…</string>
 
+    <string name="home_tab_recent">אחרונים</string>
+    <string name="home_tab_recordings">הקלטות</string>
+    <string name="home_tab_music">מוזיקה</string>
+    <string name="home_tab_with_count">%1$s %2$d</string>
+    <string name="home_search">חיפוש</string>
+    <string name="home_search_hint">חיפוש ברשימה</string>
+    <string name="home_search_clear">ניקוי החיפוש</string>
+    <string name="home_day_today">היום</string>
+    <string name="home_day_yesterday">אתמול</string>
+    <string name="home_day_earlier">קודם</string>
+    <string name="home_chip_recording">טרם הומר</string>
+    <string name="home_chip_cue">נוצר ב־Cue</string>
+    <string name="home_chip_music">במכשיר</string>
+    <string name="home_empty_recent_title">עוד אין כאן כלום</string>
+    <string name="home_empty_recent_body">הוסיפו הקלטת מסך או קובץ MP3 והוא יופיע כאן.</string>
+    <string name="home_empty_recordings_title">אין עדיין הקלטות מסך</string>
+    <string name="home_empty_recordings_body">הקליטו את המסך, ואז הוסיפו את הסרטון כדי להפוך אותו ל־MP3 עם תגיות.</string>
+    <string name="home_empty_music_title">אין עדיין מוזיקה</string>
+    <string name="home_empty_music_body">קובצי MP3 במכשיר ושירים שנוצרו ב־Cue יופיעו כאן.</string>
+    <string name="home_empty_search_title">אין התאמות</string>
+    <string name="home_empty_search_body">אין בלשונית הזו משהו שמתאים ל־„%1$s”.</string>
+    <string name="home_empty_add">הוספת קובץ</string>
+    <string name="home_permission_title">ההקלטות שלכם יופיעו כאן</string>
+    <string name="home_permission_body">כדי לבנות את הגלריה, Cue זקוקה לגישה לסרטונים ולשמע במכשיר. שום דבר לא יוצא מהמכשיר.</string>
+    <string name="home_permission_partial">Cue רואה חלק מהספרייה. אפשרו את השאר כדי למלא את הלשונית הזו.</string>
+    <string name="home_permission_action">אישור גישה</string>
+    <string name="home_permission_settings">פתיחת הגדרות האפליקציה</string>
+    <string name="home_loading">קורא את הספרייה…</string>
+
     <string name="review_title">בדיקת הרצועה</string>
     <string name="review_session_missing">הקובץ הזה כבר אינו זמין. יש לבחור אותו שוב.</string>
     <string name="review_play">נגינת תצוגה מקדימה</string>
