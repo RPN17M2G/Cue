@@ -110,8 +110,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -218,6 +220,7 @@ fun ReviewScreen(
                 onQuality = viewModel::setQuality,
                 onDeleteSource = viewModel::setDeleteSource,
                 onCommitField = viewModel::commitField,
+                onBeginFieldEdit = viewModel::beginFieldEdit,
                 onRevertField = viewModel::revertField,
                 onRetry = viewModel::retryIdentification,
                 onSearch = viewModel::search,
@@ -242,7 +245,8 @@ private fun ReviewContent(
     onQuality: (QualityPreset) -> Unit,
     onDeleteSource: (Boolean) -> Unit,
     onCommitField: (TagField) -> Unit,
-    onRevertField: (TagField, TagDraft, Map<TagField, IdentificationSource>) -> Unit,
+    onBeginFieldEdit: (TagField) -> Unit,
+    onRevertField: (TagField, String, IdentificationSource?) -> Unit,
     onRetry: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
@@ -267,40 +271,46 @@ private fun ReviewContent(
     var editingField by remember { mutableStateOf<TagField?>(null) }
     var editText by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf(false) }
-    var capturedDraft by remember { mutableStateOf(TagDraft()) }
-    var capturedSources by remember {
-        mutableStateOf<Map<TagField, IdentificationSource>>(emptyMap())
-    }
+    var capturedValue by remember { mutableStateOf("") }
+    var capturedSource by remember { mutableStateOf<IdentificationSource?>(null) }
     var showMoreFields by rememberSaveable { mutableStateOf(false) }
     var clipExpanded by rememberSaveable { mutableStateOf(false) }
     var matchesSheet by rememberSaveable { mutableStateOf(false) }
     var searchSheet by rememberSaveable { mutableStateOf(false) }
 
+    /** Returns false when validation rejects the value, leaving the editor open. */
+    fun commitField(): Boolean {
+        val field = editingField ?: return true
+        val year = editText.trim()
+        if (field == TagField.YEAR && year.isNotEmpty() && !YEAR_PATTERN.matches(year)) {
+            editError = true
+            return false
+        }
+        // The hero fields already preview live; writing here settles every
+        // field on Save, so a half-typed value never reaches the tag.
+        onUpdate(field) { it.withField(field, editText.sanitizedFor(field)) }
+        onCommitField(field)
+        editingField = null
+        editError = false
+        return true
+    }
+
     fun openField(field: TagField) {
         if (editingField == field) return
-        editingField?.let(onCommitField)
-        capturedDraft = latestState.draft
-        capturedSources = latestState.sources
+        // Switching rows saves the open editor through the same path as Save,
+        // so an invalid year keeps the editor (and its error) open.
+        if (editingField != null && !commitField()) return
+        onBeginFieldEdit(field)
+        capturedValue = latestState.valueFor(field)
+        capturedSource = latestState.sources[field]
         editingField = field
-        editText = latestState.valueFor(field)
+        editText = capturedValue
         editError = false
     }
 
     fun cancelField() {
         val field = editingField ?: return
-        onRevertField(field, capturedDraft, capturedSources)
-        editingField = null
-        editError = false
-    }
-
-    fun commitField() {
-        val field = editingField ?: return
-        val year = editText.trim()
-        if (field == TagField.YEAR && year.isNotEmpty() && !YEAR_PATTERN.matches(year)) {
-            editError = true
-            return
-        }
-        onCommitField(field)
+        onRevertField(field, capturedValue, capturedSource)
         editingField = null
         editError = false
     }
@@ -340,9 +350,13 @@ private fun ReviewContent(
                 val sanitized = value.sanitizedFor(field)
                 editText = sanitized
                 editError = false
-                onUpdate(field) { it.withField(field, sanitized) }
+                // Title and artist drive the cover preview, so they update
+                // live; the other fields wait for Save.
+                if (field == TagField.TITLE || field == TagField.ARTIST) {
+                    onUpdate(field) { it.withField(field, sanitized) }
+                }
             },
-            onSave = ::commitField,
+            onSave = { commitField() },
             onCancel = ::cancelField,
         )
 
@@ -370,14 +384,6 @@ private fun ReviewContent(
         }
 
         OcrDetails(state = state)
-
-        state.errorRes?.let {
-            Text(
-                text = stringResource(it),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
 
         Spacer(Modifier.height(2.dp))
     }
@@ -760,12 +766,28 @@ private fun FieldEditor(
     val focusRequester = remember { FocusRequester() }
     val bringIntoView = remember { BringIntoViewRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    // Selecting the whole value makes replacing it one keystroke, as the plan
+    // asks. The selection lives in TextFieldValue; the parent still owns the
+    // plain string.
+    var value by remember {
+        mutableStateOf(TextFieldValue(text, selection = TextRange(0, text.length)))
+    }
+    LaunchedEffect(text) {
+        if (value.text != text) value = value.copy(text = text)
+    }
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
         // Wait for the IME to resize the window, then lift the editor above
         // the sticky Create bar so Save and Cancel stay reachable.
         delay(EDITOR_BRING_INTO_VIEW_MILLIS)
         bringIntoView.bringIntoView()
+    }
+    LaunchedEffect(error) {
+        if (error) {
+            // The validation line grows the editor; keep it visible too.
+            delay(EDITOR_BRING_INTO_VIEW_MILLIS)
+            bringIntoView.bringIntoView()
+        }
     }
     Column(
         modifier = Modifier
@@ -795,8 +817,12 @@ private fun FieldEditor(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
+                value = value,
+                onValueChange = { candidate ->
+                    val sanitized = candidate.text.sanitizedFor(field)
+                    value = candidate.copy(text = sanitized)
+                    onTextChange(sanitized)
+                },
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(focusRequester),
@@ -1148,7 +1174,9 @@ private fun TrimControls(
 
     fun applyStart() {
         val parsed = TrimClock.parse(startText)
-        if (parsed == null) {
+        // The handles clamp silently, which would move the end the user did not
+        // touch. Reject the value instead and leave the last good window alone.
+        if (parsed == null || parsed < 0 || parsed >= state.trimEndMs || parsed > durationMs) {
             invalid = true
         } else {
             invalid = false
@@ -1158,7 +1186,7 @@ private fun TrimControls(
 
     fun applyEnd() {
         val parsed = TrimClock.parse(endText)
-        if (parsed == null) {
+        if (parsed == null || parsed <= state.trimStartMs || parsed > durationMs) {
             invalid = true
         } else {
             invalid = false
@@ -1393,6 +1421,18 @@ private fun CreateBar(
                     .navigationBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
+                // Validation and save errors live next to the button that
+                // produced them; at the bottom of the scroll they were invisible.
+                state.errorRes?.let {
+                    Text(
+                        text = stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 if (isVideo) {
                     Text(
                         text = stringResource(
@@ -1804,7 +1844,10 @@ private fun MatchSheetRow(match: MetadataMatch, onClick: () -> Unit) {
                 )
             }
             ConfidencePill(
-                text = "${(match.score * 100).roundToInt()}%",
+                text = stringResource(
+                    R.string.review_score_percent,
+                    (match.score * 100).roundToInt(),
+                ),
                 score = match.score,
             )
         }
@@ -1816,7 +1859,7 @@ private fun MatchCover(match: MetadataMatch, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val repository = remember(context) { context.appContainer().artworkRepository }
     var bitmap by remember(match.artworkUrl, match.artwork) {
-        mutableStateOf(match.artwork?.let { decodeArtwork(it.bytes) })
+        mutableStateOf(match.artwork?.let { decodeArtwork(it.bytes, maxWidth = 128) })
     }
     LaunchedEffect(match.artworkUrl) {
         if (bitmap == null && !match.artworkUrl.isNullOrBlank()) {
@@ -2102,17 +2145,6 @@ private fun ReviewUiState.valueFor(field: TagField): String = when (field) {
     TagField.ARTWORK -> ""
 }
 
-private fun TagDraft.withField(field: TagField, value: String): TagDraft = when (field) {
-    TagField.TITLE -> copy(title = value)
-    TagField.ARTIST -> copy(artist = value)
-    TagField.ALBUM -> copy(album = value)
-    TagField.ALBUM_ARTIST -> copy(albumArtist = value)
-    TagField.YEAR -> copy(year = value)
-    TagField.GENRE -> copy(genre = value)
-    TagField.TRACK_NUMBER -> copy(trackNumber = value.takeIf { it.isNotBlank() }?.toIntOrNull())
-    TagField.ARTWORK -> this
-}
-
 private fun String.sanitizedFor(field: TagField): String = when (field) {
     TagField.TRACK_NUMBER -> filter(Char::isDigit).take(3)
     TagField.YEAR -> filter { it.isDigit() || it == '-' }.take(10)
@@ -2159,8 +2191,16 @@ private fun cueOutlinedFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
 )
 
-private fun decodeArtwork(bytes: ByteArray): Bitmap? = runCatching {
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+private fun decodeArtwork(bytes: ByteArray, maxWidth: Int = 1024): Bitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    val sample = if (bounds.outWidth > maxWidth) {
+        Integer.highestOneBit(bounds.outWidth / maxWidth).coerceAtLeast(1)
+    } else {
+        1
+    }
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
 }.getOrNull()
 
 private val PRIMARY_FIELDS = listOf(

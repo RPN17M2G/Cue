@@ -95,7 +95,7 @@
     <string name="review_add_value">Add</string>
     <string name="review_change_cover">Change cover</string>
     <string name="review_cover_suggestions">Suggestions</string>
-    <string name="review_check_banner">%1$s was read with low confidence.</string>
+    <string name="review_check_banner">%1$s: low confidence.</string>
     <string name="review_check_chip">Check this</string>
     <string name="review_fix_it">Fix it</string>
     <string name="review_field_save">Save</string>
@@ -106,6 +106,7 @@
     <string name="review_more_details">More details</string>
     <string name="review_fewer_details">Fewer details</string>
     <string name="review_match_line">Matched %1$d%% · %2$s</string>
+    <string name="review_score_percent">%1$d%%</string>
     <string name="review_no_match">No match yet</string>
     <string name="review_no_match_body">Search manually or look up again.</string>
     <string name="review_search_manually">Search manually</string>
@@ -119,9 +120,6 @@
     <string name="review_create_note_delete">The screen recording will be deleted after the MP3 is saved.</string>
     <string name="review_create_note_keep">The screen recording stays on this device.</string>
     <string name="review_create">Create MP3</string>
-    <string name="review_confidence_high">Likely</string>
-    <string name="review_confidence_medium">Check</string>
-    <string name="review_confidence_low">Weak</string>
     <string name="review_matches_sheet_title">Other matches</string>
     <string name="review_search_sheet_title">Search manually</string>
     <string name="review_search_sheet_hint">Title or artist</string>
