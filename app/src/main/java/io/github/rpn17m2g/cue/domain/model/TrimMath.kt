@@ -24,6 +24,25 @@ object TrimMath {
         return start..end
     }
 
+    /**
+     * True when [startMs] can become the start without [clampWindow] moving it:
+     * inside the track and at least the minimum span before [endMs]. Typed
+     * values are checked with this so the field never promises a window the
+     * slider then silently changes.
+     */
+    fun acceptsStart(startMs: Long, endMs: Long, durationMs: Long): Boolean {
+        if (durationMs <= 0) return false
+        return startMs >= 0 && startMs <= durationMs &&
+            endMs - startMs >= minOf(MIN_DURATION_MS, durationMs)
+    }
+
+    /** True when [endMs] can become the end without [clampWindow] moving it. */
+    fun acceptsEnd(endMs: Long, startMs: Long, durationMs: Long): Boolean {
+        if (durationMs <= 0) return false
+        return endMs >= 0 && endMs <= durationMs &&
+            endMs - startMs >= minOf(MIN_DURATION_MS, durationMs)
+    }
+
     /** `null` means "use the whole input" and lets FFmpeg skip the trim arguments. */
     fun trimRange(startMs: Long, endMs: Long, durationMs: Long?): TrimRange? {
         if (durationMs == null || durationMs <= 0) return null

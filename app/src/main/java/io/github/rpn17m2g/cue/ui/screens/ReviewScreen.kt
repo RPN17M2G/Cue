@@ -86,7 +86,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -137,8 +136,8 @@ import io.github.rpn17m2g.cue.domain.model.Artwork
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
-import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimClock
+import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.estimateMp3Bytes
 import io.github.rpn17m2g.cue.ui.cueViewModel
 import io.github.rpn17m2g.cue.ui.navigation.appContainer
@@ -159,6 +158,52 @@ fun ReviewScreen(
         ReviewViewModel(context.appContainer(), inputId)
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // The inline editor lives here rather than inside the scrolling content so
+    // Create can settle a field that is still open. Saveable state keeps a
+    // half-typed value alive across rotation.
+    var editingField by rememberSaveable { mutableStateOf<TagField?>(null) }
+    var editText by rememberSaveable { mutableStateOf("") }
+    var editError by rememberSaveable { mutableStateOf(false) }
+    var capturedValue by rememberSaveable { mutableStateOf("") }
+    var capturedSource by rememberSaveable { mutableStateOf<IdentificationSource?>(null) }
+
+    /** Returns false when validation rejects the value, leaving the editor open. */
+    fun commitField(): Boolean {
+        val field = editingField ?: return true
+        val year = editText.trim()
+        if (field == TagField.YEAR && year.isNotEmpty() && !YEAR_PATTERN.matches(year)) {
+            editError = true
+            return false
+        }
+        // The hero fields already preview live; writing here settles every
+        // field on Save, so a half-typed value never reaches the tag.
+        viewModel.updateDraft(field) { it.withField(field, editText.sanitizedFor(field)) }
+        viewModel.commitField(field)
+        editingField = null
+        editError = false
+        return true
+    }
+
+    fun openField(field: TagField) {
+        if (editingField == field) return
+        // Switching rows saves the open editor through the same path as Save,
+        // so an invalid year keeps the editor (and its error) open.
+        if (editingField != null && !commitField()) return
+        viewModel.beginFieldEdit(field)
+        capturedValue = state.valueFor(field)
+        capturedSource = state.sources[field]
+        editingField = field
+        editText = capturedValue
+        editError = false
+    }
+
+    fun cancelField() {
+        val field = editingField ?: return
+        viewModel.revertField(field, capturedValue, capturedSource)
+        editingField = null
+        editError = false
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -183,7 +228,12 @@ fun ReviewScreen(
             if (!state.loading && state.input != null) {
                 CreateBar(
                     state = state,
-                    onSave = { viewModel.save { onProcessing() } },
+                    onSave = {
+                        // A field that is still open counts: settle it before
+                        // the job reads the draft, and keep the editor open on
+                        // invalid input.
+                        if (commitField()) viewModel.save { onProcessing() }
+                    },
                 )
             }
         },
@@ -215,13 +265,25 @@ fun ReviewScreen(
             else -> ReviewContent(
                 state = state,
                 padding = padding,
-                onUpdate = viewModel::updateDraft,
                 onTrim = viewModel::setTrim,
                 onQuality = viewModel::setQuality,
                 onDeleteSource = viewModel::setDeleteSource,
-                onCommitField = viewModel::commitField,
-                onBeginFieldEdit = viewModel::beginFieldEdit,
-                onRevertField = viewModel::revertField,
+                editingField = editingField,
+                editText = editText,
+                editError = editError,
+                onOpenField = ::openField,
+                onFieldTextChange = { field, value ->
+                    val sanitized = value.sanitizedFor(field)
+                    editText = sanitized
+                    editError = false
+                    // Title and artist drive the cover preview, so they update
+                    // live; the other fields wait for Save.
+                    if (field == TagField.TITLE || field == TagField.ARTIST) {
+                        viewModel.updateDraft(field) { it.withField(field, sanitized) }
+                    }
+                },
+                onSaveField = { commitField() },
+                onCancelField = ::cancelField,
                 onRetry = viewModel::retryIdentification,
                 onSearch = viewModel::search,
                 onApplyMatch = viewModel::applyMatch,
@@ -240,13 +302,16 @@ fun ReviewScreen(
 private fun ReviewContent(
     state: ReviewUiState,
     padding: PaddingValues,
-    onUpdate: (TagField, (TagDraft) -> TagDraft) -> Unit,
     onTrim: (Long, Long) -> Unit,
     onQuality: (QualityPreset) -> Unit,
     onDeleteSource: (Boolean) -> Unit,
-    onCommitField: (TagField) -> Unit,
-    onBeginFieldEdit: (TagField) -> Unit,
-    onRevertField: (TagField, String, IdentificationSource?) -> Unit,
+    editingField: TagField?,
+    editText: String,
+    editError: Boolean,
+    onOpenField: (TagField) -> Unit,
+    onFieldTextChange: (TagField, String) -> Unit,
+    onSaveField: () -> Unit,
+    onCancelField: () -> Unit,
     onRetry: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
@@ -258,62 +323,16 @@ private fun ReviewContent(
     onRemoveArtwork: () -> Unit,
 ) {
     val input = state.input ?: return
-    // Handlers can outlive the composition that created them; reading the
-    // latest state through a State object keeps an old lambda from reopening
-    // an editor with the title the screen had before identification.
-    val latestState by rememberUpdatedState(state)
     val galleryPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri != null) onGalleryArtwork(uri)
     }
 
-    var editingField by remember { mutableStateOf<TagField?>(null) }
-    var editText by remember { mutableStateOf("") }
-    var editError by remember { mutableStateOf(false) }
-    var capturedValue by remember { mutableStateOf("") }
-    var capturedSource by remember { mutableStateOf<IdentificationSource?>(null) }
     var showMoreFields by rememberSaveable { mutableStateOf(false) }
     var clipExpanded by rememberSaveable { mutableStateOf(false) }
     var matchesSheet by rememberSaveable { mutableStateOf(false) }
     var searchSheet by rememberSaveable { mutableStateOf(false) }
-
-    /** Returns false when validation rejects the value, leaving the editor open. */
-    fun commitField(): Boolean {
-        val field = editingField ?: return true
-        val year = editText.trim()
-        if (field == TagField.YEAR && year.isNotEmpty() && !YEAR_PATTERN.matches(year)) {
-            editError = true
-            return false
-        }
-        // The hero fields already preview live; writing here settles every
-        // field on Save, so a half-typed value never reaches the tag.
-        onUpdate(field) { it.withField(field, editText.sanitizedFor(field)) }
-        onCommitField(field)
-        editingField = null
-        editError = false
-        return true
-    }
-
-    fun openField(field: TagField) {
-        if (editingField == field) return
-        // Switching rows saves the open editor through the same path as Save,
-        // so an invalid year keeps the editor (and its error) open.
-        if (editingField != null && !commitField()) return
-        onBeginFieldEdit(field)
-        capturedValue = latestState.valueFor(field)
-        capturedSource = latestState.sources[field]
-        editingField = field
-        editText = capturedValue
-        editError = false
-    }
-
-    fun cancelField() {
-        val field = editingField ?: return
-        onRevertField(field, capturedValue, capturedSource)
-        editingField = null
-        editError = false
-    }
 
     Column(
         modifier = Modifier
@@ -334,7 +353,7 @@ private fun ReviewContent(
         CheckBanner(
             flaggedField = state.flaggedFields.firstOrNull(),
             identifying = state.identifying,
-            onFix = { state.flaggedFields.firstOrNull()?.let(::openField) },
+            onFix = { state.flaggedFields.firstOrNull()?.let(onOpenField) },
         )
 
         FieldsCard(
@@ -344,20 +363,12 @@ private fun ReviewContent(
             editError = editError,
             showMoreFields = showMoreFields,
             onToggleMore = { showMoreFields = !showMoreFields },
-            onOpen = ::openField,
+            onOpen = onOpenField,
             onTextChange = { value ->
-                val field = editingField ?: return@FieldsCard
-                val sanitized = value.sanitizedFor(field)
-                editText = sanitized
-                editError = false
-                // Title and artist drive the cover preview, so they update
-                // live; the other fields wait for Save.
-                if (field == TagField.TITLE || field == TagField.ARTIST) {
-                    onUpdate(field) { it.withField(field, sanitized) }
-                }
+                editingField?.let { onFieldTextChange(it, value) }
             },
-            onSave = { commitField() },
-            onCancel = ::cancelField,
+            onSave = onSaveField,
+            onCancel = onCancelField,
         )
 
         MatchCard(
@@ -1169,6 +1180,7 @@ private fun TrimControls(
     var startText by remember { mutableStateOf(TrimClock.format(state.trimStartMs)) }
     var endText by remember { mutableStateOf(TrimClock.format(state.trimEndMs)) }
     var invalid by remember { mutableStateOf(false) }
+    var outOfRange by remember { mutableStateOf(false) }
     LaunchedEffect(state.trimStartMs) { startText = TrimClock.format(state.trimStartMs) }
     LaunchedEffect(state.trimEndMs) { endText = TrimClock.format(state.trimEndMs) }
 
@@ -1176,20 +1188,30 @@ private fun TrimControls(
         val parsed = TrimClock.parse(startText)
         // The handles clamp silently, which would move the end the user did not
         // touch. Reject the value instead and leave the last good window alone.
-        if (parsed == null || parsed < 0 || parsed >= state.trimEndMs || parsed > durationMs) {
+        if (parsed == null) {
             invalid = true
+            outOfRange = false
+        } else if (!TrimMath.acceptsStart(parsed, state.trimEndMs, durationMs)) {
+            invalid = true
+            outOfRange = true
         } else {
             invalid = false
+            outOfRange = false
             onTrim(parsed, state.trimEndMs)
         }
     }
 
     fun applyEnd() {
         val parsed = TrimClock.parse(endText)
-        if (parsed == null || parsed <= state.trimStartMs || parsed > durationMs) {
+        if (parsed == null) {
             invalid = true
+            outOfRange = false
+        } else if (!TrimMath.acceptsEnd(parsed, state.trimStartMs, durationMs)) {
+            invalid = true
+            outOfRange = true
         } else {
             invalid = false
+            outOfRange = false
             onTrim(state.trimStartMs, parsed)
         }
     }
@@ -1218,6 +1240,7 @@ private fun TrimControls(
                 onValueChange = {
                     startText = it
                     invalid = false
+                    outOfRange = false
                 },
                 onDone = ::applyStart,
                 modifier = Modifier.weight(1f),
@@ -1228,6 +1251,7 @@ private fun TrimControls(
                 onValueChange = {
                     endText = it
                     invalid = false
+                    outOfRange = false
                 },
                 onDone = ::applyEnd,
                 modifier = Modifier.weight(1f),
@@ -1235,7 +1259,9 @@ private fun TrimControls(
         }
         if (invalid) {
             Text(
-                text = stringResource(R.string.review_trim_invalid),
+                text = stringResource(
+                    if (outOfRange) R.string.review_trim_range else R.string.review_trim_invalid,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )

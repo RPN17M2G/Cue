@@ -115,6 +115,7 @@
     <string name="review_clip_summary">%1$s–%2$s · %3$s · %4$s</string>
     <string name="review_clip_summary_short">%1$s–%2$s · %3$s</string>
     <string name="review_trim_invalid">יש להזין דקות:שניות, למשל 1:05</string>
+    <string name="review_trim_range">צריך להשאיר לפחות שנייה בין ההתחלה לסוף, בתוך הקטע</string>
     <string name="review_delete_source">מחיקת הקלטת המקור</string>
     <string name="review_delete_source_note">המחיקה מתבצעת רק אחרי שמירת ה־MP3 וקריאת התגיות חזרה. Cue תשאל קודם.</string>
     <string name="review_create_note_delete">הקלטת המסך תימחק אחרי שמירת ה־MP3.</string>

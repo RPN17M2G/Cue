@@ -188,10 +188,13 @@ class ReviewViewModel(
     /**
      * Remembers whether the field had already been edited before this editor
      * opened, so cancelling the editor does not erase an earlier confirmed
-     * edit (or claim one that never happened).
+     * edit (or claim one that never happened). Marking the field edited while
+     * the editor is open stops a late identification result from replacing the
+     * value the user is looking at.
      */
     fun beginFieldEdit(field: TagField) {
         editedBeforeEditor[field] = field in editedFields
+        editedFields += field
     }
 
     /**
@@ -527,27 +530,26 @@ class ReviewViewModel(
     private fun applyIdentification(result: SongIdentification) {
         _state.update { current ->
             val sources = current.sources.toMutableMap()
+            // Only the fields this run actually took from the provider can be
+            // blamed on it; values kept from an earlier run are not flagged.
+            val applied = mutableSetOf<TagField>()
             val draft = mergeIdentified(
                 current = current.draft,
                 identified = result.outcome.tag,
                 identifiedSources = result.outcome.sources,
                 sources = sources,
+                applied = applied,
             )
             val best = result.outcome.bestMatch
                 ?.takeIf { Confidence.tier(it.score) != ConfidenceTier.IGNORED }
             // A mid-tier match is shown, but the fields it actually filled ask
-            // for a glance. Reading the merged sources (not the raw outcome)
-            // keeps fields the user edited — or that came from another stage —
-            // out of the banner.
+            // for a glance. Fields the user edited stay out of the banner.
             val flagged = if (
                 best != null && Confidence.tier(best.score) == ConfidenceTier.CHECK
             ) {
-                sources
-                    .filterValues { it == best.source }
-                    .keys
-                    .filterTo(mutableSetOf()) {
-                        it in CHECKABLE_FIELDS && it !in editedFields
-                    }
+                applied.filterTo(mutableSetOf()) {
+                    it in CHECKABLE_FIELDS && it !in editedFields
+                }
             } else {
                 emptySet()
             }
@@ -573,22 +575,26 @@ class ReviewViewModel(
         identified: TagDraft,
         identifiedSources: Map<TagField, IdentificationSource>,
         sources: MutableMap<TagField, IdentificationSource>,
+        applied: MutableSet<TagField>,
     ): TagDraft {
         fun text(field: TagField, currentValue: String, identifiedValue: String): String {
             if (field in editedFields || identifiedValue.isBlank()) return currentValue
             identifiedSources[field]?.let { sources[field] = it }
+            applied += field
             return identifiedValue
         }
 
         fun optional(field: TagField, currentValue: String?, identifiedValue: String?): String? {
             if (field in editedFields || identifiedValue.isNullOrBlank()) return currentValue
             identifiedSources[field]?.let { sources[field] = it }
+            applied += field
             return identifiedValue
         }
 
         fun <T> optionalValue(field: TagField, currentValue: T?, identifiedValue: T?): T? {
             if (field in editedFields || identifiedValue == null) return currentValue
             identifiedSources[field]?.let { sources[field] = it }
+            applied += field
             return identifiedValue
         }
 

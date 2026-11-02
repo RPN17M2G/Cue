@@ -115,6 +115,7 @@
     <string name="review_clip_summary">%1$s–%2$s · %3$s · %4$s</string>
     <string name="review_clip_summary_short">%1$s–%2$s · %3$s</string>
     <string name="review_trim_invalid">Use m:ss, for example 1:05</string>
+    <string name="review_trim_range">Keep at least 1 second between start and end, inside the clip</string>
     <string name="review_delete_source">Delete the source recording</string>
     <string name="review_delete_source_note">Removed only after the MP3 is saved and its tags are read back. Cue asks first.</string>
     <string name="review_create_note_delete">The screen recording will be deleted after the MP3 is saved.</string>
