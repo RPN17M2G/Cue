@@ -32,7 +32,7 @@ fun CueTheme(
     val spec = palette.spec
     val dark = theme.isDark()
     val colorScheme = if (dark) spec.dark else spec.light
-    val tokens = cueTokens(spec)
+    val tokens = cueTokens(spec, dark)
     // Edge-to-edge picks the system-bar icon colour from the system
     // configuration, but Settings can force the app into the other theme. In
     // light mode over a dark system that leaves white icons on a white bar, so

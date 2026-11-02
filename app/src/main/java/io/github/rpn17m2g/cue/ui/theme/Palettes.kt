@@ -32,6 +32,11 @@ data class PaletteSpec(
     val dark: ColorScheme,
     val heroGradient: List<Color>,
     val glow: Color,
+    /** Confidence and status colours; semantic, so every palette shares them. */
+    val successLight: Color,
+    val successDark: Color,
+    val cautionLight: Color,
+    val cautionDark: Color,
 )
 
 private val ErrorLight = Color(0xFFB3261E)
@@ -40,6 +45,14 @@ private val OnErrorLightContainer = Color(0xFF410E0B)
 private val ErrorDark = Color(0xFFF2B8B5)
 private val OnErrorDark = Color(0xFF601410)
 private val ErrorDarkContainer = Color(0xFF8C1D18)
+
+// Semantic status colours. They sit outside the palette so a green "matched"
+// badge means the same thing in every theme, and they carry light/dark
+// variants so the badge passes contrast in both modes.
+private val SuccessLight = Color(0xFF15803D)
+private val SuccessDark = Color(0xFF4ADE80)
+private val CautionLight = Color(0xFFB45309)
+private val CautionDark = Color(0xFFFBBF24)
 
 private fun lightScheme(
     background: Color,
@@ -164,6 +177,10 @@ private val Mint = PaletteSpec(
     ),
     heroGradient = listOf(Color(0xFF5EEAD4), Color(0xFF22C55E), Color(0xFF0E7490)),
     glow = Color(0xFF0FAE7B),
+    successLight = SuccessLight,
+    successDark = SuccessDark,
+    cautionLight = CautionLight,
+    cautionDark = CautionDark,
 )
 
 private val Lagoon = PaletteSpec(
@@ -192,6 +209,10 @@ private val Lagoon = PaletteSpec(
     ),
     heroGradient = listOf(Color(0xFF7DD3FC), Color(0xFF22D3EE), Color(0xFF4338CA)),
     glow = Color(0xFF06A8C4),
+    successLight = SuccessLight,
+    successDark = SuccessDark,
+    cautionLight = CautionLight,
+    cautionDark = CautionDark,
 )
 
 private val Navy = PaletteSpec(
@@ -220,6 +241,10 @@ private val Navy = PaletteSpec(
     ),
     heroGradient = listOf(Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF0B1220)),
     glow = Color(0xFF1E3A8A),
+    successLight = SuccessLight,
+    successDark = SuccessDark,
+    cautionLight = CautionLight,
+    cautionDark = CautionDark,
 )
 
 private val DeepTeal = PaletteSpec(
@@ -248,6 +273,10 @@ private val DeepTeal = PaletteSpec(
     ),
     heroGradient = listOf(Color(0xFF0F766E), Color(0xFF0E7490), Color(0xFF082F49)),
     glow = Color(0xFF0F766E),
+    successLight = SuccessLight,
+    successDark = SuccessDark,
+    cautionLight = CautionLight,
+    cautionDark = CautionDark,
 )
 
 /** Resolves the persisted palette key into its full specification. */

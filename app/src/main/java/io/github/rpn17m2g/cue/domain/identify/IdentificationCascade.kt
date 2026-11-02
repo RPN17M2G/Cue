@@ -40,6 +40,7 @@ data class IdentificationOutcome(
     val usedFingerprint: Boolean,
     val usedEmbeddedTags: Boolean,
     val fingerprintKeyRejected: Boolean = false,
+    val bestMatch: MetadataMatch? = null,
 )
 
 /**
@@ -164,6 +165,7 @@ class IdentificationCascade(
             rawOcrLines = rawOcrLines,
             usedFingerprint = usedFingerprint,
             usedEmbeddedTags = merged.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
+            bestMatch = ranked.firstOrNull(),
         )
     }
 
