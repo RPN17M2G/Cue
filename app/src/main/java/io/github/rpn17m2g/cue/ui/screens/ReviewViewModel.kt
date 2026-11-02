@@ -9,6 +9,8 @@ import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.data.metadata.ArtworkCandidate
 import io.github.rpn17m2g.cue.data.metadata.MetadataQuery
 import io.github.rpn17m2g.cue.di.AppContainer
+import io.github.rpn17m2g.cue.domain.identify.Confidence
+import io.github.rpn17m2g.cue.domain.identify.ConfidenceTier
 import io.github.rpn17m2g.cue.domain.identify.SongIdentification
 import io.github.rpn17m2g.cue.domain.metadata.TagField
 import io.github.rpn17m2g.cue.domain.model.Artwork
@@ -52,6 +54,9 @@ data class ReviewUiState(
     val identifying: Boolean = false,
     val sources: Map<TagField, IdentificationSource> = emptyMap(),
     val alternatives: List<MetadataMatch> = emptyList(),
+    val matched: MetadataMatch? = null,
+    val flaggedFields: Set<TagField> = emptySet(),
+    val deleteSource: Boolean = false,
     val searchResults: List<MetadataMatch> = emptyList(),
     val searchCompleted: Boolean = false,
     val searching: Boolean = false,
@@ -98,7 +103,11 @@ class ReviewViewModel(
     private var settings = AppSettings()
     private var embeddedTags: TagDraft? = null
     private var identifyJob: Job? = null
+    private var searchJob: Job? = null
     private val editedFields = mutableSetOf<TagField>()
+
+    /** Whether each field was already edited when its inline editor opened. */
+    private val editedBeforeEditor = mutableMapOf<TagField, Boolean>()
 
     init {
         viewModelScope.launch {
@@ -135,6 +144,10 @@ class ReviewViewModel(
             durationMs = duration,
             identifying = true,
             fingerprintAvailable = settings.fingerprintAvailable,
+            // Videos are the only kind that can be deleted, and the decision
+            // is ON by default: the user is usually done with the recording
+            // once the song exists.
+            deleteSource = input.kind == InputKind.VIDEO,
         )
         identifyNow()
     }
@@ -162,6 +175,51 @@ class ReviewViewModel(
         _state.update { it.copy(quality = quality) }
     }
 
+    fun setDeleteSource(enabled: Boolean) {
+        _state.update { it.copy(deleteSource = enabled) }
+    }
+
+    /** Called when the user saves an inline editor, which settles its flag. */
+    fun commitField(field: TagField) {
+        editedBeforeEditor.remove(field)
+        _state.update { it.copy(flaggedFields = it.flaggedFields - field) }
+    }
+
+    /**
+     * Remembers whether the field had already been edited before this editor
+     * opened, so cancelling the editor does not erase an earlier confirmed
+     * edit (or claim one that never happened). Marking the field edited while
+     * the editor is open stops a late identification result from replacing the
+     * value the user is looking at.
+     */
+    fun beginFieldEdit(field: TagField) {
+        editedBeforeEditor[field] = field in editedFields
+        editedFields += field
+    }
+
+    /**
+     * Cancel puts back only the value and source of the field being edited.
+     * Restoring the whole draft would undo identification results that arrived
+     * while the editor was open.
+     */
+    fun revertField(
+        field: TagField,
+        value: String,
+        source: IdentificationSource?,
+    ) {
+        val wasEdited = editedBeforeEditor.remove(field) ?: (field in editedFields)
+        if (wasEdited) editedFields += field else editedFields -= field
+        _state.update { current ->
+            val sources = current.sources.toMutableMap()
+            if (source == null) sources.remove(field) else sources[field] = source
+            current.copy(
+                draft = current.draft.withField(field, value),
+                sources = sources,
+                errorRes = null,
+            )
+        }
+    }
+
     fun retryIdentification() {
         if (_state.value.identifying) return
         identifyJob?.cancel()
@@ -172,13 +230,17 @@ class ReviewViewModel(
 
     fun search(query: String) {
         val term = query.trim()
-        if (term.isEmpty() || _state.value.searching) return
-        viewModelScope.launch {
+        if (term.isEmpty()) return
+        // Live search fires per keystroke; cancel the previous request so a
+        // slow answer cannot overwrite the results for a newer query.
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             val currentSettings = container.settingsRepository.settings.first()
             settings = currentSettings
             if (!currentSettings.networkLookups) {
                 _state.update {
                     it.copy(
+                        searching = false,
                         searchOffline = true,
                         searchCompleted = false,
                         searchResults = emptyList(),
@@ -260,11 +322,20 @@ class ReviewViewModel(
                 artwork = optionalValue(TagField.ARTWORK, match.artwork, current.draft.artwork),
             )
             appliedFields = applied
+            // Applying a weak candidate is allowed — the user picked it — but
+            // the fields it fills must still ask for a glance.
+            val flagged = if (Confidence.tier(match.score) == ConfidenceTier.ACCEPTED) {
+                current.flaggedFields - applied
+            } else {
+                current.flaggedFields + applied.filter { it in CHECKABLE_FIELDS }
+            }
             current.copy(
                 draft = draft,
                 sources = sources,
+                matched = match,
                 alternatives = current.alternatives - match,
                 searchResults = current.searchResults - match,
+                flaggedFields = flagged,
                 errorRes = null,
             )
         }
@@ -330,6 +401,12 @@ class ReviewViewModel(
 
     fun openArtworkPicker() {
         _state.update { it.copy(artworkPickerOpen = true, artworkFailed = false) }
+        val current = _state.value
+        if (current.artworkResults.isNotEmpty() || current.artworkSearching) return
+        val query = listOf(current.draft.artist, current.draft.title)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+        if (query.isNotBlank()) searchArtwork(query)
     }
 
     fun closeArtworkPicker() {
@@ -453,16 +530,37 @@ class ReviewViewModel(
     private fun applyIdentification(result: SongIdentification) {
         _state.update { current ->
             val sources = current.sources.toMutableMap()
+            // Only the fields this run actually took from the provider can be
+            // blamed on it; values kept from an earlier run are not flagged.
+            val applied = mutableSetOf<TagField>()
             val draft = mergeIdentified(
                 current = current.draft,
                 identified = result.outcome.tag,
                 identifiedSources = result.outcome.sources,
                 sources = sources,
+                applied = applied,
             )
+            val best = result.outcome.bestMatch
+                ?.takeIf { Confidence.tier(it.score) != ConfidenceTier.IGNORED }
+            // A mid-tier match is shown, but the fields it actually filled ask
+            // for a glance. Fields the user edited stay out of the banner.
+            val flagged = if (
+                best != null && Confidence.tier(best.score) == ConfidenceTier.CHECK
+            ) {
+                applied.filterTo(mutableSetOf()) {
+                    it in CHECKABLE_FIELDS && it !in editedFields
+                }
+            } else {
+                emptySet()
+            }
             current.copy(
                 draft = draft,
                 sources = sources,
-                alternatives = result.outcome.alternatives,
+                alternatives = result.outcome.alternatives.filter {
+                    Confidence.tier(it.score) != ConfidenceTier.IGNORED
+                },
+                matched = best,
+                flaggedFields = flagged,
                 rawOcrLines = result.outcome.rawOcrLines,
                 ocrAttempted = current.input?.kind == InputKind.VIDEO,
                 ocrFailed = result.ocrFailed,
@@ -477,22 +575,26 @@ class ReviewViewModel(
         identified: TagDraft,
         identifiedSources: Map<TagField, IdentificationSource>,
         sources: MutableMap<TagField, IdentificationSource>,
+        applied: MutableSet<TagField>,
     ): TagDraft {
         fun text(field: TagField, currentValue: String, identifiedValue: String): String {
             if (field in editedFields || identifiedValue.isBlank()) return currentValue
             identifiedSources[field]?.let { sources[field] = it }
+            applied += field
             return identifiedValue
         }
 
         fun optional(field: TagField, currentValue: String?, identifiedValue: String?): String? {
             if (field in editedFields || identifiedValue.isNullOrBlank()) return currentValue
             identifiedSources[field]?.let { sources[field] = it }
+            applied += field
             return identifiedValue
         }
 
         fun <T> optionalValue(field: TagField, currentValue: T?, identifiedValue: T?): T? {
             if (field in editedFields || identifiedValue == null) return currentValue
             identifiedSources[field]?.let { sources[field] = it }
+            applied += field
             return identifiedValue
         }
 
@@ -552,5 +654,26 @@ class ReviewViewModel(
 
     private companion object {
         val YEAR_PATTERN = Regex("""^\d{4}(?:-\d{2}(?:-\d{2})?)?$""")
+        val CHECKABLE_FIELDS = setOf(
+            TagField.TITLE,
+            TagField.ARTIST,
+            TagField.ALBUM,
+            TagField.YEAR,
+        )
     }
+}
+
+/**
+ * Writes one text field back into a draft. Shared by the inline editor and by
+ * Cancel's single-field restore, so both agree on how a field is represented.
+ */
+internal fun TagDraft.withField(field: TagField, value: String): TagDraft = when (field) {
+    TagField.TITLE -> copy(title = value)
+    TagField.ARTIST -> copy(artist = value)
+    TagField.ALBUM -> copy(album = value)
+    TagField.ALBUM_ARTIST -> copy(albumArtist = value)
+    TagField.YEAR -> copy(year = value)
+    TagField.GENRE -> copy(genre = value)
+    TagField.TRACK_NUMBER -> copy(trackNumber = value.takeIf { it.isNotBlank() }?.toIntOrNull())
+    TagField.ARTWORK -> this
 }

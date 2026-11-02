@@ -2,12 +2,19 @@ package io.github.rpn17m2g.cue.ui.screens
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.text.format.DateUtils
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +26,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,9 +35,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -37,13 +46,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +65,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -61,10 +74,12 @@ import androidx.compose.material3.RangeSliderState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,17 +91,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -102,16 +129,22 @@ import io.github.rpn17m2g.cue.R
 import io.github.rpn17m2g.cue.data.input.InputKind
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.data.metadata.ArtworkCandidate
+import io.github.rpn17m2g.cue.domain.identify.Confidence
+import io.github.rpn17m2g.cue.domain.identify.ConfidenceTier
 import io.github.rpn17m2g.cue.domain.metadata.TagField
 import io.github.rpn17m2g.cue.domain.model.Artwork
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import io.github.rpn17m2g.cue.domain.model.MetadataMatch
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
-import io.github.rpn17m2g.cue.domain.model.TagDraft
+import io.github.rpn17m2g.cue.domain.model.TrimClock
+import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.estimateMp3Bytes
 import io.github.rpn17m2g.cue.ui.cueViewModel
 import io.github.rpn17m2g.cue.ui.navigation.appContainer
+import io.github.rpn17m2g.cue.ui.theme.LocalCueTokens
 import java.io.File
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,11 +159,57 @@ fun ReviewScreen(
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // The inline editor lives here rather than inside the scrolling content so
+    // Create can settle a field that is still open. Saveable state keeps a
+    // half-typed value alive across rotation.
+    var editingField by rememberSaveable { mutableStateOf<TagField?>(null) }
+    var editText by rememberSaveable { mutableStateOf("") }
+    var editError by rememberSaveable { mutableStateOf(false) }
+    var capturedValue by rememberSaveable { mutableStateOf("") }
+    var capturedSource by rememberSaveable { mutableStateOf<IdentificationSource?>(null) }
+
+    /** Returns false when validation rejects the value, leaving the editor open. */
+    fun commitField(): Boolean {
+        val field = editingField ?: return true
+        val year = editText.trim()
+        if (field == TagField.YEAR && year.isNotEmpty() && !YEAR_PATTERN.matches(year)) {
+            editError = true
+            return false
+        }
+        // The hero fields already preview live; writing here settles every
+        // field on Save, so a half-typed value never reaches the tag.
+        viewModel.updateDraft(field) { it.withField(field, editText.sanitizedFor(field)) }
+        viewModel.commitField(field)
+        editingField = null
+        editError = false
+        return true
+    }
+
+    fun openField(field: TagField) {
+        if (editingField == field) return
+        // Switching rows saves the open editor through the same path as Save,
+        // so an invalid year keeps the editor (and its error) open.
+        if (editingField != null && !commitField()) return
+        viewModel.beginFieldEdit(field)
+        capturedValue = state.valueFor(field)
+        capturedSource = state.sources[field]
+        editingField = field
+        editText = capturedValue
+        editError = false
+    }
+
+    fun cancelField() {
+        val field = editingField ?: return
+        viewModel.revertField(field, capturedValue, capturedSource)
+        editingField = null
+        editError = false
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.review_title)) },
+                title = { Text(stringResource(R.string.review_song_details)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -147,10 +226,14 @@ fun ReviewScreen(
         },
         bottomBar = {
             if (!state.loading && state.input != null) {
-                ReviewActionBar(
-                    tagOnlyEdit = state.tagOnlyEdit,
-                    saving = state.saving,
-                    onSave = { viewModel.save { onProcessing() } },
+                CreateBar(
+                    state = state,
+                    onSave = {
+                        // A field that is still open counts: settle it before
+                        // the job reads the draft, and keep the editor open on
+                        // invalid input.
+                        if (commitField()) viewModel.save { onProcessing() }
+                    },
                 )
             }
         },
@@ -182,9 +265,25 @@ fun ReviewScreen(
             else -> ReviewContent(
                 state = state,
                 padding = padding,
-                onUpdate = viewModel::updateDraft,
                 onTrim = viewModel::setTrim,
                 onQuality = viewModel::setQuality,
+                onDeleteSource = viewModel::setDeleteSource,
+                editingField = editingField,
+                editText = editText,
+                editError = editError,
+                onOpenField = ::openField,
+                onFieldTextChange = { field, value ->
+                    val sanitized = value.sanitizedFor(field)
+                    editText = sanitized
+                    editError = false
+                    // Title and artist drive the cover preview, so they update
+                    // live; the other fields wait for Save.
+                    if (field == TagField.TITLE || field == TagField.ARTIST) {
+                        viewModel.updateDraft(field) { it.withField(field, sanitized) }
+                    }
+                },
+                onSaveField = { commitField() },
+                onCancelField = ::cancelField,
                 onRetry = viewModel::retryIdentification,
                 onSearch = viewModel::search,
                 onApplyMatch = viewModel::applyMatch,
@@ -203,9 +302,16 @@ fun ReviewScreen(
 private fun ReviewContent(
     state: ReviewUiState,
     padding: PaddingValues,
-    onUpdate: (TagField, (TagDraft) -> TagDraft) -> Unit,
     onTrim: (Long, Long) -> Unit,
     onQuality: (QualityPreset) -> Unit,
+    onDeleteSource: (Boolean) -> Unit,
+    editingField: TagField?,
+    editText: String,
+    editError: Boolean,
+    onOpenField: (TagField) -> Unit,
+    onFieldTextChange: (TagField, String) -> Unit,
+    onSaveField: () -> Unit,
+    onCancelField: () -> Unit,
     onRetry: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
@@ -213,7 +319,7 @@ private fun ReviewContent(
     onCloseArtworkPicker: () -> Unit,
     onSearchArtwork: (String) -> Unit,
     onChooseArtwork: (ArtworkCandidate) -> Unit,
-    onGalleryArtwork: (android.net.Uri) -> Unit,
+    onGalleryArtwork: (Uri) -> Unit,
     onRemoveArtwork: () -> Unit,
 ) {
     val input = state.input ?: return
@@ -222,793 +328,842 @@ private fun ReviewContent(
     ) { uri ->
         if (uri != null) onGalleryArtwork(uri)
     }
+
+    var showMoreFields by rememberSaveable { mutableStateOf(false) }
+    var clipExpanded by rememberSaveable { mutableStateOf(false) }
+    var matchesSheet by rememberSaveable { mutableStateOf(false) }
+    var searchSheet by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
-            .padding(top = 8.dp, bottom = 24.dp),
+            .padding(top = 4.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        MediaPreview(
-            input = input,
-            trimStartMs = state.trimStartMs,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
+        CoverHero(
+            artwork = state.draft.artwork,
+            title = state.draft.title.ifBlank { stringResource(R.string.review_untitled) },
+            artist = state.draft.artist,
+            onChangeCover = onOpenArtworkPicker,
         )
-        Spacer(Modifier.height(12.dp))
-        FileSummary(input = input, durationMs = state.durationMs)
-        if (state.identifying) {
-            Spacer(Modifier.height(12.dp))
-            IdentificationBanner()
+
+        CheckBanner(
+            flaggedField = state.flaggedFields.firstOrNull(),
+            identifying = state.identifying,
+            onFix = { state.flaggedFields.firstOrNull()?.let(onOpenField) },
+        )
+
+        FieldsCard(
+            state = state,
+            editingField = editingField,
+            editText = editText,
+            editError = editError,
+            showMoreFields = showMoreFields,
+            onToggleMore = { showMoreFields = !showMoreFields },
+            onOpen = onOpenField,
+            onTextChange = { value ->
+                editingField?.let { onFieldTextChange(it, value) }
+            },
+            onSave = onSaveField,
+            onCancel = onCancelField,
+        )
+
+        MatchCard(
+            state = state,
+            onRetry = onRetry,
+            onOpenMatches = { matchesSheet = true },
+            onOpenSearch = { searchSheet = true },
+        )
+
+        ClipQualityCard(
+            state = state,
+            input = input,
+            expanded = clipExpanded,
+            onToggle = { clipExpanded = !clipExpanded },
+            onTrim = onTrim,
+            onQuality = onQuality,
+        )
+
+        if (input.kind == InputKind.VIDEO) {
+            DeleteSourceCard(
+                checked = state.deleteSource,
+                onCheckedChange = onDeleteSource,
+            )
         }
 
-        Spacer(Modifier.height(28.dp))
-        SectionHeader(R.string.review_lookup)
-        Spacer(Modifier.height(12.dp))
-        TagFields(state = state, onUpdate = onUpdate)
+        OcrDetails(state = state)
 
-        Spacer(Modifier.height(28.dp))
-        ArtworkSection(
-            artwork = state.draft.artwork,
-            applying = state.artworkApplying,
-            onSearchCovers = onOpenArtworkPicker,
-            onPickGallery = {
+        Spacer(Modifier.height(2.dp))
+    }
+
+    if (state.artworkPickerOpen) {
+        CoverSheet(
+            state = state,
+            onDismiss = onCloseArtworkPicker,
+            onSearch = onSearchArtwork,
+            onChoose = onChooseArtwork,
+            onPickDevice = {
                 galleryPicker.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                 )
             },
             onRemove = onRemoveArtwork,
         )
-
-        Spacer(Modifier.height(28.dp))
-        LookupSection(
+    }
+    if (matchesSheet) {
+        MatchesSheet(
+            matches = state.alternatives,
+            onDismiss = { matchesSheet = false },
+            onChoose = { match ->
+                onApplyMatch(match)
+                matchesSheet = false
+            },
+        )
+    }
+    if (searchSheet) {
+        SearchSheet(
             state = state,
-            onRetry = onRetry,
+            onDismiss = { searchSheet = false },
             onSearch = onSearch,
-            onApplyMatch = onApplyMatch,
-        )
-        Spacer(Modifier.height(8.dp))
-        OcrDetails(state = state)
-
-        if (state.hasTrim) {
-            Spacer(Modifier.height(28.dp))
-            TrimSection(state = state, onTrim = onTrim)
-        }
-        if (!state.tagOnlyEdit) {
-            Spacer(Modifier.height(28.dp))
-            QualitySection(
-                state = state,
-                onQuality = onQuality,
-                estimatedBytes = estimateMp3Bytes(
-                    durationMs = state.effectiveDurationMs ?: 0L,
-                    preset = state.quality,
-                ),
-            )
-        }
-        state.errorRes?.let {
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(it),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-    }
-    if (state.artworkPickerOpen) {
-        ArtworkPickerDialog(
-            state = state,
-            onDismiss = onCloseArtworkPicker,
-            onSearch = onSearchArtwork,
-            onChoose = onChooseArtwork,
-        )
-    }
-}
-
-@Composable
-private fun FileSummary(
-    input: ResolvedInput,
-    durationMs: Long?,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(
-            imageVector = if (input.kind == InputKind.VIDEO) {
-                Icons.Default.Movie
-            } else {
-                Icons.Default.MusicNote
-            },
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
-        )
-        Text(
-            text = input.displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        if (durationMs != null && durationMs > 0L) {
-            Text(
-                text = DateUtils.formatElapsedTime(durationMs / 1_000),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/** Small, quiet label that separates the form's sections. */
-@Composable
-private fun SectionHeader(resId: Int) {
-    Text(
-        text = stringResource(resId),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        letterSpacing = 0.6.sp,
-    )
-}
-
-/** Sticky primary action, so Process is always reachable. */
-@Composable
-private fun ReviewActionBar(
-    tagOnlyEdit: Boolean,
-    saving: Boolean,
-    onSave: () -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.imePadding(),
-    ) {
-        Column {
-            HorizontalDivider(
-                thickness = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-            ) {
-                Button(
-                    onClick = onSave,
-                    enabled = !saving,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                ) {
-                    if (saving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                        Spacer(Modifier.width(10.dp))
-                    }
-                    Text(
-                        text = stringResource(
-                            if (tagOnlyEdit) R.string.review_save_tags else R.string.review_save,
-                        ),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun IdentificationBanner() {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.medium,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.review_identifying),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun TagFields(
-    state: ReviewUiState,
-    onUpdate: (TagField, (TagDraft) -> TagDraft) -> Unit,
-) {
-    val draft = state.draft
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        TagField(
-            labelRes = R.string.review_field_title,
-            value = draft.title,
-            source = state.sourceFor(TagField.TITLE, draft.title.isNotBlank()),
-            onValueChange = { value -> onUpdate(TagField.TITLE) { it.copy(title = value) } },
-        )
-        TagField(
-            labelRes = R.string.review_field_artist,
-            value = draft.artist,
-            source = state.sourceFor(TagField.ARTIST, draft.artist.isNotBlank()),
-            onValueChange = { value -> onUpdate(TagField.ARTIST) { it.copy(artist = value) } },
-        )
-        TagField(
-            labelRes = R.string.review_field_album,
-            value = draft.album,
-            source = state.sourceFor(TagField.ALBUM, draft.album.isNotBlank()),
-            onValueChange = { value -> onUpdate(TagField.ALBUM) { it.copy(album = value) } },
-        )
-        TagField(
-            labelRes = R.string.review_field_album_artist,
-            value = draft.albumArtist,
-            source = state.sourceFor(TagField.ALBUM_ARTIST, draft.albumArtist.isNotBlank()),
-            onValueChange = { value ->
-                onUpdate(TagField.ALBUM_ARTIST) { it.copy(albumArtist = value) }
+            onChoose = { match ->
+                onApplyMatch(match)
+                searchSheet = false
             },
         )
-        TagField(
-            labelRes = R.string.review_field_year,
-            value = draft.year.orEmpty(),
-            source = state.sourceFor(TagField.YEAR, !draft.year.isNullOrBlank()),
-            onValueChange = { value -> onUpdate(TagField.YEAR) { it.copy(year = value) } },
-            keyboardType = KeyboardType.Number,
-        )
-        TagField(
-            labelRes = R.string.review_field_genre,
-            value = draft.genre.orEmpty(),
-            source = state.sourceFor(TagField.GENRE, !draft.genre.isNullOrBlank()),
-            onValueChange = { value -> onUpdate(TagField.GENRE) { it.copy(genre = value) } },
-        )
-        TagField(
-            labelRes = R.string.review_field_track,
-            value = draft.trackNumber?.toString().orEmpty(),
-            source = state.sourceFor(TagField.TRACK_NUMBER, draft.trackNumber != null),
-            onValueChange = { value ->
-                onUpdate(TagField.TRACK_NUMBER) {
-                    it.copy(trackNumber = value.filter(Char::isDigit).take(3).toIntOrNull())
-                }
-            },
-            keyboardType = KeyboardType.Number,
-        )
     }
 }
 
-@Composable
-private fun TagField(
-    labelRes: Int,
-    value: String,
-    source: IdentificationSource?,
-    onValueChange: (String) -> Unit,
-    keyboardType: KeyboardType = KeyboardType.Text,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(stringResource(labelRes)) },
-        supportingText = if (source != null) {
-            { SourceLabel(source) }
-        } else {
-            null
-        },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        shape = MaterialTheme.shapes.medium,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        colors = cueOutlinedFieldColors(),
-    )
-}
+// ---------------------------------------------------------------- hero
 
 @Composable
-private fun cueOutlinedFieldColors() = OutlinedTextFieldDefaults.colors(
-    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-)
-
-@Composable
-private fun ArtworkSection(
+private fun CoverHero(
     artwork: Artwork?,
-    applying: Boolean,
-    onSearchCovers: () -> Unit,
-    onPickGallery: () -> Unit,
-    onRemove: () -> Unit,
+    title: String,
+    artist: String,
+    onChangeCover: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader(R.string.review_artwork)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (artwork != null) {
-                ArtworkThumbnail(artwork = artwork, modifier = Modifier.size(96.dp))
-            } else {
-                Surface(
-                    modifier = Modifier.size(96.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.review_artwork_none),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                TextButton(onClick = onSearchCovers, enabled = !applying) {
-                    Text(stringResource(R.string.review_artwork_search))
-                }
-                TextButton(onClick = onPickGallery, enabled = !applying) {
-                    Text(
-                        text = stringResource(R.string.review_artwork_gallery),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (artwork != null) {
-                    TextButton(onClick = onRemove, enabled = !applying) {
-                        Text(
-                            text = stringResource(R.string.review_artwork_remove),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-            if (applying) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtworkThumbnail(
-    artwork: Artwork,
-    modifier: Modifier = Modifier,
-) {
-    val bitmap = remember(artwork) { decodeArtwork(artwork.bytes) }
-    if (bitmap == null) {
-        Surface(
-            modifier = modifier,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = MaterialTheme.shapes.medium,
-        ) {}
-    } else {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = stringResource(R.string.review_field_artwork),
-            contentScale = ContentScale.Crop,
-            modifier = modifier.clip(MaterialTheme.shapes.medium),
-        )
-    }
-}
-
-@Composable
-private fun ArtworkPickerDialog(
-    state: ReviewUiState,
-    onDismiss: () -> Unit,
-    onSearch: (String) -> Unit,
-    onChoose: (ArtworkCandidate) -> Unit,
-) {
-    var query by rememberSaveable { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.review_artwork_search_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text(stringResource(R.string.review_artwork_search_hint)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
-                    trailingIcon = {
-                        IconButton(
-                            onClick = { onSearch(query) },
-                            enabled = query.isNotBlank() && !state.artworkSearching,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = stringResource(R.string.review_search_action),
-                            )
-                        }
-                    },
-                )
-                when {
-                    state.artworkOffline -> Text(
-                        text = stringResource(R.string.review_artwork_offline),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    state.artworkSearching -> Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
-                        Text(
-                            text = stringResource(R.string.review_searching),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    state.artworkFailed -> Text(
-                        text = stringResource(R.string.review_artwork_failed),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    state.artworkSearchCompleted && state.artworkResults.isEmpty() -> Text(
-                        text = stringResource(R.string.review_artwork_no_results),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    state.artworkResults.isNotEmpty() -> LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(280.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(state.artworkResults, key = { it.artworkUrl600 }) { candidate ->
-                            CoverCell(candidate = candidate, onClick = { onChoose(candidate) })
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.review_artwork_close))
-            }
-        },
-    )
-}
-
-@Composable
-private fun CoverCell(
-    candidate: ArtworkCandidate,
-    onClick: () -> Unit,
-) {
-    val context = LocalContext.current
-    val repository = remember(context) { context.appContainer().artworkRepository }
-    var preview by remember(candidate.artworkUrl600) {
-        mutableStateOf<PreviewState>(PreviewState.Loading)
-    }
-    LaunchedEffect(candidate.artworkUrl600) {
-        val bitmap = repository.preview(candidate.artworkUrl600)
-        preview = if (bitmap == null) PreviewState.Failed else PreviewState.Loaded(bitmap)
-    }
-    val fallbackDescription = stringResource(R.string.review_artwork_choose)
-    val description = listOfNotNull(candidate.album, candidate.artist)
-        .joinToString(" · ")
-        .ifBlank { fallbackDescription }
-    Surface(
+    val tokens = LocalCueTokens.current
+    val bitmap = remember(artwork) { artwork?.let { decodeArtwork(it.bytes) } }
+    Box(
         modifier = Modifier
-            .aspectRatio(1f)
-            .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium,
+            .fillMaxWidth()
+            .aspectRatio(4f / 3f)
+            .shadow(tokens.shadowElevation, tokens.cardShape)
+            .clip(tokens.cardShape),
     ) {
-        when (val current = preview) {
-            PreviewState.Loading -> Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp))
-            }
-            PreviewState.Failed -> Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = stringResource(R.string.review_artwork_unavailable),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            is PreviewState.Loaded -> Image(
-                bitmap = current.bitmap.asImageBitmap(),
-                contentDescription = description,
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = stringResource(R.string.review_field_artwork),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(tokens.heroBrush),
+            )
         }
-    }
-}
-
-private sealed interface PreviewState {
-    data object Loading : PreviewState
-    data object Failed : PreviewState
-    data class Loaded(val bitmap: Bitmap) : PreviewState
-}
-
-private fun decodeArtwork(bytes: ByteArray): Bitmap? = runCatching {
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-}.getOrNull()
-
-private fun ReviewUiState.sourceFor(
-    field: TagField,
-    hasValue: Boolean,
-): IdentificationSource? {
-    if (!hasValue) return null
-    return sources[field]
-}
-
-/** Where a field's value came from, as a quiet dot and label. */
-@Composable
-private fun SourceLabel(source: IdentificationSource) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
         Box(
             modifier = Modifier
-                .size(6.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
+                        0.45f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f),
+                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.82f),
+                    ),
+                ),
         )
-        Text(
-            text = stringResource(source.labelRes()),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun LookupSection(
-    state: ReviewUiState,
-    onRetry: () -> Unit,
-    onSearch: (String) -> Unit,
-    onApplyMatch: (MetadataMatch) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        SectionHeader(R.string.review_section_online)
-        TextButton(onClick = onRetry, enabled = !state.identifying) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = stringResource(R.string.review_refresh),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-    }
-    if (state.searchOffline) {
-        Text(
-            text = stringResource(R.string.review_search_offline),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
-    if (state.fingerprintKeyRejected) {
-        Text(
-            text = stringResource(R.string.review_fingerprint_key_rejected),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
-    if (
-        state.input?.kind == InputKind.VIDEO &&
-        !state.fingerprintAvailable &&
-        !state.identifying &&
-        state.rawOcrLines.isEmpty()
-    ) {
-        Text(
-            text = stringResource(R.string.review_fingerprint_unavailable),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (state.alternatives.isNotEmpty()) {
-        OtherMatches(
-            matches = state.alternatives,
-            onApplyMatch = onApplyMatch,
-        )
-    }
-    ManualSearch(state = state, onSearch = onSearch)
-    if (state.searching) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 18.dp, end = 18.dp, bottom = 16.dp),
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp))
             Text(
-                text = stringResource(R.string.review_searching),
-                style = MaterialTheme.typography.bodyMedium,
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = tokens.heroInk,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
+            if (artist.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.heroInk.copy(alpha = 0.86f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-    }
-    if (state.searchCompleted) {
-        if (state.searchResults.isEmpty()) {
-            Text(
-                text = stringResource(R.string.review_no_matches),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.review_search_results),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            MatchList(matches = state.searchResults, onApplyMatch = onApplyMatch)
+        Surface(
+            onClick = onChangeCover,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                )
+                Text(
+                    text = stringResource(R.string.review_change_cover),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
     }
 }
 
+// ---------------------------------------------------------------- check banner
+
 @Composable
-private fun OtherMatches(
-    matches: List<MetadataMatch>,
-    onApplyMatch: (MetadataMatch) -> Unit,
+private fun CheckBanner(
+    flaggedField: TagField?,
+    identifying: Boolean,
+    onFix: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    TextButton(onClick = { expanded = !expanded }) {
-        Text(stringResource(R.string.review_other_matches_count, matches.size))
-    }
-    if (expanded) {
-        MatchList(matches = matches, onApplyMatch = onApplyMatch)
-    }
-}
-
-@Composable
-private fun MatchList(
-    matches: List<MetadataMatch>,
-    onApplyMatch: (MetadataMatch) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        matches.forEach { match ->
-            MatchRow(match = match, onApply = { onApplyMatch(match) })
-        }
-    }
-}
-
-@Composable
-private fun MatchRow(match: MetadataMatch, onApply: () -> Unit) {
-    Surface(
-        onClick = onApply,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+    val tokens = LocalCueTokens.current
+    when {
+        identifying -> Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ) {
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
+                Text(
+                    text = stringResource(R.string.review_identifying),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+        flaggedField != null -> Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = tokens.caution.copy(alpha = 0.14f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.review_check_banner,
+                        stringResource(flaggedField.labelRes()),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onFix) {
+                    Text(
+                        text = stringResource(R.string.review_fix_it),
+                        color = tokens.caution,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- fields
+
+@Composable
+private fun FieldsCard(
+    state: ReviewUiState,
+    editingField: TagField?,
+    editText: String,
+    editError: Boolean,
+    showMoreFields: Boolean,
+    onToggleMore: () -> Unit,
+    onOpen: (TagField) -> Unit,
+    onTextChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    Surface(
+        shape = tokens.cardShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            PRIMARY_FIELDS.forEachIndexed { index, field ->
+                FieldRow(
+                    field = field,
+                    state = state,
+                    editing = editingField == field,
+                    editText = editText,
+                    editError = editError,
+                    onOpen = { onOpen(field) },
+                    onTextChange = onTextChange,
+                    onSave = onSave,
+                    onCancel = onCancel,
+                )
+                if (index < PRIMARY_FIELDS.lastIndex) {
+                    FieldDivider()
+                }
+            }
+            FieldDivider()
+            TextButton(
+                onClick = onToggleMore,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                Icon(
+                    imageVector = if (showMoreFields) {
+                        Icons.Default.ExpandLess
+                    } else {
+                        Icons.Default.ExpandMore
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = stringResource(
+                        if (showMoreFields) R.string.review_fewer_details
+                        else R.string.review_more_details,
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (showMoreFields) {
+                EXTRA_FIELDS.forEachIndexed { index, field ->
+                    FieldDivider()
+                    FieldRow(
+                        field = field,
+                        state = state,
+                        editing = editingField == field,
+                        editText = editText,
+                        editError = editError,
+                        onOpen = { onOpen(field) },
+                        onTextChange = onTextChange,
+                        onSave = onSave,
+                        onCancel = onCancel,
+                    )
+                    if (index == EXTRA_FIELDS.lastIndex) {
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldRow(
+    field: TagField,
+    state: ReviewUiState,
+    editing: Boolean,
+    editText: String,
+    editError: Boolean,
+    onOpen: () -> Unit,
+    onTextChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    val value = state.valueFor(field)
+    val flagged = field in state.flaggedFields
+    val source = state.sources[field]
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !editing, onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(field.labelRes()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (flagged) {
+                        Surface(
+                            shape = CircleShape,
+                            color = tokens.caution.copy(alpha = 0.16f),
+                            contentColor = tokens.caution,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.review_check_chip),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(1.dp))
+                Text(
+                    text = value.ifBlank { stringResource(R.string.review_add_value) },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (value.isBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (source != null && value.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    SourceLabel(source)
+                }
+            }
+            if (!editing) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = stringResource(R.string.review_field_edit),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = editing,
+            enter = fadeIn(tween(FIELD_ANIM_MILLIS)) + expandVertically(tween(FIELD_ANIM_MILLIS)),
+            exit = fadeOut(tween(FIELD_ANIM_MILLIS)) + shrinkVertically(tween(FIELD_ANIM_MILLIS)),
+        ) {
+            FieldEditor(
+                field = field,
+                text = editText,
+                error = editError,
+                onTextChange = onTextChange,
+                onSave = onSave,
+                onCancel = onCancel,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FieldEditor(
+    field: TagField,
+    text: String,
+    error: Boolean,
+    onTextChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    // Selecting the whole value makes replacing it one keystroke, as the plan
+    // asks. The selection lives in TextFieldValue; the parent still owns the
+    // plain string.
+    var value by remember {
+        mutableStateOf(TextFieldValue(text, selection = TextRange(0, text.length)))
+    }
+    LaunchedEffect(text) {
+        if (value.text != text) value = value.copy(text = text)
+    }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        // Wait for the IME to resize the window, then lift the editor above
+        // the sticky Create bar so Save and Cancel stay reachable.
+        delay(EDITOR_BRING_INTO_VIEW_MILLIS)
+        bringIntoView.bringIntoView()
+    }
+    LaunchedEffect(error) {
+        if (error) {
+            // The validation line grows the editor; keep it visible too.
+            delay(EDITOR_BRING_INTO_VIEW_MILLIS)
+            bringIntoView.bringIntoView()
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .bringIntoViewRequester(bringIntoView)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyUp) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.Escape -> {
+                        onCancel()
+                        true
+                    }
+                    Key.Enter, Key.NumPadEnter -> {
+                        keyboard?.hide()
+                        onSave()
+                        true
+                    }
+                    else -> false
+                }
+            },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { candidate ->
+                    val sanitized = candidate.text.sanitizedFor(field)
+                    value = candidate.copy(text = sanitized)
+                    onTextChange(sanitized)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+                singleLine = true,
+                isError = error,
+                shape = LocalCueTokens.current.fieldShape,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = field.keyboardType(),
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        keyboard?.hide()
+                        onSave()
+                    },
+                ),
+                colors = cueOutlinedFieldColors(),
+            )
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.review_field_cancel))
+            }
+            TextButton(onClick = onSave) {
+                Text(stringResource(R.string.review_field_save))
+            }
+        }
+        if (error) {
+            Text(
+                text = stringResource(R.string.review_year_invalid),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FieldDivider() {
+    HorizontalDivider(
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+    )
+}
+
+// ---------------------------------------------------------------- match card
+
+@Composable
+private fun MatchCard(
+    state: ReviewUiState,
+    onRetry: () -> Unit,
+    onOpenMatches: () -> Unit,
+    onOpenSearch: () -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    val match = state.matched
+    Surface(
+        shape = tokens.cardShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.review_section_online),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onRetry, enabled = !state.identifying) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.review_look_up_again),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            if (match != null) {
+                ConfidencePill(
+                    text = stringResource(
+                        R.string.review_match_line,
+                        (match.score * 100).roundToInt(),
+                        stringResource(match.source.labelRes()),
+                    ),
+                    score = match.score,
+                )
                 Text(
                     text = match.title,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val subtitle = listOfNotNull(
                     match.artist.takeIf { it.isNotBlank() },
                     match.album?.takeIf { it.isNotBlank() },
+                    match.year?.takeIf { it.isNotBlank() },
                 ).joinToString(" · ")
                 if (subtitle.isNotEmpty()) {
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            } else {
                 Text(
-                    text = stringResource(match.source.labelRes()),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = stringResource(R.string.review_no_match),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.review_no_match_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = stringResource(R.string.review_apply),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (state.alternatives.isNotEmpty()) {
+                    TextButton(
+                        onClick = onOpenMatches,
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.review_other_matches_count,
+                                state.alternatives.size,
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = onOpenSearch,
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.review_search_manually),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            if (state.searchOffline) {
+                MatchNote(
+                    text = stringResource(R.string.review_search_offline),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (state.fingerprintKeyRejected) {
+                MatchNote(
+                    text = stringResource(R.string.review_fingerprint_key_rejected),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (
+                state.input?.kind == InputKind.VIDEO &&
+                !state.fingerprintAvailable &&
+                !state.identifying &&
+                state.rawOcrLines.isEmpty()
+            ) {
+                MatchNote(
+                    text = stringResource(R.string.review_fingerprint_unavailable),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ManualSearch(
-    state: ReviewUiState,
-    onSearch: (String) -> Unit,
-) {
-    var query by rememberSaveable { mutableStateOf("") }
-    val keyboard = LocalSoftwareKeyboardController.current
-    val submit: () -> Unit = {
-        onSearch(query)
-        keyboard?.hide()
-    }
-    OutlinedTextField(
-        value = query,
-        onValueChange = { query = it },
-        label = { Text(stringResource(R.string.review_search_hint)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        shape = MaterialTheme.shapes.medium,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { submit() }),
-        colors = cueOutlinedFieldColors(),
-        trailingIcon = {
-            IconButton(
-                onClick = submit,
-                enabled = query.isNotBlank() && !state.searching,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = stringResource(R.string.review_search_action),
-                )
-            }
-        },
+private fun MatchNote(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = color,
     )
 }
 
 @Composable
-private fun OcrDetails(state: ReviewUiState) {
-    if (!state.hasOcrDetails) return
-    var expanded by remember { mutableStateOf(false) }
-    TextButton(
-        onClick = { expanded = !expanded },
-        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+private fun ConfidencePill(text: String, score: Double) {
+    val tokens = LocalCueTokens.current
+    val color = when (Confidence.tier(score)) {
+        ConfidenceTier.ACCEPTED -> tokens.success
+        ConfidenceTier.CHECK -> tokens.caution
+        ConfidenceTier.IGNORED -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = CircleShape,
+        color = color.copy(alpha = 0.14f),
+        contentColor = color,
     ) {
         Text(
-            text = stringResource(
-                if (expanded) R.string.review_ocr_hide else R.string.review_ocr_details,
-            ),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
         )
     }
-    if (expanded) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+}
+
+// ---------------------------------------------------------------- clip & quality
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ClipQualityCard(
+    state: ReviewUiState,
+    input: ResolvedInput,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onTrim: (Long, Long) -> Unit,
+    onQuality: (QualityPreset) -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    val quality = stringResource(state.quality.shortLabelRes())
+    val summary = when {
+        state.hasTrim && state.tagOnlyEdit -> stringResource(
+            R.string.review_clip_summary_short,
+            TrimClock.format(state.trimStartMs),
+            TrimClock.format(state.trimEndMs),
+            TrimClock.format(state.effectiveDurationMs ?: 0L),
+        )
+        state.hasTrim -> stringResource(
+            R.string.review_clip_summary,
+            TrimClock.format(state.trimStartMs),
+            TrimClock.format(state.trimEndMs),
+            TrimClock.format(state.effectiveDurationMs ?: 0L),
+            quality,
+        )
+        else -> quality
+    }
+    Surface(
+        shape = tokens.cardShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (state.rawOcrLines.isNotEmpty()) {
-                    state.rawOcrLines.forEach { line ->
-                        Text(
-                            text = line,
-                            style = MaterialTheme.typography.bodySmall,
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.review_clip_quality),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) {
+                        Icons.Default.ExpandLess
+                    } else {
+                        Icons.Default.ExpandMore
+                    },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(tween(FIELD_ANIM_MILLIS)) + expandVertically(tween(FIELD_ANIM_MILLIS)),
+                exit = fadeOut(tween(FIELD_ANIM_MILLIS)) + shrinkVertically(tween(FIELD_ANIM_MILLIS)),
+            ) {
+                Column(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.review_preview),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    MediaPreview(
+                        input = input,
+                        trimStartMs = state.trimStartMs,
+                        modifier = if (input.kind == InputKind.VIDEO) {
+                            Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                        } else {
+                            Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                        },
+                    )
+                    if (state.hasTrim) {
+                        TrimControls(
+                            state = state,
+                            onTrim = onTrim,
                         )
                     }
-                } else if (state.ocrFailed) {
-                    Text(
-                        text = stringResource(R.string.review_ocr_failed),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.review_ocr_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    if (!state.tagOnlyEdit) {
+                        Text(
+                            text = stringResource(R.string.review_quality),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            QualityPreset.entries.forEach { preset ->
+                                FilterChip(
+                                    selected = state.quality == preset,
+                                    onClick = { onQuality(preset) },
+                                    label = { Text(stringResource(preset.shortLabelRes())) },
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(
+                                R.string.review_estimated_size_value,
+                                android.text.format.Formatter.formatShortFileSize(
+                                    LocalContext.current,
+                                    estimateMp3Bytes(
+                                        durationMs = state.effectiveDurationMs ?: 0L,
+                                        preset = state.quality,
+                                    ),
+                                ),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -1017,20 +1172,57 @@ private fun OcrDetails(state: ReviewUiState) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TrimSection(
+private fun TrimControls(
     state: ReviewUiState,
     onTrim: (Long, Long) -> Unit,
 ) {
     val durationMs = state.durationMs ?: return
-    val maxSeconds = durationMs / 1_000f
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionHeader(R.string.review_trim)
+    var startText by remember { mutableStateOf(TrimClock.format(state.trimStartMs)) }
+    var endText by remember { mutableStateOf(TrimClock.format(state.trimEndMs)) }
+    var invalid by remember { mutableStateOf(false) }
+    var outOfRange by remember { mutableStateOf(false) }
+    LaunchedEffect(state.trimStartMs) { startText = TrimClock.format(state.trimStartMs) }
+    LaunchedEffect(state.trimEndMs) { endText = TrimClock.format(state.trimEndMs) }
+
+    fun applyStart() {
+        val parsed = TrimClock.parse(startText)
+        // The handles clamp silently, which would move the end the user did not
+        // touch. Reject the value instead and leave the last good window alone.
+        if (parsed == null) {
+            invalid = true
+            outOfRange = false
+        } else if (!TrimMath.acceptsStart(parsed, state.trimEndMs, durationMs)) {
+            invalid = true
+            outOfRange = true
+        } else {
+            invalid = false
+            outOfRange = false
+            onTrim(parsed, state.trimEndMs)
+        }
+    }
+
+    fun applyEnd() {
+        val parsed = TrimClock.parse(endText)
+        if (parsed == null) {
+            invalid = true
+            outOfRange = false
+        } else if (!TrimMath.acceptsEnd(parsed, state.trimStartMs, durationMs)) {
+            invalid = true
+            outOfRange = true
+        } else {
+            invalid = false
+            outOfRange = false
+            onTrim(state.trimStartMs, parsed)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         RangeSlider(
             value = (state.trimStartMs / 1_000f)..(state.trimEndMs / 1_000f),
             onValueChange = { range ->
                 onTrim((range.start * 1_000).toLong(), (range.endInclusive * 1_000).toLong())
             },
-            valueRange = 0f..maxSeconds,
+            valueRange = 0f..(durationMs / 1_000f),
             colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.primary,
                 activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -1040,26 +1232,71 @@ private fun TrimSection(
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = stringResource(
-                    R.string.review_trim_start,
-                    DateUtils.formatElapsedTime(state.trimStartMs / 1_000),
-                ),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            TrimTextField(
+                label = stringResource(R.string.review_trim_start_short),
+                value = startText,
+                onValueChange = {
+                    startText = it
+                    invalid = false
+                    outOfRange = false
+                },
+                onDone = ::applyStart,
+                modifier = Modifier.weight(1f),
             )
+            TrimTextField(
+                label = stringResource(R.string.review_trim_end_short),
+                value = endText,
+                onValueChange = {
+                    endText = it
+                    invalid = false
+                    outOfRange = false
+                },
+                onDone = ::applyEnd,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (invalid) {
             Text(
                 text = stringResource(
-                    R.string.review_trim_end,
-                    DateUtils.formatElapsedTime(state.trimEndMs / 1_000),
+                    if (outOfRange) R.string.review_trim_range else R.string.review_trim_invalid,
                 ),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
             )
         }
     }
+}
+
+@Composable
+private fun TrimTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = modifier,
+        singleLine = true,
+        shape = LocalCueTokens.current.fieldShape,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Text,
+            imeAction = ImeAction.Done,
+        ),
+        keyboardActions = KeyboardActions(
+            onDone = {
+                keyboard?.hide()
+                onDone()
+            },
+        ),
+        colors = cueOutlinedFieldColors(),
+    )
 }
 
 /** A slim two-handle track; the stock slider's 16dp bar reads as a progress bar. */
@@ -1102,37 +1339,646 @@ private fun TrimTrack(state: RangeSliderState) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+// ---------------------------------------------------------------- delete source
+
 @Composable
-private fun QualitySection(
-    state: ReviewUiState,
-    onQuality: (QualityPreset) -> Unit,
-    estimatedBytes: Long,
+private fun DeleteSourceCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(R.string.review_quality)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    val tokens = LocalCueTokens.current
+    Surface(
+        shape = tokens.cardShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            QualityPreset.entries.forEach { preset ->
-                FilterChip(
-                    selected = state.quality == preset,
-                    onClick = { onQuality(preset) },
-                    label = { Text(stringResource(preset.labelRes())) },
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.review_delete_source),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.review_delete_source_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
-        Text(
-            text = stringResource(
-                R.string.review_estimated_size_value,
-                android.text.format.Formatter.formatShortFileSize(LocalContext.current, estimatedBytes),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
+
+// ---------------------------------------------------------------- OCR details
+
+@Composable
+private fun OcrDetails(state: ReviewUiState) {
+    if (!state.hasOcrDetails) return
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        TextButton(
+            onClick = { expanded = !expanded },
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+        ) {
+            Text(
+                text = stringResource(
+                    if (expanded) R.string.review_ocr_hide else R.string.review_ocr_details,
+                ),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (expanded) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (state.rawOcrLines.isNotEmpty()) {
+                        state.rawOcrLines.forEach { line ->
+                            Text(text = line, style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (state.ocrFailed) {
+                        Text(
+                            text = stringResource(R.string.review_ocr_failed),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.review_ocr_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- create bar
+
+@Composable
+private fun CreateBar(
+    state: ReviewUiState,
+    onSave: () -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    val isVideo = state.input?.kind == InputKind.VIDEO
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.imePadding(),
+    ) {
+        Column {
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                // Validation and save errors live next to the button that
+                // produced them; at the bottom of the scroll they were invisible.
+                state.errorRes?.let {
+                    Text(
+                        text = stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+                if (isVideo) {
+                    Text(
+                        text = stringResource(
+                            if (state.deleteSource) {
+                                R.string.review_create_note_delete
+                            } else {
+                                R.string.review_create_note_keep
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+                Button(
+                    onClick = onSave,
+                    enabled = !state.saving,
+                    shape = tokens.buttonShape,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                ) {
+                    if (state.saving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    Text(
+                        text = stringResource(
+                            when {
+                                state.tagOnlyEdit -> R.string.review_save_tags
+                                else -> R.string.review_create
+                            },
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- sheets
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CoverSheet(
+    state: ReviewUiState,
+    onDismiss: () -> Unit,
+    onSearch: (String) -> Unit,
+    onChoose: (ArtworkCandidate) -> Unit,
+    onPickDevice: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    var query by rememberSaveable { mutableStateOf("") }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = tokens.sheetShape,
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.review_artwork_search_title),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            if (state.artworkApplying) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            when {
+                state.artworkOffline -> SheetNote(
+                    text = stringResource(R.string.review_artwork_offline),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                state.artworkSearching && state.artworkResults.isEmpty() -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    Text(
+                        text = stringResource(R.string.review_searching),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                state.artworkFailed -> SheetNote(
+                    text = stringResource(R.string.review_artwork_failed),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                state.artworkSearchCompleted && state.artworkResults.isEmpty() -> SheetNote(
+                    text = stringResource(R.string.review_artwork_no_results),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (state.artworkResults.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.review_cover_suggestions),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ArtworkGrid(
+                    candidates = if (searchOpen) {
+                        state.artworkResults
+                    } else {
+                        state.artworkResults.take(4)
+                    },
+                    onChoose = onChoose,
+                )
+            }
+            if (searchOpen) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.review_artwork_search_hint)) },
+                    singleLine = true,
+                    shape = tokens.fieldShape,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            keyboard?.hide()
+                            onSearch(query)
+                        },
+                    ),
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                keyboard?.hide()
+                                onSearch(query)
+                            },
+                            enabled = query.isNotBlank() && !state.artworkSearching,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.review_search_action),
+                            )
+                        }
+                    },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { searchOpen = true },
+                    shape = tokens.buttonShape,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.review_artwork_search),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                OutlinedButton(
+                    onClick = onPickDevice,
+                    shape = tokens.buttonShape,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.review_artwork_gallery),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            if (state.draft.artwork != null) {
+                TextButton(
+                    onClick = onRemove,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text(
+                        text = stringResource(R.string.review_artwork_remove),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtworkGrid(
+    candidates: List<ArtworkCandidate>,
+    onChoose: (ArtworkCandidate) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        candidates.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { candidate ->
+                    CoverCell(
+                        candidate = candidate,
+                        onClick = { onChoose(candidate) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetNote(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = color,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MatchesSheet(
+    matches: List<MetadataMatch>,
+    onDismiss: () -> Unit,
+    onChoose: (MetadataMatch) -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = tokens.sheetShape,
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.review_matches_sheet_title),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 12.dp),
+            ) {
+                items(matches) { match ->
+                    MatchSheetRow(match = match, onClick = { onChoose(match) })
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchSheet(
+    state: ReviewUiState,
+    onDismiss: () -> Unit,
+    onSearch: (String) -> Unit,
+    onChoose: (MetadataMatch) -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    var query by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(query) {
+        val term = query.trim()
+        if (term.length >= 2) {
+            delay(SEARCH_DEBOUNCE_MILLIS)
+            onSearch(term)
+        }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = tokens.sheetShape,
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.review_search_sheet_title),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.review_search_sheet_hint)) },
+                singleLine = true,
+                shape = tokens.fieldShape,
+                colors = cueOutlinedFieldColors(),
+                trailingIcon = {
+                    if (state.searching) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                },
+            )
+            when {
+                state.searchOffline -> SheetNote(
+                    text = stringResource(R.string.review_search_offline),
+                    color = MaterialTheme.colorScheme.error,
+                )
+                state.searching && state.searchResults.isEmpty() -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    Text(
+                        text = stringResource(R.string.review_searching),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                state.searchCompleted && state.searchResults.isEmpty() -> SheetNote(
+                    text = stringResource(R.string.review_no_matches),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (state.searchResults.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 12.dp),
+                ) {
+                    items(state.searchResults) { match ->
+                        MatchSheetRow(match = match, onClick = { onChoose(match) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MatchSheetRow(match: MetadataMatch, onClick: () -> Unit) {
+    val tokens = LocalCueTokens.current
+    Surface(
+        onClick = onClick,
+        shape = tokens.cardShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MatchCover(match = match, modifier = Modifier.size(48.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = match.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val subtitle = listOfNotNull(
+                    match.artist.takeIf { it.isNotBlank() },
+                    listOfNotNull(match.album, match.year)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · ")
+                        .takeIf { it.isNotEmpty() },
+                ).joinToString(" · ")
+                if (subtitle.isNotEmpty()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = stringResource(match.source.labelRes()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            ConfidencePill(
+                text = stringResource(
+                    R.string.review_score_percent,
+                    (match.score * 100).roundToInt(),
+                ),
+                score = match.score,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MatchCover(match: MetadataMatch, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val repository = remember(context) { context.appContainer().artworkRepository }
+    var bitmap by remember(match.artworkUrl, match.artwork) {
+        mutableStateOf(match.artwork?.let { decodeArtwork(it.bytes, maxWidth = 128) })
+    }
+    LaunchedEffect(match.artworkUrl) {
+        if (bitmap == null && !match.artworkUrl.isNullOrBlank()) {
+            bitmap = repository.preview(match.artworkUrl)
+        }
+    }
+    Box(
+        modifier = modifier
+            .clip(LocalCueTokens.current.thumbnailShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        val image = bitmap
+        if (image != null) {
+            Image(
+                bitmap = image.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- artwork grid
+
+@Composable
+private fun CoverCell(
+    candidate: ArtworkCandidate,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val repository = remember(context) { context.appContainer().artworkRepository }
+    var preview by remember(candidate.artworkUrl600) {
+        mutableStateOf<PreviewState>(PreviewState.Loading)
+    }
+    LaunchedEffect(candidate.artworkUrl600) {
+        val bitmap = repository.preview(candidate.artworkUrl600)
+        preview = if (bitmap == null) PreviewState.Failed else PreviewState.Loaded(bitmap)
+    }
+    val fallbackDescription = stringResource(R.string.review_artwork_choose)
+    val description = listOfNotNull(candidate.album, candidate.artist)
+        .joinToString(" · ")
+        .ifBlank { fallbackDescription }
+    Surface(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        when (val current = preview) {
+            PreviewState.Loading -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            }
+            PreviewState.Failed -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.review_artwork_unavailable),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            is PreviewState.Loaded -> Image(
+                bitmap = current.bitmap.asImageBitmap(),
+                contentDescription = description,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+private sealed interface PreviewState {
+    data object Loading : PreviewState
+    data object Failed : PreviewState
+    data class Loaded(val bitmap: Bitmap) : PreviewState
+}
+
+// ---------------------------------------------------------------- preview
 
 @Composable
 private fun MediaPreview(
@@ -1143,7 +1989,7 @@ private fun MediaPreview(
     val context = LocalContext.current
     val player = remember(input.id) {
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(File(input.path))))
+            setMediaItem(MediaItem.fromUri(Uri.fromFile(File(input.path))))
             prepare()
         }
     }
@@ -1217,7 +2063,7 @@ private fun VideoPreview(
         )
         if (!isPlaying) {
             Surface(
-                color = Color.Black.copy(alpha = 0.55f),
+                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
                 shape = CircleShape,
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -1227,7 +2073,7 @@ private fun VideoPreview(
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = stringResource(R.string.review_play),
-                        tint = Color.White,
+                        tint = LocalCueTokens.current.heroInk,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -1293,12 +2139,66 @@ private fun AudioPreview(
     }
 }
 
+// ---------------------------------------------------------------- labels
+
 @Composable
-private fun QualityPreset.labelRes(): Int = when (this) {
-    QualityPreset.V0 -> R.string.quality_v0
-    QualityPreset.V2 -> R.string.quality_v2
-    QualityPreset.CBR_256 -> R.string.quality_cbr256
-    QualityPreset.CBR_192 -> R.string.quality_cbr192
+private fun SourceLabel(source: IdentificationSource) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(5.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+        )
+        Text(
+            text = stringResource(source.labelRes()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun ReviewUiState.valueFor(field: TagField): String = when (field) {
+    TagField.TITLE -> draft.title
+    TagField.ARTIST -> draft.artist
+    TagField.ALBUM -> draft.album
+    TagField.ALBUM_ARTIST -> draft.albumArtist
+    TagField.YEAR -> draft.year.orEmpty()
+    TagField.GENRE -> draft.genre.orEmpty()
+    TagField.TRACK_NUMBER -> draft.trackNumber?.toString().orEmpty()
+    TagField.ARTWORK -> ""
+}
+
+private fun String.sanitizedFor(field: TagField): String = when (field) {
+    TagField.TRACK_NUMBER -> filter(Char::isDigit).take(3)
+    TagField.YEAR -> filter { it.isDigit() || it == '-' }.take(10)
+    else -> this
+}
+
+private fun TagField.keyboardType(): KeyboardType = when (this) {
+    TagField.TRACK_NUMBER -> KeyboardType.Number
+    else -> KeyboardType.Text
+}
+
+private fun TagField.labelRes(): Int = when (this) {
+    TagField.TITLE -> R.string.review_field_title
+    TagField.ARTIST -> R.string.review_field_artist
+    TagField.ALBUM -> R.string.review_field_album
+    TagField.ALBUM_ARTIST -> R.string.review_field_album_artist
+    TagField.YEAR -> R.string.review_field_year
+    TagField.GENRE -> R.string.review_field_genre
+    TagField.TRACK_NUMBER -> R.string.review_field_track
+    TagField.ARTWORK -> R.string.review_field_artwork
+}
+
+@Composable
+private fun QualityPreset.shortLabelRes(): Int = when (this) {
+    QualityPreset.V0 -> R.string.review_quality_best
+    QualityPreset.V2 -> R.string.review_quality_standard
+    QualityPreset.CBR_256 -> R.string.review_quality_256
+    QualityPreset.CBR_192 -> R.string.review_quality_192
 }
 
 @Composable
@@ -1312,4 +2212,38 @@ private fun IdentificationSource.labelRes(): Int = when (this) {
     IdentificationSource.MANUAL -> R.string.source_manual
 }
 
+@Composable
+private fun cueOutlinedFieldColors() = OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+)
+
+private fun decodeArtwork(bytes: ByteArray, maxWidth: Int = 1024): Bitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    val sample = if (bounds.outWidth > maxWidth) {
+        Integer.highestOneBit(bounds.outWidth / maxWidth).coerceAtLeast(1)
+    } else {
+        1
+    }
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+}.getOrNull()
+
+private val PRIMARY_FIELDS = listOf(
+    TagField.TITLE,
+    TagField.ARTIST,
+    TagField.ALBUM,
+    TagField.YEAR,
+)
+
+private val EXTRA_FIELDS = listOf(
+    TagField.ALBUM_ARTIST,
+    TagField.GENRE,
+    TagField.TRACK_NUMBER,
+)
+
+private val YEAR_PATTERN = Regex("""^\d{4}(?:-\d{2}(?:-\d{2})?)?$""")
 private val TRIM_TRACK_HEIGHT = 6.dp
+private const val FIELD_ANIM_MILLIS = 180
+private const val SEARCH_DEBOUNCE_MILLIS = 350L
+private const val EDITOR_BRING_INTO_VIEW_MILLIS = 400L

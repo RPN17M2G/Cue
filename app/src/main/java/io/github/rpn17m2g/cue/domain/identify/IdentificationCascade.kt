@@ -40,6 +40,7 @@ data class IdentificationOutcome(
     val usedFingerprint: Boolean,
     val usedEmbeddedTags: Boolean,
     val fingerprintKeyRejected: Boolean = false,
+    val bestMatch: MetadataMatch? = null,
 )
 
 /**
@@ -85,7 +86,7 @@ class IdentificationCascade(
                 durationMs = durationMs,
             )
             val matches = lookupSafely { lookup(lookupSeed) }
-            val ranked = MetadataMatcher.rank(seed.tag, matches)
+            val ranked = MetadataMatcher.rank(seed.tag, matches).accepted()
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = false)
             }
@@ -98,7 +99,7 @@ class IdentificationCascade(
                 durationMs = durationMs,
             )
             val attempt = fingerprintSafely { fingerprintLookup(fingerprintSeed) }
-            val ranked = MetadataMatcher.rank(seed.tag, attempt.matches)
+            val ranked = MetadataMatcher.rank(seed.tag, attempt.matches).accepted()
             if (ranked.isNotEmpty()) {
                 return outcome(seed, ranked, rawOcrLines, usedFingerprint = true)
             }
@@ -145,13 +146,21 @@ class IdentificationCascade(
             FingerprintAttempt()
         }
 
+    /**
+     * Below the ignore threshold a match is noise: it would populate fields the
+     * user has to undo, and it must not stop the cascade from trying the next
+     * stage. The thresholds live in [Confidence] so the UI and this filter
+     * cannot drift apart.
+     */
+    private fun List<MetadataMatch>.accepted(): List<MetadataMatch> =
+        filter { Confidence.tier(it.score) != ConfidenceTier.IGNORED }
+
     private fun outcome(
         seed: Seed,
         ranked: List<MetadataMatch>,
         rawOcrLines: List<String>,
         usedFingerprint: Boolean,
-    ): IdentificationOutcome {
-        val merged = MetadataMerger.merge(
+    ): IdentificationOutcome {        val merged = MetadataMerger.merge(
             base = seed.tag,
             matches = ranked,
             baseSource = seed.defaultSource,
@@ -164,6 +173,7 @@ class IdentificationCascade(
             rawOcrLines = rawOcrLines,
             usedFingerprint = usedFingerprint,
             usedEmbeddedTags = merged.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
+            bestMatch = ranked.firstOrNull(),
         )
     }
 

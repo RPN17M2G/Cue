@@ -206,7 +206,65 @@ class IdentificationCascadeTest {
 
         assertEquals("Zulu", outcome.tag.title)
         assertEquals("High Album", outcome.tag.album)
-        assertEquals(listOf("Alpha"), outcome.alternatives.map { it.title })
+        // Below the ignore threshold the candidate is noise, not an alternative.
+        assertTrue(outcome.alternatives.isEmpty())
+    }
+
+    @Test
+    fun `a weak lookup match is ignored and the fingerprint still runs`() = runTest {
+        val noise = MetadataMatch(
+            title = "Completely Different Song",
+            artist = "Somebody Else",
+            album = "Noise",
+            source = IdentificationSource.ITUNES,
+            score = 0.0,
+        )
+        var fingerprintCalls = 0
+
+        val outcome = cascade(
+            lookup = { listOf(noise) },
+            fingerprintLookup = {
+                fingerprintCalls += 1
+                FingerprintAttempt(
+                    listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT)),
+                )
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+        )
+
+        assertTrue(outcome.usedFingerprint)
+        assertEquals("Random Access Memories", outcome.tag.album)
+        assertEquals(IdentificationSource.FINGERPRINT, outcome.sources[TagField.ALBUM])
+        assertEquals(1, fingerprintCalls)
+    }
+
+    @Test
+    fun `weak matches never populate the draft`() = runTest {
+        val noise = MetadataMatch(
+            title = "Completely Different Song",
+            artist = "Somebody Else",
+            album = "Noise",
+            source = IdentificationSource.ITUNES,
+            score = 0.0,
+        )
+
+        val outcome = cascade(lookup = { listOf(noise) }).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+        )
+
+        assertEquals(TagDraft(title = "Get Lucky", artist = "Daft Punk"), outcome.tag)
+        assertEquals(IdentificationSource.OCR_LATIN, outcome.sources[TagField.TITLE])
+        assertNull(outcome.bestMatch)
+        assertTrue(outcome.alternatives.isEmpty())
     }
 
     @Test

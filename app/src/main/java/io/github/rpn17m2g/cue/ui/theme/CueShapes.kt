@@ -30,6 +30,10 @@ data class CueTokens(
     val titleWeight: FontWeight,
     val bodyWeight: FontWeight,
     val titleTracking: TextUnit,
+    /** Text drawn over artwork or the hero gradient. */
+    val heroInk: Color,
+    val success: Color,
+    val caution: Color,
 )
 
 val LocalCueTokens = staticCompositionLocalOf<CueTokens> {
@@ -53,7 +57,7 @@ internal fun cueShapes(style: CueStyle): Shapes = when (style) {
     )
 }
 
-internal fun cueTokens(spec: PaletteSpec): CueTokens {
+internal fun cueTokens(spec: PaletteSpec, dark: Boolean): CueTokens {
     val cheerful = spec.style == CueStyle.CHEERFUL
     return CueTokens(
         style = spec.style,
@@ -75,5 +79,8 @@ internal fun cueTokens(spec: PaletteSpec): CueTokens {
         titleWeight = if (cheerful) FontWeight.ExtraBold else FontWeight.SemiBold,
         bodyWeight = if (cheerful) FontWeight.Medium else FontWeight.Normal,
         titleTracking = if (cheerful) (-0.02).em else (-0.01).em,
+        heroInk = Color.White,
+        success = if (dark) spec.successDark else spec.successLight,
+        caution = if (dark) spec.cautionDark else spec.cautionLight,
     )
 }

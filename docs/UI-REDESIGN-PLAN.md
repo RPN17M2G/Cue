@@ -229,7 +229,8 @@ Top to bottom:
 - **Cover**: four suggestions + `Search online` + `Pick from this device` +
   `Remove artwork`.
 - **Other matches**: three candidates with cover, artist, album/year and a
-  confidence badge coloured by tier (green ≥ 80, amber 60–79, muted < 60).
+  confidence badge coloured by tier (green ≥ 0.75, amber 0.55–0.75, muted
+  below; decision D15 supersedes the earlier 80/60 split).
 - **Manual search**: query field + result list, results update as you type.
 
 All sheets: scrim, 28/16 dp top radius, grabber, max 90 % height, scrollable.
