@@ -35,6 +35,11 @@ data class AppSettings(
     val theme: AppTheme = AppTheme.SYSTEM,
     val palette: CuePalette = CuePalette.MINT,
     val filenameTemplate: String = DEFAULT_FILENAME_TEMPLATE,
+    /**
+     * Turns the delete-source toggle on when a video opens in Review. Deletion
+     * still needs a successful save, a tag read-back and the system confirm.
+     */
+    val deleteSourceAfterSave: Boolean = true,
     val ocrIntervalMs: Long = DEFAULT_OCR_INTERVAL_MS,
     val httpTimeoutMs: Long = DEFAULT_HTTP_TIMEOUT_MS,
     val httpRetries: Int = DEFAULT_HTTP_RETRIES,

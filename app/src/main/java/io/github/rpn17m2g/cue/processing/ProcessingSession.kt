@@ -21,6 +21,14 @@ class ProcessingSession {
         _state.value = ProcessingState.Done(song)
     }
 
+    /** Replaces the saved song, e.g. after the delete-source outcome is known. */
+    fun updateSong(song: SavedSong) {
+        val current = _state.value
+        if (current is ProcessingState.Done) {
+            _state.value = current.copy(song = song)
+        }
+    }
+
     fun failed(reason: String, details: String?) {
         _state.value = ProcessingState.Failed(reason, details)
     }

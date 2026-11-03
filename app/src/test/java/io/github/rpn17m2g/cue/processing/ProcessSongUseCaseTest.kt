@@ -339,6 +339,7 @@ class ProcessSongUseCaseTest {
 
     private class RecordingOutputStore : OutputStore {
         var saved = false
+        val deleted = mutableListOf<String>()
 
         override suspend fun save(source: File, displayNameBase: String, outputFolder: String): SavedSong {
             saved = true
@@ -347,6 +348,14 @@ class ProcessSongUseCaseTest {
                 displayName = "$displayNameBase.mp3",
                 relativePath = "$outputFolder/",
             )
+        }
+
+        override suspend fun copyOut(uri: String, target: File) {
+            target.writeBytes(byteArrayOf())
+        }
+
+        override suspend fun delete(uri: String) {
+            deleted += uri
         }
     }
 }

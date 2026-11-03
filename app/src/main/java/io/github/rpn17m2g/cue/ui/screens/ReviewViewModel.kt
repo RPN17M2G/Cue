@@ -146,8 +146,8 @@ class ReviewViewModel(
             fingerprintAvailable = settings.fingerprintAvailable,
             // Videos are the only kind that can be deleted, and the decision
             // is ON by default: the user is usually done with the recording
-            // once the song exists.
-            deleteSource = input.kind == InputKind.VIDEO,
+            // once the song exists. Settings can turn the default off.
+            deleteSource = settings.deleteSourceAfterSave && input.kind == InputKind.VIDEO,
         )
         identifyNow()
     }
@@ -383,6 +383,7 @@ class ReviewViewModel(
                     } else {
                         emptySet()
                     },
+                    deleteSource = snapshot.deleteSource && input.kind == InputKind.VIDEO,
                 )
                 container.errorReporter.clear()
                 container.sessionRepository.remember(job)

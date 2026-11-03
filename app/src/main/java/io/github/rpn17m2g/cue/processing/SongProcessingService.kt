@@ -84,8 +84,10 @@ class SongProcessingService : Service() {
                 val saved = container.processSongUseCase.execute(job) { stage, progress ->
                     publishProgress(stage, progress)
                 }
-                container.processingSession.done(saved)
+                // Drop the cache copy before the Saved screen offers to delete
+                // the original, so a delete leaves nothing behind.
                 container.inputResolver.cleanup(job.input)
+                container.processingSession.done(saved)
                 showCompleted(saved)
             } catch (cancelled: CancellationException) {
                 container.processingSession.reset()

@@ -159,6 +159,13 @@
     <string name="result_saved_to">Saved to %1$s</string>
     <string name="result_updated_in_place">Tags updated in the original file.</string>
     <string name="result_share_chooser">Share song</string>
+    <string name="result_delete_title">Delete the source recording?</string>
+    <string name="result_delete_body">The MP3 is saved. You can remove the original recording from this device now.</string>
+    <string name="result_delete_confirm">Delete</string>
+    <string name="result_delete_cancel">Keep</string>
+    <string name="result_source_deleted">Source recording deleted</string>
+    <string name="result_source_kept">Source recording kept</string>
+    <string name="result_delete_failed">The recording could not be deleted, so it was kept.</string>
 
     <string name="error_title">Something went wrong</string>
     <string name="error_retry">Retry</string>
@@ -179,6 +186,9 @@
     <string name="settings_output_folder">Output folder</string>
     <string name="settings_network">Online lookups</string>
     <string name="settings_identification">Identification</string>
+    <string name="settings_after_processing">After processing</string>
+    <string name="settings_delete_source">Delete the source recording</string>
+    <string name="settings_delete_source_note">On by default for videos. Cue still asks before deleting, and only after the MP3 is saved and its tags are read back.</string>
     <string name="settings_fingerprint">Fingerprint matching</string>
     <string name="settings_acoustid_key">AcoustID API key</string>
     <string name="settings_acoustid_missing">Fingerprint lookup is off until a free AcoustID key from acoustid.org is entered.</string>

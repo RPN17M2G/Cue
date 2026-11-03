@@ -34,6 +34,7 @@ internal object ProcessingJobCodec {
         intent.putExtra(KEY_OUTPUT_FOLDER, job.outputFolder)
         intent.putExtra(KEY_TEMPLATE, job.filenameTemplate)
         intent.putExtra(KEY_MODE, job.mode.name)
+        intent.putExtra(KEY_DELETE_SOURCE, job.deleteSource)
         intent.putStringArrayListExtra(
             KEY_CHANGED_FIELDS,
             ArrayList(job.changedFields.map(TagField::name)),
@@ -85,6 +86,7 @@ internal object ProcessingJobCodec {
             outputFolder = intent.getStringExtra(KEY_OUTPUT_FOLDER).orEmpty(),
             filenameTemplate = intent.getStringExtra(KEY_TEMPLATE).orEmpty(),
             mode = mode,
+            deleteSource = intent.getBooleanExtra(KEY_DELETE_SOURCE, false),
             changedFields = intent.getStringArrayListExtra(KEY_CHANGED_FIELDS)
                 .orEmpty()
                 .mapNotNull { name -> TagField.entries.firstOrNull { it.name == name } }
@@ -117,5 +119,6 @@ internal object ProcessingJobCodec {
     private const val KEY_OUTPUT_FOLDER = "output_folder"
     private const val KEY_TEMPLATE = "filename_template"
     private const val KEY_MODE = "processing_mode"
+    private const val KEY_DELETE_SOURCE = "delete_source"
     private const val KEY_CHANGED_FIELDS = "changed_fields"
 }

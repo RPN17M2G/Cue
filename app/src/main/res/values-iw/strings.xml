@@ -159,6 +159,13 @@
     <string name="result_saved_to">נשמר ב־%1$s</string>
     <string name="result_updated_in_place">התגיות עודכנו בקובץ המקורי.</string>
     <string name="result_share_chooser">שיתוף שיר</string>
+    <string name="result_delete_title">למחוק את הקלטת המקור?</string>
+    <string name="result_delete_body">ה־MP3 נשמר. אפשר להסיר עכשיו את הקלטת המקור מהמכשיר.</string>
+    <string name="result_delete_confirm">מחיקה</string>
+    <string name="result_delete_cancel">השארה</string>
+    <string name="result_source_deleted">הקלטת המקור נמחקה</string>
+    <string name="result_source_kept">הקלטת המקור נשמרה</string>
+    <string name="result_delete_failed">לא ניתן היה למחוק את ההקלטה, ולכן היא נשמרה.</string>
 
     <string name="error_title">משהו השתבש</string>
     <string name="error_retry">ניסיון חוזר</string>
@@ -179,6 +186,9 @@
     <string name="settings_output_folder">תיקיית פלט</string>
     <string name="settings_network">חיפושים מקוונים</string>
     <string name="settings_identification">זיהוי</string>
+    <string name="settings_after_processing">אחרי העיבוד</string>
+    <string name="settings_delete_source">מחיקת הקלטת המקור</string>
+    <string name="settings_delete_source_note">פעיל כברירת מחדל לסרטונים. Cue עדיין שואל לפני מחיקה, ורק אחרי שה־MP3 נשמר והתגיות נקראו חזרה.</string>
     <string name="settings_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="settings_acoustid_key">מפתח API של AcoustID</string>
     <string name="settings_acoustid_missing">זיהוי לפי טביעת אצבע מושבת עד להזנת מפתח AcoustID חינמי מ־acoustid.org.</string>

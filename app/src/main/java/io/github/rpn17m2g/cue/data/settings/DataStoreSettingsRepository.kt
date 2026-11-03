@@ -49,6 +49,7 @@ class DataStoreSettingsRepository(
             preferences[Keys.THEME] = next.theme.name
             preferences[Keys.PALETTE] = next.palette.name
             preferences[Keys.FILENAME_TEMPLATE] = next.filenameTemplate
+            preferences[Keys.DELETE_SOURCE] = next.deleteSourceAfterSave
             preferences[Keys.OCR_INTERVAL] = next.ocrIntervalMs
             preferences[Keys.HTTP_TIMEOUT] = next.httpTimeoutMs
             preferences[Keys.HTTP_RETRIES] = next.httpRetries
@@ -90,6 +91,7 @@ internal fun mapPreferences(preferences: Preferences): AppSettings = AppSettings
         ?: CuePalette.MINT,
     filenameTemplate = preferences[Keys.FILENAME_TEMPLATE]
         ?: AppSettings.DEFAULT_FILENAME_TEMPLATE,
+    deleteSourceAfterSave = preferences[Keys.DELETE_SOURCE] ?: true,
     ocrIntervalMs = preferences[Keys.OCR_INTERVAL] ?: AppSettings.DEFAULT_OCR_INTERVAL_MS,
     httpTimeoutMs = preferences[Keys.HTTP_TIMEOUT] ?: AppSettings.DEFAULT_HTTP_TIMEOUT_MS,
     httpRetries = preferences[Keys.HTTP_RETRIES] ?: AppSettings.DEFAULT_HTTP_RETRIES,
@@ -107,6 +109,7 @@ private object Keys {
     val THEME = stringPreferencesKey("theme")
     val PALETTE = stringPreferencesKey("palette")
     val FILENAME_TEMPLATE = stringPreferencesKey("filename_template")
+    val DELETE_SOURCE = booleanPreferencesKey("delete_source_after_save")
     val OCR_INTERVAL = longPreferencesKey("ocr_interval_ms")
     val HTTP_TIMEOUT = longPreferencesKey("http_timeout_ms")
     val HTTP_RETRIES = intPreferencesKey("http_retries")

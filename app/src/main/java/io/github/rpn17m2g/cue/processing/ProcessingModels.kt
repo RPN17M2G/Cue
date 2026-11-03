@@ -29,6 +29,11 @@ data class ProcessingJob(
     val filenameTemplate: String,
     val mode: ProcessingMode = ProcessingMode.CONVERT_AND_SAVE,
     val changedFields: Set<TagField> = emptySet(),
+    /**
+     * Set by Review for videos only. The service never deletes on its own: it
+     * marks the saved song as pending, and the Saved screen asks the OS.
+     */
+    val deleteSource: Boolean = false,
 ) {
     val inputId: String get() = input.id
 

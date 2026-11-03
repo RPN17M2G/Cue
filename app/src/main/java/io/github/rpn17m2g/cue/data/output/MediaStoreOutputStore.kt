@@ -2,22 +2,50 @@ package io.github.rpn17m2g.cue.data.output
 
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.provider.MediaStore
+import io.github.rpn17m2g.cue.domain.model.Artwork
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** What happened to the source video, if Review offered to delete it. */
+enum class SourceOutcome {
+    /** No deletion was requested (MP3 input, or the toggle was off). */
+    NONE,
+
+    /** Saved and verified; the Saved screen still has to ask the OS. */
+    PENDING,
+
+    DELETED,
+
+    KEPT,
+}
+
 data class SavedSong(
     val uri: String,
     val displayName: String,
     val relativePath: String,
     val inPlaceEdit: Boolean = false,
+    val title: String = "",
+    val artist: String = "",
+    val durationMs: Long? = null,
+    val artwork: Artwork? = null,
+    /** The original video document, when the job asked to delete it. */
+    val sourceUri: String? = null,
+    val sourceOutcome: SourceOutcome = SourceOutcome.NONE,
 )
 
 interface OutputStore {
     suspend fun save(source: File, displayNameBase: String, outputFolder: String): SavedSong
+
+    /** Copies a published song back to a local file so its tags can be read back. */
+    suspend fun copyOut(uri: String, target: File)
+
+    /** Removes a published song, used when read-back verification fails. */
+    suspend fun delete(uri: String)
 }
 
 /**
@@ -60,6 +88,22 @@ class MediaStoreOutputStore(
         } catch (e: Exception) {
             runCatching { context.contentResolver.delete(uri, null, null) }
             throw e
+        }
+    }
+
+    override suspend fun copyOut(uri: String, target: File) {
+        withContext(ioDispatcher) {
+            val stream = context.contentResolver.openInputStream(Uri.parse(uri))
+                ?: throw IOException("MediaStore returned no stream for $uri")
+            stream.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+    }
+
+    override suspend fun delete(uri: String) {
+        withContext(ioDispatcher) {
+            context.contentResolver.delete(Uri.parse(uri), null, null)
         }
     }
 
