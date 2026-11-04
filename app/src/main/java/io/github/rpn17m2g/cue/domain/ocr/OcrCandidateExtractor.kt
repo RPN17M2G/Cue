@@ -192,7 +192,7 @@ object OcrCandidateExtractor {
                 if (artist != null) {
                     val pairKey = CandidateKey(normalize(line.text), normalize(artist))
                     if (seen.add(pairKey)) {
-                        record(stats, pairKey, line.text, artist, quality, subtitle, weight)
+                        record(stats, pairKey, line.text, artist, quality, subtitle, frameIndex, weight)
                     }
                 }
                 val soloKey = CandidateKey(normalize(line.text), null)
@@ -204,6 +204,7 @@ object OcrCandidateExtractor {
                         null,
                         quality * SOLO_QUALITY_PENALTY,
                         subtitle,
+                        frameIndex,
                         weight,
                     )
                 }
@@ -243,14 +244,19 @@ object OcrCandidateExtractor {
         if (frames.isEmpty()) return DoubleArray(0)
         val gaps = frames.zipWithNext { current, next ->
             next.timestampMs - current.timestampMs
-        }.filter { it > 0L }
-        val fallback = gaps.sorted().getOrNull(gaps.size / 2)?.toDouble() ?: 1.0
+        }
+        val positive = gaps.filter { it > 0L }
+        // Every frame at the same instant (or a single frame) carries the same
+        // vote, matching the old frame-count ranking.
+        if (positive.isEmpty()) return DoubleArray(frames.size) { 1.0 }
+        val fallback = positive.sorted()[positive.size / 2].toDouble()
         return DoubleArray(frames.size) { index ->
             if (index == frames.lastIndex) {
                 fallback
             } else {
-                (frames[index + 1].timestampMs - frames[index].timestampMs)
-                    .takeIf { it > 0L }?.toDouble() ?: fallback
+                // A repeated or out-of-order timestamp must not claim negative
+                // time; the frame simply stands for no interval.
+                gaps[index].coerceAtLeast(0L).toDouble()
             }
         }
     }
@@ -259,13 +265,20 @@ object OcrCandidateExtractor {
      * A marquee title scrolls across the line, so consecutive frames read
      * different slices of it ("Get Luc", "et Lucky", "Get Lucky"). Each slice is
      * its own candidate key, and on its own every one looks unstable. Folding a
-     * fragment into the longest reading that contains it restores the vote the
-     * title earned and keeps the complete text. Length ratio and artist
-     * compatibility stop short, unrelated titles from being swallowed.
+     * fragment into the reading that was on screen longest restores the vote the
+     * title earned and keeps the complete text. A longer line that merely
+     * contains the title ("Get Lucky Official Video") is not swallowed unless it
+     * is a comparable slice of it, and a fragment recorded in the same frame as
+     * the host adds no time: the two are one sighting.
+     *
+     * Containment needs at least one frame that saw the whole line. A marquee
+     * that is never fully visible cannot be reconstructed here; the longest
+     * slice stands for the title.
      */
     private fun mergeFragments(stats: Collection<CandidateStat>): List<CandidateStat> {
         val ordered = stats.sortedWith(
-            compareByDescending<CandidateStat> { titleKey(it.title).length }
+            compareByDescending<CandidateStat> { it.weight }
+                .thenByDescending { titleKey(it.title).length }
                 .thenByDescending { it.bestQuality }
                 .thenBy { titleKey(it.title) },
         )
@@ -276,9 +289,8 @@ object OcrCandidateExtractor {
                 val host = merged[hostIndex]
                 merged[hostIndex] = host.copy(
                     artist = host.artist ?: stat.artist,
-                    weight = host.weight + stat.weight,
+                    frameWeights = unionWeights(host.frameWeights, stat.frameWeights),
                     bestQuality = maxOf(host.bestQuality, stat.bestQuality),
-                    alwaysSubtitle = host.alwaysSubtitle && stat.alwaysSubtitle,
                 )
             } else {
                 merged += stat
@@ -287,12 +299,23 @@ object OcrCandidateExtractor {
         return merged
     }
 
+    /** A frame is one sighting however many ways the same line was keyed. */
+    private fun unionWeights(first: Map<Int, Double>, second: Map<Int, Double>): Map<Int, Double> {
+        if (first.isEmpty()) return second
+        if (second.isEmpty()) return first
+        val union = first.toMutableMap()
+        second.forEach { (frame, weight) -> union[frame] = maxOf(union[frame] ?: 0.0, weight) }
+        return union
+    }
+
     private fun canMerge(host: CandidateStat, fragment: CandidateStat): Boolean {
         val hostTitle = titleKey(host.title)
         val fragmentTitle = titleKey(fragment.title)
         if (fragmentTitle.length < MIN_FRAGMENT_LENGTH) return false
-        if (!hostTitle.contains(fragmentTitle)) return false
-        if (fragmentTitle.length.toDouble() / hostTitle.length < MIN_FRAGMENT_RATIO) return false
+        val shorter = minOf(hostTitle.length, fragmentTitle.length)
+        val longer = maxOf(hostTitle.length, fragmentTitle.length)
+        if (shorter.toDouble() / longer < MIN_FRAGMENT_RATIO) return false
+        if (!hostTitle.contains(fragmentTitle) && !fragmentTitle.contains(hostTitle)) return false
         val hostArtist = host.artist?.let(::normalize)
         val fragmentArtist = fragment.artist?.let(::normalize)
         return hostArtist == null || fragmentArtist == null || hostArtist == fragmentArtist
@@ -309,14 +332,21 @@ object OcrCandidateExtractor {
         artist: String?,
         quality: Double,
         subtitle: Boolean,
+        frameIndex: Int,
         weight: Double,
     ) {
         val existing = stats[key]
         stats[key] = existing?.copy(
-            weight = existing.weight + weight,
+            frameWeights = existing.frameWeights + (frameIndex to weight),
             bestQuality = maxOf(existing.bestQuality, quality),
             alwaysSubtitle = existing.alwaysSubtitle && subtitle,
-        ) ?: CandidateStat(title, artist, weight, quality, subtitle)
+        ) ?: CandidateStat(
+            title = title,
+            artist = artist,
+            frameWeights = mapOf(frameIndex to weight),
+            bestQuality = quality,
+            alwaysSubtitle = subtitle,
+        )
     }
 
     /** Drops chrome and keeps the geometry the ranking needs. */
@@ -502,18 +532,23 @@ object OcrCandidateExtractor {
     private data class CandidateStat(
         val title: String,
         val artist: String?,
-        val weight: Double,
+        val frameWeights: Map<Int, Double>,
         val bestQuality: Double,
         val alwaysSubtitle: Boolean,
-    )
+    ) {
+        val weight: Double get() = frameWeights.values.sum()
+    }
 
     private const val SOLO_QUALITY_PENALTY = 0.9
 
     /** Shorter fragments than this are too ambiguous to stitch. */
     private const val MIN_FRAGMENT_LENGTH = 4
 
-    /** A fragment must cover this much of the host title to be a slice of it. */
-    private const val MIN_FRAGMENT_RATIO = 0.4
+    /**
+     * A fragment must cover this much of the longer reading. A title and a queue
+     * row that adds "Official Video" are too far apart to be the same sighting.
+     */
+    private const val MIN_FRAGMENT_RATIO = 0.5
 
     /** Single-word chrome is dropped unless it is at least this big. */
     private const val SINGLE_WORD_TITLE_RATIO = 0.6f

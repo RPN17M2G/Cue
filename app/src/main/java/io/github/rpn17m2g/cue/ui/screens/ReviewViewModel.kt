@@ -9,6 +9,7 @@ import io.github.rpn17m2g.cue.data.input.ResolvedInput
 import io.github.rpn17m2g.cue.data.metadata.ArtworkCandidate
 import io.github.rpn17m2g.cue.data.metadata.MetadataQuery
 import io.github.rpn17m2g.cue.di.AppContainer
+import io.github.rpn17m2g.cue.domain.identify.ArtworkPolicy
 import io.github.rpn17m2g.cue.domain.identify.Confidence
 import io.github.rpn17m2g.cue.domain.identify.ConfidenceTier
 import io.github.rpn17m2g.cue.domain.identify.SongIdentification
@@ -21,6 +22,7 @@ import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.TrimRange
 import io.github.rpn17m2g.cue.domain.model.changedFieldsFrom
+import io.github.rpn17m2g.cue.processing.DeleteSourcePolicy
 import io.github.rpn17m2g.cue.processing.ProcessingJob
 import io.github.rpn17m2g.cue.processing.ProcessingMode
 import io.github.rpn17m2g.cue.processing.ProcessingModeSelector
@@ -104,6 +106,17 @@ class ReviewViewModel(
     private var embeddedTags: TagDraft? = null
     private var identifyJob: Job? = null
     private var searchJob: Job? = null
+
+    /**
+     * Bumped by every identification run. A download that finishes after the
+     * user asked for a fresh lookup must not paste its cover over the newer
+     * result.
+     */
+    private var identifyGeneration = 0
+
+    /** The URL this app applied by itself, so a retry may replace that cover. */
+    private var autoArtworkUrl: String? = null
+
     private val editedFields = mutableSetOf<TagField>()
 
     /** Whether each field was already edited when its inline editor opened. */
@@ -117,7 +130,27 @@ class ReviewViewModel(
                 }
             }
         }
-        viewModelScope.launch { load() }
+        // A rejected key is fixed in Settings, which sits on top of this
+        // screen. Watching the settings flow lets the note clear (and the
+        // lookup run again) as soon as a new key is saved, without a manual
+        // refresh.
+        viewModelScope.launch {
+            container.settingsRepository.settings.collect { latest ->
+                val keyChanged = latest.acoustIdKey != settings.acoustIdKey
+                settings = latest
+                if (keyChanged) {
+                    _state.update { it.copy(fingerprintAvailable = latest.fingerprintAvailable) }
+                    if (
+                        _state.value.input?.kind == InputKind.VIDEO &&
+                        _state.value.fingerprintKeyRejected &&
+                        !_state.value.identifying
+                    ) {
+                        retryIdentification()
+                    }
+                }
+            }
+        }
+        identifyJob = viewModelScope.launch { load() }
     }
 
     private suspend fun load() {
@@ -147,13 +180,18 @@ class ReviewViewModel(
             // Videos are the only kind that can be deleted, and the decision
             // is ON by default: the user is usually done with the recording
             // once the song exists. Settings can turn the default off.
-            deleteSource = settings.deleteSourceAfterSave && input.kind == InputKind.VIDEO,
+            deleteSource = DeleteSourcePolicy.offered(
+                kind = input.kind,
+                enabled = settings.deleteSourceAfterSave,
+            ),
         )
         identifyNow()
     }
 
     fun updateDraft(field: TagField, transform: (TagDraft) -> TagDraft) {
         editedFields += field
+        // A cover the user touched is theirs; automatic replacement stops here.
+        if (field == TagField.ARTWORK) autoArtworkUrl = null
         _state.update { current ->
             current.copy(
                 draft = transform(current.draft),
@@ -271,6 +309,10 @@ class ReviewViewModel(
     }
 
     fun applyMatch(match: MetadataMatch) {
+        // Picking another row replaces the song. A cover this app applied for
+        // the previous match would now be a picture of the wrong record, so it
+        // goes with it; a cover the user chose is never touched.
+        val dropAutoArtwork = match.artwork == null && autoArtworkUrl != null
         var appliedFields: Set<TagField> = emptySet()
         _state.update { current ->
             val sources = current.sources.toMutableMap()
@@ -319,8 +361,13 @@ class ReviewViewModel(
                     match.trackNumber,
                     current.draft.trackNumber,
                 ),
-                artwork = optionalValue(TagField.ARTWORK, match.artwork, current.draft.artwork),
+                artwork = if (dropAutoArtwork) {
+                    null
+                } else {
+                    optionalValue(TagField.ARTWORK, match.artwork, current.draft.artwork)
+                },
             )
+            if (dropAutoArtwork) sources.remove(TagField.ARTWORK)
             appliedFields = applied
             // Applying a weak candidate is allowed — the user picked it — but
             // the fields it fills must still ask for a glance.
@@ -340,6 +387,38 @@ class ReviewViewModel(
             )
         }
         editedFields += appliedFields
+        if (match.artwork != null || dropAutoArtwork) autoArtworkUrl = null
+        if (match.artwork == null) downloadMatchArtwork(match)
+    }
+
+    /**
+     * A match picked by hand should show its own cover. The lookup already
+     * carries the URL, so this is a download; a cover the user picked stays
+     * theirs, and offline mode does nothing.
+     */
+    private fun downloadMatchArtwork(match: MetadataMatch) {
+        val url = match.artworkUrl?.takeIf { it.isNotBlank() } ?: return
+        if (TagField.ARTWORK in editedFields) return
+        viewModelScope.launch {
+            val latest = try {
+                container.settingsRepository.settings.first()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                settings
+            }
+            settings = latest
+            if (!latest.networkLookups) return@launch
+            val artwork = container.artworkRepository.fromUrl(url) ?: return@launch
+            if (TagField.ARTWORK in editedFields) return@launch
+            autoArtworkUrl = url
+            _state.update { current ->
+                current.copy(
+                    draft = current.draft.copy(artwork = artwork),
+                    sources = current.sources + (TagField.ARTWORK to match.source),
+                )
+            }
+        }
     }
 
     fun save(onStarted: (String) -> Unit) {
@@ -383,7 +462,10 @@ class ReviewViewModel(
                     } else {
                         emptySet()
                     },
-                    deleteSource = snapshot.deleteSource && input.kind == InputKind.VIDEO,
+                    deleteSource = DeleteSourcePolicy.offered(
+                        kind = input.kind,
+                        enabled = snapshot.deleteSource,
+                    ),
                 )
                 container.errorReporter.clear()
                 container.sessionRepository.remember(job)
@@ -493,6 +575,7 @@ class ReviewViewModel(
 
     private suspend fun identifyNow() {
         val input = _state.value.input ?: return
+        val generation = ++identifyGeneration
         settings = container.settingsRepository.settings.first()
         _state.update {
             it.copy(
@@ -515,6 +598,7 @@ class ReviewViewModel(
         } catch (_: Exception) {
             null
         }
+        if (generation != identifyGeneration) return
         if (result == null) {
             _state.update {
                 it.copy(
@@ -526,32 +610,50 @@ class ReviewViewModel(
             return
         }
         applyIdentification(result)
-        applyAutoArtwork(result)
+        applyAutoArtwork(result, generation)
+        // The refresh button stays disabled until the cover settles, so a
+        // second lookup cannot race the download.
+        if (generation == identifyGeneration) {
+            _state.update { it.copy(identifying = false) }
+        }
     }
 
     /**
      * Fills the cover from the best match when the match is confident. The
      * lookup already carried the provider's artwork URL, so this is a download,
-     * not another search. It never replaces a cover the user chose, never
-     * overrides artwork the match itself carried, and never touches a draft the
-     * user is already editing.
+     * not another search. [ArtworkPolicy] decides whether the draft is fair
+     * game; a cover the user chose or removed is never overwritten, and a
+     * failed download leaves the draft untouched.
      */
-    private suspend fun applyAutoArtwork(result: SongIdentification) {
+    private suspend fun applyAutoArtwork(result: SongIdentification, generation: Int) {
         val best = result.outcome.bestMatch ?: return
-        if (Confidence.tier(best.score) != ConfidenceTier.ACCEPTED) return
-        val url = best.artworkUrl ?: return
-        if (_state.value.draft.artwork != null) return
-        if (TagField.ARTWORK in editedFields) return
+        val latest = try {
+            container.settingsRepository.settings.first()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            settings
+        }
+        settings = latest
+        val url = ArtworkPolicy.autoApplyUrl(
+            match = best,
+            hasArtwork = _state.value.draft.artwork != null,
+            autoAppliedUrl = autoArtworkUrl,
+            artworkEdited = TagField.ARTWORK in editedFields,
+            networkEnabled = latest.networkLookups,
+        ) ?: return
         val artwork = container.artworkRepository.fromUrl(url) ?: return
+        if (generation != identifyGeneration) return
+        // The user may have picked a cover while the download was in flight;
+        // their choice wins. Both run on the main dispatcher, so this check and
+        // the update cannot interleave with another edit.
+        if (TagField.ARTWORK in editedFields) return
+        autoArtworkUrl = url
         _state.update { current ->
-            if (current.draft.artwork != null || TagField.ARTWORK in editedFields) {
-                current
-            } else {
-                current.copy(
-                    draft = current.draft.copy(artwork = artwork),
-                    sources = current.sources + (TagField.ARTWORK to best.source),
-                )
-            }
+            current.copy(
+                draft = current.draft.copy(artwork = artwork),
+                sources = current.sources + (TagField.ARTWORK to best.source),
+            )
         }
     }
 
@@ -593,7 +695,6 @@ class ReviewViewModel(
                 ocrAttempted = current.input?.kind == InputKind.VIDEO,
                 ocrFailed = result.ocrFailed,
                 fingerprintKeyRejected = result.outcome.fingerprintKeyRejected,
-                identifying = false,
             )
         }
     }

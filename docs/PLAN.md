@@ -1,9 +1,8 @@
 # Cue — Design Plan
 
-Status: agreed design; Phase 1 walking skeleton, Phase 2 recognition, Phase 3
-fingerprint fallback, Phase 4 MP3 tag editing & trimming, and Phase 5 bilingual
-UI, settings & polish implemented. The approved UI redesign and four-palette
-theme work is specified in `docs/UI-REDESIGN-PLAN.md`.
+Status: agreed design; Phases 1–5 implemented, and the approved UI redesign in
+`docs/UI-REDESIGN-PLAN.md` is implemented through Phase E, with hardening in
+progress.
 Owner: Omer Gindi (`RPN17M2G`).
 App id: `io.github.rpn17m2g.cue`.
 

@@ -45,11 +45,11 @@ class ArtworkRepository(
     }
 
     suspend fun load(candidate: ArtworkCandidate): Artwork? =
-        fetch(candidate.artworkUrl600)?.let { encode(it, EMBED_MAX_DIMENSION) }
+        fetch(candidate.artworkUrl600)?.let { withContext(ioDispatcher) { encode(it, EMBED_MAX_DIMENSION) } }
 
     /** Downloads a provider-supplied cover URL, e.g. the best match's artwork. */
     suspend fun fromUrl(url: String): Artwork? =
-        fetch(url)?.let { encode(it, EMBED_MAX_DIMENSION) }
+        fetch(url)?.let { withContext(ioDispatcher) { encode(it, EMBED_MAX_DIMENSION) } }
 
     suspend fun fromUri(uri: Uri): Artwork? = withContext(ioDispatcher) {
         val bytes = try {

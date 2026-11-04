@@ -70,11 +70,7 @@ class ProcessSongUseCase(
             // source before this read-back succeeds.
             verifySaved(saved, job, temp.length())
             onProgress(ProcessingStage.Saving, 1f)
-            val outcome = if (job.deleteSource && job.input.kind == InputKind.VIDEO) {
-                SourceOutcome.PENDING
-            } else {
-                SourceOutcome.NONE
-            }
+            val outcome = DeleteSourcePolicy.outcomeFor(job.input.kind, job.deleteSource)
             return saved.copy(
                 title = job.draft.title,
                 artist = job.draft.artist,
