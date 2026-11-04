@@ -116,6 +116,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onFingerprint = { enabled -> viewModel.update { it.copy(fingerprintEnabled = enabled) } },
                 onAcoustIdKey = { key -> viewModel.update { it.copy(acoustIdKey = key) } },
                 onTemplate = { template -> viewModel.update { it.copy(filenameTemplate = template) } },
+                onDeleteSource = { enabled -> viewModel.update { it.copy(deleteSourceAfterSave = enabled) } },
                 onScanWindow = { seconds -> viewModel.update { it.copy(scanWindowSeconds = seconds) } },
                 onOcrInterval = { intervalMs -> viewModel.update { it.copy(ocrIntervalMs = intervalMs) } },
                 onHttpTimeout = { timeoutMs -> viewModel.update { it.copy(httpTimeoutMs = timeoutMs) } },
@@ -137,6 +138,7 @@ private fun SettingsBody(
     onFingerprint: (Boolean) -> Unit,
     onAcoustIdKey: (String) -> Unit,
     onTemplate: (String) -> Unit,
+    onDeleteSource: (Boolean) -> Unit,
     onScanWindow: (Int) -> Unit,
     onOcrInterval: (Long) -> Unit,
     onHttpTimeout: (Long) -> Unit,
@@ -196,6 +198,19 @@ private fun SettingsBody(
             selected = settings.theme,
             labelRes = AppTheme::labelRes,
             onSelect = onTheme,
+        )
+    }
+
+    SettingsSection(R.string.settings_after_processing) {
+        ToggleRow(
+            label = stringResource(R.string.settings_delete_source),
+            checked = settings.deleteSourceAfterSave,
+            onCheckedChange = onDeleteSource,
+        )
+        Text(
+            text = stringResource(R.string.settings_delete_source_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 

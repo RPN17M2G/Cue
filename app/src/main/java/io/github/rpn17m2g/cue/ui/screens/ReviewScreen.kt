@@ -2217,7 +2217,7 @@ private fun cueOutlinedFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
 )
 
-private fun decodeArtwork(bytes: ByteArray, maxWidth: Int = 1024): Bitmap? = runCatching {
+internal fun decodeArtwork(bytes: ByteArray, maxWidth: Int = 1024): Bitmap? = runCatching {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     val sample = if (bounds.outWidth > maxWidth) {

@@ -199,6 +199,36 @@ class ProcessSongUseCaseTest {
     }
 
     @Test
+    fun `a truncated saved copy fails and removes the published row`() = runTest {
+        val input = inputFile()
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), File(folder.root, "work"))
+        // The runner writes three bytes; the published copy loses one.
+        outputStore.publishedBytes = byteArrayOf(9, 9)
+
+        val error = runCatching {
+            useCase.execute(job(input)) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        assertEquals(listOf("content://media/audio/1"), outputStore.deleted)
+    }
+
+    @Test
+    fun `a mismatched saved read-back removes the published row`() = runTest {
+        val input = inputFile()
+        val processingJob = job(input)
+        tagStore.readBack = processingJob.draft.copy(title = "Something else")
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), File(folder.root, "work"))
+
+        val error = runCatching {
+            useCase.execute(processingJob) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        assertEquals(listOf("content://media/audio/1"), outputStore.deleted)
+    }
+
+    @Test
     fun `a failed in-place write restores the original document`() = runTest {
         val input = folder.newFile("song.mp3").apply {
             writeBytes(byteArrayOf(4, 5, 6, 7))
@@ -339,14 +369,28 @@ class ProcessSongUseCaseTest {
 
     private class RecordingOutputStore : OutputStore {
         var saved = false
+        val deleted = mutableListOf<String>()
+        private var savedBytes: ByteArray = byteArrayOf()
+
+        /** Set to simulate a copy that lost bytes on the way to MediaStore. */
+        var publishedBytes: ByteArray? = null
 
         override suspend fun save(source: File, displayNameBase: String, outputFolder: String): SavedSong {
             saved = true
+            savedBytes = source.readBytes()
             return SavedSong(
                 uri = "content://media/audio/1",
                 displayName = "$displayNameBase.mp3",
                 relativePath = "$outputFolder/",
             )
+        }
+
+        override suspend fun copyOut(uri: String, target: File) {
+            target.writeBytes(publishedBytes ?: savedBytes)
+        }
+
+        override suspend fun delete(uri: String) {
+            deleted += uri
         }
     }
 }

@@ -22,6 +22,7 @@ import io.github.rpn17m2g.cue.data.ocr.MlKitOcrEngine
 import io.github.rpn17m2g.cue.data.ocr.TesseractHebrewOcrEngine
 import io.github.rpn17m2g.cue.data.output.MediaStoreOutputStore
 import io.github.rpn17m2g.cue.data.output.OutputStore
+import io.github.rpn17m2g.cue.data.output.SourceDeleter
 import io.github.rpn17m2g.cue.data.session.SessionRepository
 import io.github.rpn17m2g.cue.data.settings.DataStoreSettingsRepository
 import io.github.rpn17m2g.cue.domain.identify.FingerprintAttempt
@@ -79,6 +80,8 @@ class AppContainer(context: Context) {
     val documentEditor: DocumentEditor by lazy { ContentResolverDocumentEditor(appContext) }
 
     val outputStore: OutputStore by lazy { MediaStoreOutputStore(appContext) }
+
+    val sourceDeleter: SourceDeleter by lazy { SourceDeleter(appContext) }
 
     val artworkRepository: ArtworkRepository by lazy {
         ArtworkRepository(
