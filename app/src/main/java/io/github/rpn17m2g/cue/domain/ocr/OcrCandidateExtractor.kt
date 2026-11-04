@@ -24,8 +24,13 @@ import java.util.Locale
  *
  * Scores combine stability, quality and the presence of an artist:
  * `0.45 * stability + 0.45 * bestQuality + 0.1 * (artist ? 1 : 0)`, capped at
- * `1.0`. Scores are compared at three decimals and near-ties prefer the top of
- * a stacked title/artist/album block, then the normalized title, then artist.
+ * `1.0`. Stability is a time-weighted vote: each frame contributes the interval
+ * it represents, so a candidate held on screen for a long stretch outranks one
+ * that flashed past, even when the sampler skipped frames. A scrolling marquee
+ * title is cut differently in every frame, so fragments of the same line are
+ * stitched into the longest reading before the vote is counted. Scores are
+ * compared at three decimals and near-ties prefer the top of a stacked
+ * title/artist/album block, then the normalized title, then artist.
  */
 object OcrCandidateExtractor {
 
@@ -159,9 +164,10 @@ object OcrCandidateExtractor {
         val noiseKeys = (DEFAULT_NOISE_PHRASES + noisePhrases)
             .mapTo(HashSet()) { normalize(it) }
         val stats = linkedMapOf<CandidateKey, CandidateStat>()
-        val totalFrames = frames.size.toDouble()
+        val weights = frameWeights(frames)
+        val totalWeight = weights.sum().takeIf { it > 0.0 } ?: frames.size.toDouble()
 
-        frames.forEach { frame ->
+        frames.forEachIndexed { frameIndex, frame ->
             val hasStatusClock = frame.lines.any { line ->
                 val text = clean(line.text).orEmpty()
                 MERIDIEM.containsMatchIn(text) || DURATION.matches(text)
@@ -174,8 +180,9 @@ object OcrCandidateExtractor {
                 .mapNotNull { line ->
                     keep(line, noiseKeys, hebrewAware, hasStatusClock, frameLargest)
                 }
-            if (kept.isEmpty()) return@forEach
+            if (kept.isEmpty()) return@forEachIndexed
 
+            val weight = weights[frameIndex]
             val largest = kept.maxOf { it.prominence }
             val seen = HashSet<CandidateKey>()
             kept.forEachIndexed { index, line ->
@@ -185,7 +192,7 @@ object OcrCandidateExtractor {
                 if (artist != null) {
                     val pairKey = CandidateKey(normalize(line.text), normalize(artist))
                     if (seen.add(pairKey)) {
-                        record(stats, pairKey, line.text, artist, quality, subtitle)
+                        record(stats, pairKey, line.text, artist, quality, subtitle, weight)
                     }
                 }
                 val soloKey = CandidateKey(normalize(line.text), null)
@@ -197,14 +204,15 @@ object OcrCandidateExtractor {
                         null,
                         quality * SOLO_QUALITY_PENALTY,
                         subtitle,
+                        weight,
                     )
                 }
             }
         }
 
-        return stats.values
+        return mergeFragments(stats.values)
             .map { stat ->
-                val stability = stat.frameCount / totalFrames
+                val stability = (stat.weight / totalWeight).coerceIn(0.0, 1.0)
                 val base = STABILITY_WEIGHT * stability + QUALITY_WEIGHT * stat.bestQuality
                 val artistBonus = if (stat.artist != null) ARTIST_WEIGHT else 0.0
                 stat to OcrCandidate(
@@ -224,6 +232,76 @@ object OcrCandidateExtractor {
             .map { (_, candidate) -> candidate }
     }
 
+    /**
+     * How much of the recording each frame stands for. Timestamps are normally
+     * evenly spaced, but OCR can skip a frame that failed to decode, and the
+     * sampler may be tuned later; weighting by the gap keeps the vote honest in
+     * both cases. The final frame gets the median gap because its own end is
+     * unknown.
+     */
+    private fun frameWeights(frames: List<OcrFrameText>): DoubleArray {
+        if (frames.isEmpty()) return DoubleArray(0)
+        val gaps = frames.zipWithNext { current, next ->
+            next.timestampMs - current.timestampMs
+        }.filter { it > 0L }
+        val fallback = gaps.sorted().getOrNull(gaps.size / 2)?.toDouble() ?: 1.0
+        return DoubleArray(frames.size) { index ->
+            if (index == frames.lastIndex) {
+                fallback
+            } else {
+                (frames[index + 1].timestampMs - frames[index].timestampMs)
+                    .takeIf { it > 0L }?.toDouble() ?: fallback
+            }
+        }
+    }
+
+    /**
+     * A marquee title scrolls across the line, so consecutive frames read
+     * different slices of it ("Get Luc", "et Lucky", "Get Lucky"). Each slice is
+     * its own candidate key, and on its own every one looks unstable. Folding a
+     * fragment into the longest reading that contains it restores the vote the
+     * title earned and keeps the complete text. Length ratio and artist
+     * compatibility stop short, unrelated titles from being swallowed.
+     */
+    private fun mergeFragments(stats: Collection<CandidateStat>): List<CandidateStat> {
+        val ordered = stats.sortedWith(
+            compareByDescending<CandidateStat> { titleKey(it.title).length }
+                .thenByDescending { it.bestQuality }
+                .thenBy { titleKey(it.title) },
+        )
+        val merged = ArrayList<CandidateStat>(ordered.size)
+        ordered.forEach { stat ->
+            val hostIndex = merged.indexOfFirst { host -> canMerge(host, stat) }
+            if (hostIndex >= 0) {
+                val host = merged[hostIndex]
+                merged[hostIndex] = host.copy(
+                    artist = host.artist ?: stat.artist,
+                    weight = host.weight + stat.weight,
+                    bestQuality = maxOf(host.bestQuality, stat.bestQuality),
+                    alwaysSubtitle = host.alwaysSubtitle && stat.alwaysSubtitle,
+                )
+            } else {
+                merged += stat
+            }
+        }
+        return merged
+    }
+
+    private fun canMerge(host: CandidateStat, fragment: CandidateStat): Boolean {
+        val hostTitle = titleKey(host.title)
+        val fragmentTitle = titleKey(fragment.title)
+        if (fragmentTitle.length < MIN_FRAGMENT_LENGTH) return false
+        if (!hostTitle.contains(fragmentTitle)) return false
+        if (fragmentTitle.length.toDouble() / hostTitle.length < MIN_FRAGMENT_RATIO) return false
+        val hostArtist = host.artist?.let(::normalize)
+        val fragmentArtist = fragment.artist?.let(::normalize)
+        return hostArtist == null || fragmentArtist == null || hostArtist == fragmentArtist
+    }
+
+    /** Letters and digits only, so punctuation and spacing cannot split a title. */
+    private fun titleKey(value: String): String =
+        value.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+
     private fun record(
         stats: MutableMap<CandidateKey, CandidateStat>,
         key: CandidateKey,
@@ -231,13 +309,14 @@ object OcrCandidateExtractor {
         artist: String?,
         quality: Double,
         subtitle: Boolean,
+        weight: Double,
     ) {
         val existing = stats[key]
         stats[key] = existing?.copy(
-            frameCount = existing.frameCount + 1,
+            weight = existing.weight + weight,
             bestQuality = maxOf(existing.bestQuality, quality),
             alwaysSubtitle = existing.alwaysSubtitle && subtitle,
-        ) ?: CandidateStat(title, artist, 1, quality, subtitle)
+        ) ?: CandidateStat(title, artist, weight, quality, subtitle)
     }
 
     /** Drops chrome and keeps the geometry the ranking needs. */
@@ -423,12 +502,18 @@ object OcrCandidateExtractor {
     private data class CandidateStat(
         val title: String,
         val artist: String?,
-        val frameCount: Int,
+        val weight: Double,
         val bestQuality: Double,
         val alwaysSubtitle: Boolean,
     )
 
     private const val SOLO_QUALITY_PENALTY = 0.9
+
+    /** Shorter fragments than this are too ambiguous to stitch. */
+    private const val MIN_FRAGMENT_LENGTH = 4
+
+    /** A fragment must cover this much of the host title to be a slice of it. */
+    private const val MIN_FRAGMENT_RATIO = 0.4
 
     /** Single-word chrome is dropped unless it is at least this big. */
     private const val SINGLE_WORD_TITLE_RATIO = 0.6f

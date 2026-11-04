@@ -108,6 +108,7 @@ fun CueNavHost(
                 inputId = inputId,
                 onBack = { navController.popBackStack() },
                 onProcessing = { navController.navigate(Routes.processing(inputId)) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(

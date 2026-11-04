@@ -362,6 +362,47 @@ class OcrCandidateExtractorTest {
         assertEquals("Daft Punk", candidate.artist)
     }
 
+    @Test
+    fun `a scrolling title is stitched from its fragments`() {
+        val frames = listOf(
+            frame(0, "Get Luc"),
+            frame(1, "et Lucky"),
+            frame(2, "t Lucky"),
+            frame(3, "Get Lucky"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals(listOf("Get Lucky"), candidates.map { it.title })
+    }
+
+    @Test
+    fun `a title held on screen longer beats a title seen in more frames`() {
+        val frames = listOf(
+            frame(0, "Long Song"),
+            frame(50, "Blip"),
+            frame(51, "Blip"),
+            frame(52, "Blip"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("Long Song", candidates.first().title)
+    }
+
+    @Test
+    fun `fragments are not stitched into a different title`() {
+        val frames = listOf(
+            frame(0, "Time"),
+            frame(1, "Time After Time"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertTrue(candidates.any { it.title == "Time" })
+        assertTrue(candidates.any { it.title == "Time After Time" })
+    }
+
     private fun frame(timestamp: Int, vararg lines: String): OcrFrameText =
         OcrFrameText(timestamp.toLong(), lines.map { OcrLine(it) })
 

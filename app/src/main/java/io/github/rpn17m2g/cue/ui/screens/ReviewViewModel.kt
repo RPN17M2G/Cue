@@ -526,6 +526,33 @@ class ReviewViewModel(
             return
         }
         applyIdentification(result)
+        applyAutoArtwork(result)
+    }
+
+    /**
+     * Fills the cover from the best match when the match is confident. The
+     * lookup already carried the provider's artwork URL, so this is a download,
+     * not another search. It never replaces a cover the user chose, never
+     * overrides artwork the match itself carried, and never touches a draft the
+     * user is already editing.
+     */
+    private suspend fun applyAutoArtwork(result: SongIdentification) {
+        val best = result.outcome.bestMatch ?: return
+        if (Confidence.tier(best.score) != ConfidenceTier.ACCEPTED) return
+        val url = best.artworkUrl ?: return
+        if (_state.value.draft.artwork != null) return
+        if (TagField.ARTWORK in editedFields) return
+        val artwork = container.artworkRepository.fromUrl(url) ?: return
+        _state.update { current ->
+            if (current.draft.artwork != null || TagField.ARTWORK in editedFields) {
+                current
+            } else {
+                current.copy(
+                    draft = current.draft.copy(artwork = artwork),
+                    sources = current.sources + (TagField.ARTWORK to best.source),
+                )
+            }
+        }
     }
 
     private fun applyIdentification(result: SongIdentification) {

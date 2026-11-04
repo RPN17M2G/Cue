@@ -152,6 +152,7 @@ fun ReviewScreen(
     inputId: String,
     onBack: () -> Unit,
     onProcessing: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     val viewModel = cueViewModel(key = inputId) {
@@ -285,6 +286,7 @@ fun ReviewScreen(
                 onSaveField = { commitField() },
                 onCancelField = ::cancelField,
                 onRetry = viewModel::retryIdentification,
+                onOpenSettings = onOpenSettings,
                 onSearch = viewModel::search,
                 onApplyMatch = viewModel::applyMatch,
                 onOpenArtworkPicker = viewModel::openArtworkPicker,
@@ -313,6 +315,7 @@ private fun ReviewContent(
     onSaveField: () -> Unit,
     onCancelField: () -> Unit,
     onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
     onOpenArtworkPicker: () -> Unit,
@@ -374,6 +377,7 @@ private fun ReviewContent(
         MatchCard(
             state = state,
             onRetry = onRetry,
+            onOpenSettings = onOpenSettings,
             onOpenMatches = { matchesSheet = true },
             onOpenSearch = { searchSheet = true },
         )
@@ -883,6 +887,7 @@ private fun FieldDivider() {
 private fun MatchCard(
     state: ReviewUiState,
     onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenMatches: () -> Unit,
     onOpenSearch: () -> Unit,
 ) {
@@ -988,6 +993,15 @@ private fun MatchCard(
                     text = stringResource(R.string.review_fingerprint_key_rejected),
                     color = MaterialTheme.colorScheme.error,
                 )
+                TextButton(
+                    onClick = onOpenSettings,
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.review_open_settings),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
             if (
                 state.input?.kind == InputKind.VIDEO &&
