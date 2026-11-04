@@ -28,37 +28,52 @@ class ResultViewModel(private val container: AppContainer) : ViewModel() {
      * The system delete request for the pending source, or `null` when the
      * source is not a MediaStore row (the in-app confirmation is then final).
      */
-    fun deleteRequest(): IntentSender? = currentSong()
+    fun deleteRequest(songUri: String): IntentSender? = song(songUri)
         ?.takeIf { it.sourceOutcome == SourceOutcome.PENDING }
         ?.sourceUri
         ?.let(container.sourceDeleter::deleteRequest)
 
-    /** Records the result of the system delete dialog. */
-    fun completeSystemDelete(deleted: Boolean) {
-        markSource(if (deleted) SourceOutcome.DELETED else SourceOutcome.KEPT)
+    /**
+     * Records the result of the system delete dialog. The dialog reports
+     * success as soon as the user allows it, so the row is re-checked before
+     * the Saved screen claims the recording is gone.
+     */
+    fun completeSystemDelete(songUri: String, allowed: Boolean) {
+        if (!allowed) {
+            markSource(songUri, SourceOutcome.KEPT)
+            return
+        }
+        val source = song(songUri)?.sourceUri ?: return
+        viewModelScope.launch {
+            val gone = withContext(Dispatchers.IO) {
+                !container.sourceDeleter.exists(source)
+            }
+            markSource(songUri, if (gone) SourceOutcome.DELETED else SourceOutcome.KEPT)
+        }
     }
 
     /** Deletes a non-MediaStore document behind the in-app confirmation. */
-    fun deleteWithoutSystemDialog(onResult: (Boolean) -> Unit) {
-        val song = currentSong()?.takeIf { it.sourceOutcome == SourceOutcome.PENDING } ?: return
+    fun deleteWithoutSystemDialog(songUri: String, onResult: (Boolean) -> Unit) {
+        val song = song(songUri)?.takeIf { it.sourceOutcome == SourceOutcome.PENDING } ?: return
         val uri = song.sourceUri ?: return
         viewModelScope.launch {
             val deleted = withContext(Dispatchers.IO) {
                 container.sourceDeleter.deleteDocument(uri)
             }
-            markSource(if (deleted) SourceOutcome.DELETED else SourceOutcome.KEPT)
+            markSource(songUri, if (deleted) SourceOutcome.DELETED else SourceOutcome.KEPT)
             onResult(deleted)
         }
     }
 
-    fun keepSource() {
-        markSource(SourceOutcome.KEPT)
+    fun keepSource(songUri: String) {
+        markSource(songUri, SourceOutcome.KEPT)
     }
 
-    private fun markSource(outcome: SourceOutcome) {
-        val song = currentSong() ?: return
-        container.processingSession.updateSong(song.copy(sourceOutcome = outcome))
+    private fun markSource(songUri: String, outcome: SourceOutcome) {
+        container.processingSession.updateSong(songUri) { it.copy(sourceOutcome = outcome) }
     }
+
+    private fun song(uri: String): SavedSong? = currentSong()?.takeIf { it.uri == uri }
 
     private fun currentSong(): SavedSong? =
         (container.processingSession.state.value as? ProcessingState.Done)?.song

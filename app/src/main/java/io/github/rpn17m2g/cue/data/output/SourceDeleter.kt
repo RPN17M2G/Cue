@@ -1,6 +1,5 @@
 package io.github.rpn17m2g.cue.data.output
 
-import android.content.ContentUris
 import android.content.Context
 import android.content.IntentSender
 import android.net.Uri
@@ -36,29 +35,34 @@ class SourceDeleter(private val context: Context) {
     }
 
     /**
-     * Maps a picker URI onto the MediaStore item it points at. The media
-     * documents provider uses `video:<id>`, `image:<id>` and `audio:<id>`
-     * document ids, which are the same row ids MediaStore exposes.
+     * True while the source is still present. The system dialog reports success
+     * as soon as the user allows the deletion; this check confirms the row is
+     * actually gone before the Saved screen claims it was deleted. Errors are
+     * treated as "still there" so a failed query never hides a kept file.
+     */
+    fun exists(uri: String): Boolean {
+        val mediaUri = mediaStoreUri(Uri.parse(uri)) ?: return true
+        return runCatching {
+            context.contentResolver.query(
+                mediaUri,
+                arrayOf(MediaStore.MediaColumns._ID),
+                null,
+                null,
+                null,
+            )?.use { it.count > 0 } ?: true
+        }.getOrDefault(true)
+    }
+
+    /**
+     * Maps a picker URI onto the MediaStore item it points at. [MediaStore.getMediaUri]
+     * keeps the volume encoded in the document id, so a file on a secondary
+     * volume is not confused with the same row id on the primary one.
      */
     private fun mediaStoreUri(uri: Uri): Uri? = when (uri.authority) {
         MediaStore.AUTHORITY -> uri
-        MEDIA_DOCUMENTS_AUTHORITY -> documentsMediaStoreUri(uri)
+        MEDIA_DOCUMENTS_AUTHORITY ->
+            runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull()
         else -> null
-    }
-
-    private fun documentsMediaStoreUri(uri: Uri): Uri? {
-        val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
-            ?: return null
-        val parts = documentId.split(':', limit = 2)
-        if (parts.size != 2) return null
-        val id = parts[1].toLongOrNull() ?: return null
-        val collection = when (parts[0]) {
-            "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-            "image" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            else -> return null
-        }
-        return ContentUris.withAppendedId(collection, id)
     }
 
     private companion object {

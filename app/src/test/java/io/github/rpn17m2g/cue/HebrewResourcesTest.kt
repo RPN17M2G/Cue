@@ -45,6 +45,16 @@ class HebrewResourcesTest {
             R.string.settings_language,
             R.string.settings_theme,
             R.string.home_settings,
+            R.string.settings_after_processing,
+            R.string.settings_delete_source,
+            R.string.settings_delete_source_note,
+            R.string.result_delete_title,
+            R.string.result_delete_body,
+            R.string.result_delete_confirm,
+            R.string.result_delete_cancel,
+            R.string.result_source_deleted,
+            R.string.result_source_kept,
+            R.string.result_delete_failed,
         )
 
         samples.forEach { id ->

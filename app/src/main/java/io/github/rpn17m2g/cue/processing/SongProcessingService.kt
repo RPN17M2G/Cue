@@ -97,6 +97,7 @@ class SongProcessingService : Service() {
                 container.processingSession.failed(failureReason(e), failureDetails(e))
                 showFailed()
             } finally {
+                ProcessingJobCodec.cleanup(intent)
                 runningJob = null
                 stopSelf()
             }
@@ -279,7 +280,7 @@ class SongProcessingService : Service() {
         fun start(context: Context, job: ProcessingJob) {
             val intent = Intent(context, SongProcessingService::class.java).apply {
                 action = ACTION_START
-                ProcessingJobCodec.write(this, job)
+                ProcessingJobCodec.write(context, this, job)
             }
             ContextCompat.startForegroundService(context, intent)
         }

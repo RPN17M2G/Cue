@@ -17,6 +17,7 @@ import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
@@ -67,7 +68,7 @@ class ProcessSongUseCase(
             // The tags were written to the temp file, but only the published
             // row proves the copy survived MediaStore. Nothing may delete the
             // source before this read-back succeeds.
-            verifySaved(saved, job)
+            verifySaved(saved, job, temp.length())
             onProgress(ProcessingStage.Saving, 1f)
             val outcome = if (job.deleteSource && job.input.kind == InputKind.VIDEO) {
                 SourceOutcome.PENDING
@@ -88,14 +89,20 @@ class ProcessSongUseCase(
     }
 
     /**
-     * Reads the published file back through [OutputStore] and compares it with
-     * the draft. A partial MediaStore copy or a provider that dropped the tag
-     * must fail here, before the Saved screen offers to delete the source.
+     * Reads the published file back through [OutputStore] and compares its size
+     * and tags with what was written. A partial MediaStore copy or a provider
+     * that dropped a frame must fail here, before the Saved screen offers to
+     * delete the source.
      */
-    private suspend fun verifySaved(saved: SavedSong, job: ProcessingJob) {
+    private suspend fun verifySaved(saved: SavedSong, job: ProcessingJob, expectedBytes: Long) {
         val copy = createTemp()
         try {
             outputStore.copyOut(saved.uri, copy)
+            if (copy.length() != expectedBytes) {
+                throw ProcessingException(
+                    "The saved file is ${copy.length()} bytes instead of $expectedBytes",
+                )
+            }
             val written = withContext(ioDispatcher) {
                 runCatching { tagStore.read(copy) }.getOrNull()
             } ?: throw ProcessingException("The saved file has no readable tag")
@@ -108,11 +115,17 @@ class ProcessSongUseCase(
                 throw ProcessingException("The saved tags read back differently from what was written")
             }
         } catch (cancelled: CancellationException) {
-            runCatching { outputStore.delete(saved.uri) }
+            // The row was already published; remove it even though the job is
+            // being cancelled, otherwise a half-verified file stays visible.
+            withContext(NonCancellable) {
+                runCatching { outputStore.delete(saved.uri) }
+            }
             throw cancelled
         } catch (e: Exception) {
-            // Do not leave a file whose tags could not be confirmed.
-            runCatching { outputStore.delete(saved.uri) }
+            // Do not leave a file whose bytes or tags could not be confirmed.
+            withContext(NonCancellable) {
+                runCatching { outputStore.delete(saved.uri) }
+            }
             throw e
         } finally {
             copy.delete()

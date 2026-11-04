@@ -1,17 +1,27 @@
 package io.github.rpn17m2g.cue.processing
 
+import android.content.Context
 import android.content.Intent
 import io.github.rpn17m2g.cue.data.input.InputKind
 import io.github.rpn17m2g.cue.data.input.ResolvedInput
+import io.github.rpn17m2g.cue.domain.model.Artwork
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimRange
 import io.github.rpn17m2g.cue.tags.TagField
+import java.io.File
 
-/** Passes a job to the service without serializing artwork bytes. */
+/**
+ * Passes a job to the service.
+ *
+ * A cover can be a few hundred kilobytes, close to the Binder transaction
+ * limit, so artwork bytes are staged in the cache directory and the intent
+ * carries only the path. [cleanup] removes that file once the service has read
+ * the job.
+ */
 internal object ProcessingJobCodec {
 
-    fun write(intent: Intent, job: ProcessingJob) {
+    fun write(context: Context, intent: Intent, job: ProcessingJob) {
         intent.putExtra(KEY_INPUT_ID, job.input.id)
         intent.putExtra(KEY_URI, job.input.uri)
         intent.putExtra(KEY_PATH, job.input.path)
@@ -28,6 +38,12 @@ internal object ProcessingJobCodec {
         intent.putExtra(KEY_GENRE, job.draft.genre)
         intent.putExtra(KEY_TRACK, job.draft.trackNumber ?: ABSENT_INT)
         intent.putExtra(KEY_TRACK_TOTAL, job.draft.trackTotal ?: ABSENT_INT)
+        job.draft.artwork?.let { artwork ->
+            stageArtwork(context, artwork)?.let { staged ->
+                intent.putExtra(KEY_ARTWORK_PATH, staged.absolutePath)
+                intent.putExtra(KEY_ARTWORK_MIME, artwork.mimeType)
+            }
+        }
         intent.putExtra(KEY_TRIM_START, job.trim?.startMs ?: ABSENT_LONG)
         intent.putExtra(KEY_TRIM_END, job.trim?.endMs ?: ABSENT_LONG)
         intent.putExtra(KEY_QUALITY, job.quality.name)
@@ -76,6 +92,7 @@ internal object ProcessingJobCodec {
                 genre = intent.getStringExtra(KEY_GENRE),
                 trackNumber = intent.getIntExtra(KEY_TRACK, ABSENT_INT).takeIf { it != ABSENT_INT },
                 trackTotal = intent.getIntExtra(KEY_TRACK_TOTAL, ABSENT_INT).takeIf { it != ABSENT_INT },
+                artwork = readArtwork(intent),
             ),
             trim = if (trimStart != ABSENT_LONG && trimEnd != ABSENT_LONG && trimEnd > trimStart) {
                 TrimRange(trimStart, trimEnd)
@@ -93,6 +110,35 @@ internal object ProcessingJobCodec {
                 .toSet(),
         )
     }
+
+    /** Removes the staged cover once the service no longer needs the job. */
+    fun cleanup(intent: Intent?) {
+        intent?.getStringExtra(KEY_ARTWORK_PATH)?.let { path ->
+            runCatching { File(path).delete() }
+        }
+    }
+
+    private fun stageArtwork(context: Context, artwork: Artwork): File? = runCatching {
+        val directory = File(context.cacheDir, ARTWORK_DIRECTORY).apply { mkdirs() }
+        File(directory, "artwork-${System.nanoTime()}.bin").apply {
+            writeBytes(artwork.bytes)
+        }
+    }.getOrNull()
+
+    private fun readArtwork(intent: Intent): Artwork? {
+        val path = intent.getStringExtra(KEY_ARTWORK_PATH) ?: return null
+        val file = File(path)
+        if (!file.isFile) return null
+        return runCatching {
+            Artwork(
+                bytes = file.readBytes(),
+                mimeType = intent.getStringExtra(KEY_ARTWORK_MIME) ?: DEFAULT_ARTWORK_MIME,
+            )
+        }.getOrNull()
+    }
+
+    private const val ARTWORK_DIRECTORY = "processing-jobs"
+    private const val DEFAULT_ARTWORK_MIME = "image/jpeg"
 
     private const val ABSENT_LONG = -1L
     private const val ABSENT_INT = -1
@@ -113,6 +159,8 @@ internal object ProcessingJobCodec {
     private const val KEY_GENRE = "tag_genre"
     private const val KEY_TRACK = "tag_track"
     private const val KEY_TRACK_TOTAL = "tag_track_total"
+    private const val KEY_ARTWORK_PATH = "tag_artwork_path"
+    private const val KEY_ARTWORK_MIME = "tag_artwork_mime"
     private const val KEY_TRIM_START = "trim_start"
     private const val KEY_TRIM_END = "trim_end"
     private const val KEY_QUALITY = "quality"

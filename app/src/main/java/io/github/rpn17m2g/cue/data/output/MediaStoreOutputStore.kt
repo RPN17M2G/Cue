@@ -83,7 +83,10 @@ class MediaStoreOutputStore(
             val publish = ContentValues().apply {
                 put(MediaStore.Audio.Media.IS_PENDING, 0)
             }
-            context.contentResolver.update(uri, publish, null, null)
+            val published = context.contentResolver.update(uri, publish, null, null)
+            if (published == 0) {
+                throw IOException("MediaStore did not publish $displayName")
+            }
             SavedSong(uri = uri.toString(), displayName = displayName, relativePath = folder)
         } catch (e: Exception) {
             runCatching { context.contentResolver.delete(uri, null, null) }
@@ -103,7 +106,8 @@ class MediaStoreOutputStore(
 
     override suspend fun delete(uri: String) {
         withContext(ioDispatcher) {
-            context.contentResolver.delete(Uri.parse(uri), null, null)
+            val removed = context.contentResolver.delete(Uri.parse(uri), null, null)
+            if (removed == 0) throw IOException("MediaStore did not delete $uri")
         }
     }
 

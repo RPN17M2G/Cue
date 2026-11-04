@@ -84,7 +84,12 @@ fun ResultScreen(
     val deleteLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
-        viewModel.completeSystemDelete(result.resultCode == Activity.RESULT_OK)
+        song?.let { current ->
+            viewModel.completeSystemDelete(
+                current.uri,
+                result.resultCode == Activity.RESULT_OK,
+            )
+        }
     }
 
     // A pending source is confirmed here first; MediaStore then adds the OS
@@ -97,7 +102,7 @@ fun ResultScreen(
         AlertDialog(
             onDismissRequest = {
                 showDeleteDialog = false
-                viewModel.keepSource()
+                viewModel.keepSource(song.uri)
             },
             icon = { Icon(Icons.Default.Delete, contentDescription = null) },
             title = { Text(stringResource(R.string.result_delete_title)) },
@@ -106,13 +111,13 @@ fun ResultScreen(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        val request = viewModel.deleteRequest()
+                        val request = viewModel.deleteRequest(song.uri)
                         if (request != null) {
                             deleteLauncher.launch(
                                 IntentSenderRequest.Builder(request).build(),
                             )
                         } else {
-                            viewModel.deleteWithoutSystemDialog { deleted ->
+                            viewModel.deleteWithoutSystemDialog(song.uri) { deleted ->
                                 if (!deleted) {
                                     Toast.makeText(
                                         context,
@@ -131,7 +136,7 @@ fun ResultScreen(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        viewModel.keepSource()
+                        viewModel.keepSource(song.uri)
                     },
                 ) {
                     Text(stringResource(R.string.result_delete_cancel))
