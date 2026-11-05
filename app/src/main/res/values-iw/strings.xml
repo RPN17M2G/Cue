@@ -111,6 +111,7 @@
     <string name="review_no_match_body">אפשר לחפש ידנית או לנסות שוב.</string>
     <string name="review_search_manually">חיפוש ידני</string>
     <string name="review_look_up_again">חיפוש מחדש</string>
+    <string name="review_open_settings">פתיחת ההגדרות</string>
     <string name="review_clip_quality">קטע ואיכות</string>
     <string name="review_clip_summary">%1$s–%2$s · %3$s · %4$s</string>
     <string name="review_clip_summary_short">%1$s–%2$s · %3$s</string>

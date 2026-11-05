@@ -55,6 +55,7 @@ class HebrewResourcesTest {
             R.string.result_source_deleted,
             R.string.result_source_kept,
             R.string.result_delete_failed,
+            R.string.review_open_settings,
         )
 
         samples.forEach { id ->

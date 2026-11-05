@@ -362,6 +362,109 @@ class OcrCandidateExtractorTest {
         assertEquals("Daft Punk", candidate.artist)
     }
 
+    @Test
+    fun `a scrolling title is stitched from its fragments`() {
+        val frames = listOf(
+            frame(0, "Get Luc"),
+            frame(1, "et Lucky"),
+            frame(2, "t Lucky"),
+            frame(3, "Get Lucky"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals(listOf("Get Lucky"), candidates.map { it.title })
+    }
+
+    @Test
+    fun `a title held on screen longer beats a title seen in more frames`() {
+        val frames = listOf(
+            frame(0, "Long Song"),
+            frame(50, "Blip"),
+            frame(51, "Blip"),
+            frame(52, "Blip"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("Long Song", candidates.first().title)
+    }
+
+    @Test
+    fun `fragments are not stitched into a different title`() {
+        val frames = listOf(
+            frame(0, "Time"),
+            frame(1, "Time After Time"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertTrue(candidates.any { it.title == "Time" })
+        assertTrue(candidates.any { it.title == "Time After Time" })
+    }
+
+    @Test
+    fun `a title with an artist is one sighting per frame`() {
+        val frames = listOf(
+            frame(
+                0,
+                line("Get Lucky", 0.30f, 0.50f, 0.70f, 0.545f),
+                line("Daft Punk", 0.34f, 0.56f, 0.66f, 0.587f),
+            ),
+            frame(1, line("Something Else", 0.30f, 0.50f, 0.70f, 0.545f)),
+        )
+
+        val candidate = OcrCandidateExtractor.extract(frames)
+            .first { it.title == "Get Lucky" }
+
+        // One of two frames: 0.45 * 0.5 + 0.45 * 1.0 + 0.1. The paired and the
+        // solo key for the same line must not each add the frame's time.
+        assertEquals(0.775, candidate.score, 0.001)
+    }
+
+    @Test
+    fun `a longer queue row does not swallow the stable title`() {
+        val frames = listOf(
+            frame(0, "Get Lucky"),
+            frame(1, "Get Lucky"),
+            frame(2, "Get Lucky"),
+            frame(3, "Get Lucky Official"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("Get Lucky", candidates.first().title)
+    }
+
+    @Test
+    fun `equal timestamps fall back to how many frames saw the title`() {
+        val frames = listOf(
+            frame(0, "Once"),
+            frame(0, "Twice"),
+            frame(0, "Twice"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("Twice", candidates.first().title)
+    }
+
+    @Test
+    fun `a repeated timestamp does not add time to either frame`() {
+        val frames = listOf(
+            frame(0, "First"),
+            frame(1, "Second"),
+            frame(1, "Second"),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        // The second frame stands for no interval, so the two titles tie on
+        // stability and keep the deterministic order instead of one doubling.
+        assertTrue(candidates.all { it.score <= 0.45 + 0.45 + 0.1 })
+        assertEquals(2, candidates.size)
+    }
+
     private fun frame(timestamp: Int, vararg lines: String): OcrFrameText =
         OcrFrameText(timestamp.toLong(), lines.map { OcrLine(it) })
 

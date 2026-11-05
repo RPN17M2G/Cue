@@ -1,6 +1,7 @@
 # Cue — UI redesign & palette plan
 
-Status: approved direction, plan not yet implemented.
+Status: implemented. Phases A–E are merged on `dev` and verified on the SM-S911B;
+Phase F (docs, screenshots, artefact cleanup) is in progress.
 Owner: Omer Gindi (`RPN17M2G`).
 Related: `docs/PLAN.md` (design source of truth), `docs/ADR/0007-fixed-palette-themes.md`.
 
