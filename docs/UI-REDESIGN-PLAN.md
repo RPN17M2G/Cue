@@ -1,9 +1,10 @@
 # Cue — UI redesign & palette plan
 
 Status: implemented. Phases A–E are merged on `dev` and verified on the SM-S911B;
-Phase F (docs, screenshots, artefact cleanup) is in progress. A visual polish
-pass (Rubik type scale, card gallery rows, hero glow, saved-song hero) is on
-`feat/ui-polish`, verified on the API 31 emulator in light and dark.
+Phase F (docs, screenshots, artefact cleanup) is in progress. The visual polish
+pass (Rubik type scale, card gallery rows, hero glow, saved-song hero) is merged
+on `dev` and verified on the API 31 emulator in light and dark, including a
+360 dp layout check.
 Owner: Omer Gindi (`RPN17M2G`).
 Related: `docs/PLAN.md` (design source of truth), `docs/ADR/0007-fixed-palette-themes.md`.
 
