@@ -22,7 +22,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +82,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -226,8 +226,9 @@ private fun HomeContent(
         },
     ) { padding ->
         val background = MaterialTheme.colorScheme.background
+        val darkBackground = background.luminance() < 0.5f
         val washTop = MaterialTheme.colorScheme.primary.copy(
-            alpha = if (isSystemInDarkTheme()) 0.18f else 0.12f,
+            alpha = if (darkBackground) 0.18f else 0.12f,
         )
         Column(
             modifier = Modifier
@@ -500,15 +501,11 @@ private fun CountBadge(count: Int, selected: Boolean) {
     Surface(
         shape = CircleShape,
         color = if (selected) {
-            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f)
+            MaterialTheme.colorScheme.surface
         } else {
             MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.primary
-        },
+        contentColor = MaterialTheme.colorScheme.primary,
     ) {
         Text(
             text = count.toString(),
