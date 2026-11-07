@@ -14,12 +14,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -203,9 +206,13 @@ private fun SavedHero(song: SavedSong) {
         song.artwork?.let { decodeArtwork(it.bytes, maxWidth = 512) }
     }
     val title = song.title.ifBlank { song.displayName.substringBeforeLast('.') }
+    val fontScale = LocalDensity.current.fontScale
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            // Grow past the artwork ratio when large accessibility fonts need
+            // room for a two-line title and the metadata row.
+            .heightIn(min = 200.dp * fontScale.coerceIn(1f, 1.6f))
             .aspectRatio(1.6f)
             .shadow(
                 elevation = tokens.shadowElevation * 1.5f,
@@ -242,10 +249,13 @@ private fun SavedHero(song: SavedSong) {
             modifier = Modifier
                 .fillMaxSize()
                 .background(
+                    // Monotonic and bottom-heavy: the title/artist sit in the
+                    // lower half, so the scrim must never dip back to clear.
                     Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.30f),
-                        0.4f to MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
-                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.82f),
+                        0f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.05f),
+                        0.4f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.20f),
+                        0.72f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.62f),
+                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.88f),
                     ),
                 ),
         )
@@ -346,27 +356,33 @@ private fun SavedActions(
 ) {
     val context = LocalContext.current
     val tokens = LocalCueTokens.current
+    // At 360 dp the paired buttons only leave ~75 dp for a label with the
+    // default 24 dp content padding, which wraps "Show in folder"; trim the
+    // padding so every action stays on one line.
+    val compactPadding = PaddingValues(horizontal = 12.dp)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(
                 onClick = { play(context, song) },
                 shape = tokens.buttonShape,
+                contentPadding = compactPadding,
                 modifier = Modifier.weight(1f),
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.result_play))
+                Text(stringResource(R.string.result_play), maxLines = 1)
             }
             OutlinedButton(
                 onClick = {
                     share(context, song, context.getString(R.string.result_share_chooser))
                 },
                 shape = tokens.buttonShape,
+                contentPadding = compactPadding,
                 modifier = Modifier.weight(1f),
             ) {
                 Icon(Icons.Default.Share, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.result_share))
+                Text(stringResource(R.string.result_share), maxLines = 1)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -375,19 +391,21 @@ private fun SavedActions(
                     openWith(context, song, context.getString(R.string.result_open_with))
                 },
                 shape = tokens.buttonShape,
+                contentPadding = compactPadding,
                 modifier = Modifier.weight(1f),
             ) {
-                Text(stringResource(R.string.result_open_with))
+                Text(stringResource(R.string.result_open_with), maxLines = 1)
             }
             if (song.relativePath.isNotBlank()) {
                 OutlinedButton(
                     onClick = { showInFolder(context, song) },
                     shape = tokens.buttonShape,
+                    contentPadding = compactPadding,
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Folder, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.result_show_folder))
+                    Text(stringResource(R.string.result_show_folder), maxLines = 1)
                 }
             }
         }

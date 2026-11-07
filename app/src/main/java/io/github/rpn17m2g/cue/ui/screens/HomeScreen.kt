@@ -85,11 +85,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.core.app.ActivityCompat
@@ -322,7 +324,10 @@ private fun HomeHeader(
             Text(
                 text = stringResource(R.string.home_subtitle),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // onSurface rather than onSurfaceVariant: the header wash
+                // lightens the background enough that the muted tone drops
+                // below 4.5:1 on the light palettes.
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -415,7 +420,7 @@ private fun TabBar(
     ) {
         Row(
             modifier = Modifier
-                .padding(4.dp)
+                .padding(2.dp)
                 .selectableGroup(),
         ) {
             LibraryTab.entries.forEach { item ->
@@ -480,7 +485,7 @@ private fun TabPill(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 6.dp),
+                .padding(vertical = 8.dp, horizontal = 4.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -489,8 +494,13 @@ private fun TabPill(
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                // Three equal pills at 360 dp leave "Recordings" ~60 dp once
+                // the count badge is measured; let the label ellipsize instead
+                // of pushing the badge out of the pill.
+                modifier = Modifier.weight(1f, fill = false),
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
             CountBadge(count = count, selected = selected)
         }
     }
@@ -510,7 +520,7 @@ private fun CountBadge(count: Int, selected: Boolean) {
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
         )
     }
 }
@@ -642,11 +652,14 @@ private fun DayHeader(bucket: DayBucket, modifier: Modifier = Modifier) {
                 .background(MaterialTheme.colorScheme.primary),
         )
         Spacer(Modifier.width(8.dp))
+        // Latin small-caps tracking reads well in English but separates Hebrew
+        // letters awkwardly, so drop it for RTL locales.
+        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
         Text(
             text = stringResource(bucket.labelRes()).uppercase(),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.14.em,
+                letterSpacing = if (rtl) 0.em else 0.14.em,
             ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

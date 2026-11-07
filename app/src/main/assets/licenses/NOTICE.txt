@@ -39,6 +39,12 @@ app/src/main/assets/licenses/:
   Packaged as src/main/assets/tessdata/heb.traineddata; covered by
   Tesseract4Android-Apache-2.0.txt.
 
+- Rubik, bundled as static 400/500/600/700/800 instances (SIL OFL 1.1)
+  Copyright 2015 The Rubik Project Authors.
+  Source: https://github.com/google/fonts/tree/main/ofl/rubik
+  Packaged as src/main/res/font/rubik_*.ttf; licence in
+  Rubik-OFL-1.1.txt.
+
 Compliance statement
 --------------------
 The LGPL components are dynamically linked. The executable libffmpeg.so and the
