@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -53,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -151,27 +156,21 @@ fun ResultScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 20.dp)
                 .padding(top = 8.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = stringResource(
-                    if (song?.inPlaceEdit == true) {
-                        R.string.result_title_updated
-                    } else {
-                        R.string.result_title
-                    },
-                ),
-                style = MaterialTheme.typography.headlineMedium,
-            )
             if (song == null) {
+                Text(
+                    text = stringResource(R.string.result_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
                 Text(
                     text = stringResource(R.string.result_missing),
                     style = MaterialTheme.typography.bodyLarge,
                 )
             } else {
-                SavedSongHeader(song)
+                SavedHero(song)
                 SavedActions(
                     song = song,
                     editing = editing,
@@ -181,7 +180,7 @@ fun ResultScreen(
                 )
                 SourceOutcomeLine(song)
             }
-            Button(
+            FilledTonalButton(
                 onClick = {
                     viewModel.processAnother()
                     onProcessAnother()
@@ -198,93 +197,144 @@ fun ResultScreen(
 }
 
 @Composable
-private fun SavedSongHeader(song: SavedSong) {
+private fun SavedHero(song: SavedSong) {
     val tokens = LocalCueTokens.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val bitmap = remember(song.artwork) {
+        song.artwork?.let { decodeArtwork(it.bytes, maxWidth = 512) }
+    }
+    val title = song.title.ifBlank { song.displayName.substringBeforeLast('.') }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.6f)
+            .shadow(
+                elevation = tokens.shadowElevation * 1.5f,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.45f),
+                spotColor = tokens.glow.copy(alpha = 0.55f),
+            )
+            .clip(tokens.cardShape),
     ) {
-        val bitmap = remember(song.artwork) {
-            song.artwork?.let { decodeArtwork(it.bytes, maxWidth = 512) }
-        }
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(tokens.cardShape)
-                .background(tokens.heroBrush),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = stringResource(R.string.review_field_artwork),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = stringResource(R.string.review_field_artwork),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(tokens.heroBrush),
+            ) {
                 Icon(
                     imageVector = Icons.Default.MusicNote,
                     contentDescription = null,
-                    tint = tokens.heroInk.copy(alpha = 0.85f),
-                    modifier = Modifier.size(38.dp),
+                    tint = tokens.heroInk.copy(alpha = 0.32f),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(64.dp),
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.30f),
+                        0.4f to MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
+                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.82f),
+                    ),
+                ),
+        )
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = tokens.success,
+                    modifier = Modifier.size(15.dp),
+                )
+                Text(
+                    text = stringResource(
+                        if (song.inPlaceEdit) {
+                            R.string.result_title_updated
+                        } else {
+                            R.string.result_title
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
         Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 18.dp, end = 18.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
-                text = song.title.ifBlank {
-                    song.displayName.substringBeforeLast('.')
-                },
-                style = MaterialTheme.typography.titleLarge,
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = tokens.heroInk,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (song.artist.isNotBlank()) {
                 Text(
                     text = song.artist,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.heroInk.copy(alpha = 0.86f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 song.durationMs?.let { duration ->
                     Text(
                         text = TrimClock.format(duration),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = tokens.heroInk.copy(alpha = 0.82f),
                     )
                 }
                 if (!song.inPlaceEdit && song.relativePath.isNotBlank()) {
-                    PathChip(song.relativePath.trimEnd('/'))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = tokens.heroInk.copy(alpha = 0.82f),
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Text(
+                            text = song.relativePath.trimEnd('/'),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = tokens.heroInk.copy(alpha = 0.82f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PathChip(path: String) {
-    Surface(
-        shape = RoundedCornerShape(percent = 50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        Text(
-            text = path,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
     }
 }
 
