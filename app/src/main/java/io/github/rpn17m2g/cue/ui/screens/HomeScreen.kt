@@ -17,10 +17,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,15 +42,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -69,16 +75,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -192,6 +207,10 @@ private fun HomeContent(
                 shape = tokens.buttonShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = tokens.shadowElevation,
+                    pressedElevation = tokens.shadowElevation / 2,
+                ),
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -208,29 +227,53 @@ private fun HomeContent(
             )
         },
     ) { padding ->
+        val background = MaterialTheme.colorScheme.background
+        val darkBackground = background.luminance() < 0.5f
+        val washTop = MaterialTheme.colorScheme.primary.copy(
+            alpha = if (darkBackground) 0.18f else 0.12f,
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(background)
                 .padding(padding),
         ) {
-            HomeHeader(
-                searchOpen = searchOpen,
-                enabled = !resolving,
-                onToggleSearch = onToggleSearch,
-                onOpenSettings = onOpenSettings,
-            )
-            SearchField(
-                visible = searchOpen,
-                query = query,
-                onQueryChange = onQueryChange,
-                onClear = { onQueryChange("") },
-            )
-            TabBar(
-                tab = state.tab,
-                entries = state.entries,
-                onSelect = onSelectTab,
-            )
-            PreparingBar(visible = resolving)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to washTop,
+                                0.6f to washTop.copy(alpha = washTop.alpha * 0.35f),
+                                1f to Color.Transparent,
+                                startY = 0f,
+                                endY = size.height,
+                            ),
+                        )
+                    },
+            ) {
+                Column {
+                    HomeHeader(
+                        searchOpen = searchOpen,
+                        enabled = !resolving,
+                        onToggleSearch = onToggleSearch,
+                        onOpenSettings = onOpenSettings,
+                    )
+                    SearchField(
+                        visible = searchOpen,
+                        query = query,
+                        onQueryChange = onQueryChange,
+                        onClear = { onQueryChange("") },
+                    )
+                    TabBar(
+                        tab = state.tab,
+                        entries = state.entries,
+                        onSelect = onSelectTab,
+                    )
+                    PreparingBar(visible = resolving)
+                }
+            }
             Box(modifier = Modifier.weight(1f)) {
                 GalleryBody(
                     state = state,
@@ -258,18 +301,38 @@ private fun HomeHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 8.dp, top = 10.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.home_title),
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontWeight = tokens.titleWeight,
-                letterSpacing = tokens.titleTracking,
-            ),
-        )
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = onToggleSearch, enabled = enabled) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.home_title),
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = tokens.titleWeight,
+                        letterSpacing = tokens.titleTracking,
+                    ),
+                )
+                Spacer(Modifier.width(7.dp))
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Text(
+                text = stringResource(R.string.home_subtitle),
+                style = MaterialTheme.typography.bodySmall,
+                // onSurface rather than onSurfaceVariant: the header wash
+                // lightens the background enough that the muted tone drops
+                // below 4.5:1 on the light palettes.
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        FilledTonalIconButton(onClick = onToggleSearch, enabled = enabled) {
             Icon(
                 imageVector = if (searchOpen) Icons.Default.Close else Icons.Default.Search,
                 contentDescription = stringResource(
@@ -277,7 +340,8 @@ private fun HomeHeader(
                 ),
             )
         }
-        IconButton(onClick = onOpenSettings, enabled = enabled) {
+        Spacer(Modifier.width(2.dp))
+        FilledTonalIconButton(onClick = onOpenSettings, enabled = enabled) {
             Icon(
                 imageVector = Icons.Default.Settings,
                 contentDescription = stringResource(R.string.home_settings),
@@ -345,13 +409,18 @@ private fun TabBar(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        ),
+        shadowElevation = 2.dp,
     ) {
         Row(
             modifier = Modifier
-                .padding(4.dp)
+                .padding(2.dp)
                 .selectableGroup(),
         ) {
             LibraryTab.entries.forEach { item ->
@@ -379,7 +448,7 @@ private fun TabPill(
         targetValue = if (selected) {
             MaterialTheme.colorScheme.primary
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f)
+            MaterialTheme.colorScheme.surface.copy(alpha = 0f)
         },
         animationSpec = tween(HOME_FADE_MILLIS),
         label = "tabContainer",
@@ -393,21 +462,65 @@ private fun TabPill(
         animationSpec = tween(HOME_FADE_MILLIS),
         label = "tabContent",
     )
+    val tokens = LocalCueTokens.current
+    val shadow = if (selected) {
+        Modifier.shadow(
+            elevation = tokens.shadowElevation / 2,
+            shape = CircleShape,
+            ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+            spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+        )
+    } else {
+        Modifier
+    }
     Surface(
         modifier = modifier
+            .then(shadow)
             .clip(CircleShape)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick),
         shape = CircleShape,
         color = container,
         contentColor = content,
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 4.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(tab.labelRes()),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                // Three equal pills at 360 dp leave "Recordings" ~60 dp once
+                // the count badge is measured; let the label ellipsize instead
+                // of pushing the badge out of the pill.
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(4.dp))
+            CountBadge(count = count, selected = selected)
+        }
+    }
+}
+
+@Composable
+private fun CountBadge(count: Int, selected: Boolean) {
+    Surface(
+        shape = CircleShape,
+        color = if (selected) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        },
+        contentColor = MaterialTheme.colorScheme.primary,
+    ) {
         Text(
-            text = stringResource(R.string.home_tab_with_count, stringResource(tab.labelRes()), count),
-            style = MaterialTheme.typography.labelMedium,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(vertical = 9.dp, horizontal = 2.dp),
+            text = count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
         )
     }
 }
@@ -502,7 +615,7 @@ private fun EntryList(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 104.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         groups.forEach { (bucket, bucketEntries) ->
             stickyHeader(key = "day-${bucket.name}") {
@@ -511,7 +624,7 @@ private fun EntryList(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.background)
-                        .padding(top = 12.dp, bottom = 4.dp),
+                        .padding(top = 16.dp, bottom = 6.dp),
                 )
             }
             items(bucketEntries, key = { it.uri.toString() }) { entry ->
@@ -528,12 +641,34 @@ private fun EntryList(
 
 @Composable
 private fun DayHeader(bucket: DayBucket, modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(bucket.labelRes()),
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 4.dp),
-    )
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Spacer(Modifier.width(8.dp))
+        // Latin small-caps tracking reads well in English but separates Hebrew
+        // letters awkwardly, so drop it for RTL locales.
+        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        Text(
+            text = stringResource(bucket.labelRes()).uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = if (rtl) 0.em else 0.14.em,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(12.dp))
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        )
+    }
 }
 
 @Composable
@@ -543,44 +678,63 @@ private fun EntryRow(
     onClick: () -> Unit,
     loadThumbnail: suspend (Uri) -> Bitmap?,
 ) {
-    Row(
+    val tokens = LocalCueTokens.current
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = tokens.cardShape,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(LocalCueTokens.current.cardShape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .shadow(
+                elevation = tokens.shadowElevation / 2,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.20f),
+                spotColor = tokens.glow.copy(alpha = 0.26f),
+            ),
     ) {
-        Thumbnail(entry = entry, loadThumbnail = loadThumbnail)
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val secondary = listOfNotNull(
-                entry.artist,
-                entry.durationMs?.let { DateUtils.formatElapsedTime(it / 1_000) },
-            ).joinToString(" · ")
-            if (secondary.isNotEmpty()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Thumbnail(entry = entry, loadThumbnail = loadThumbnail)
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = secondary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = entry.title,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val secondary = listOfNotNull(
+                    entry.artist,
+                    entry.durationMs?.let { DateUtils.formatElapsedTime(it / 1_000) },
+                ).joinToString(" · ")
+                if (secondary.isNotEmpty()) {
+                    Spacer(Modifier.height(1.dp))
+                    Text(
+                        text = secondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(7.dp))
+                SourceChip(source = entry.source)
             }
-            Spacer(Modifier.height(5.dp))
-            SourceChip(source = entry.source)
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.size(20.dp),
+            )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -593,11 +747,17 @@ private fun Thumbnail(
     LaunchedEffect(entry.uri) {
         image = loadThumbnail(entry.uri)
     }
+    val tokens = LocalCueTokens.current
     Box(
         modifier = Modifier
-            .size(58.dp)
-            .clip(LocalCueTokens.current.thumbnailShape)
-            .background(MaterialTheme.colorScheme.primaryContainer),
+            .size(68.dp)
+            .clip(tokens.thumbnailShape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                shape = tokens.thumbnailShape,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         val bitmap = image
@@ -617,8 +777,27 @@ private fun Thumbnail(
                 },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(26.dp),
             )
+        }
+        if (entry.kind == LibraryKind.VIDEO) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f),
+                contentColor = tokens.heroInk,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(5.dp)
+                    .size(22.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -636,7 +815,7 @@ private fun SourceChip(source: LibrarySource) {
         Text(
             text = stringResource(source.labelRes()),
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
         )
     }
 }

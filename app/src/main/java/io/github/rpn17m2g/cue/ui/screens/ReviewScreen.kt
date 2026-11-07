@@ -12,6 +12,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -455,7 +456,12 @@ private fun CoverHero(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(4f / 3f)
-            .shadow(tokens.shadowElevation, tokens.cardShape)
+            .shadow(
+                elevation = tokens.shadowElevation * 1.5f,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.45f),
+                spotColor = tokens.glow.copy(alpha = 0.55f),
+            )
             .clip(tokens.cardShape),
     ) {
         if (bitmap != null) {
@@ -612,7 +618,18 @@ private fun FieldsCard(
     Surface(
         shape = tokens.cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = tokens.shadowElevation / 2,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.16f),
+                spotColor = tokens.glow.copy(alpha = 0.20f),
+            ),
     ) {
         Column {
             PRIMARY_FIELDS.forEachIndexed { index, field ->
@@ -896,7 +913,18 @@ private fun MatchCard(
     Surface(
         shape = tokens.cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = tokens.shadowElevation / 2,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.16f),
+                spotColor = tokens.glow.copy(alpha = 0.20f),
+            ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -1081,7 +1109,18 @@ private fun ClipQualityCard(
     Surface(
         shape = tokens.cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = tokens.shadowElevation / 2,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.16f),
+                spotColor = tokens.glow.copy(alpha = 0.20f),
+            ),
     ) {
         Column {
             Row(
@@ -1364,7 +1403,18 @@ private fun DeleteSourceCard(
     Surface(
         shape = tokens.cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = tokens.shadowElevation / 2,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.16f),
+                spotColor = tokens.glow.copy(alpha = 0.20f),
+            ),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1495,7 +1545,13 @@ private fun CreateBar(
                     shape = tokens.buttonShape,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(52.dp)
+                        .shadow(
+                            elevation = tokens.shadowElevation / 2,
+                            shape = tokens.buttonShape,
+                            ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                            spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                        ),
                 ) {
                     if (state.saving) {
                         CircularProgressIndicator(

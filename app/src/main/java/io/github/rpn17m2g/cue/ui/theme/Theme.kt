@@ -12,6 +12,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -58,9 +59,8 @@ fun CueTheme(
 }
 
 /**
- * Type weight is part of the palette's personality: cheerful themes lean heavy
- * and tight, professional ones stay calm. Only the handful of styles the app
- * actually uses are overridden.
+ * One type scale, one family. Type weight is part of the palette's personality:
+ * cheerful themes lean heavy and tight, professional ones stay calm.
  */
 private fun cueTypography(style: CueStyle): Typography {
     val cheerful = style == CueStyle.CHEERFUL
@@ -68,41 +68,40 @@ private fun cueTypography(style: CueStyle): Typography {
     val title = if (cheerful) FontWeight.Bold else FontWeight.SemiBold
     val label = if (cheerful) FontWeight.SemiBold else FontWeight.Medium
     val tracking = if (cheerful) (-0.02).em else (-0.01).em
+
+    fun text(
+        size: Int,
+        lineHeight: Int,
+        weight: FontWeight,
+        letterSpacing: TextUnit = 0.em,
+    ): TextStyle = TextStyle(
+        fontFamily = CueFontFamily,
+        fontSize = size.sp,
+        lineHeight = lineHeight.sp,
+        fontWeight = weight,
+        letterSpacing = letterSpacing,
+    )
+
     return Typography(
-        displaySmall = TextStyle(
-            fontSize = 36.sp,
-            lineHeight = 42.sp,
-            fontWeight = heading,
-            letterSpacing = tracking,
+        displayLarge = text(57, 64, heading, tracking),
+        displayMedium = text(45, 52, heading, tracking),
+        displaySmall = text(36, 42, heading, tracking),
+        headlineLarge = text(32, 38, heading, tracking),
+        headlineMedium = text(28, 34, heading, tracking),
+        headlineSmall = text(24, 30, heading, tracking),
+        titleLarge = text(22, 28, title, tracking),
+        titleMedium = text(17, 24, title, tracking),
+        titleSmall = text(14, 20, title, tracking),
+        bodyLarge = text(
+            if (cheerful) 16 else 15,
+            24,
+            if (cheerful) FontWeight.Medium else FontWeight.Normal,
         ),
-        headlineMedium = TextStyle(
-            fontSize = 28.sp,
-            lineHeight = 34.sp,
-            fontWeight = heading,
-            letterSpacing = tracking,
-        ),
-        titleLarge = TextStyle(
-            fontSize = 22.sp,
-            lineHeight = 28.sp,
-            fontWeight = title,
-            letterSpacing = tracking,
-        ),
-        titleMedium = TextStyle(
-            fontSize = 16.sp,
-            lineHeight = 22.sp,
-            fontWeight = title,
-            letterSpacing = tracking,
-        ),
-        bodyLarge = TextStyle(
-            fontSize = if (cheerful) 16.sp else 15.sp,
-            lineHeight = 24.sp,
-            fontWeight = if (cheerful) FontWeight.Medium else FontWeight.Normal,
-        ),
-        labelLarge = TextStyle(
-            fontSize = if (cheerful) 14.sp else 13.sp,
-            lineHeight = if (cheerful) 20.sp else 18.sp,
-            fontWeight = label,
-        ),
+        bodyMedium = text(14, 20, FontWeight.Normal),
+        bodySmall = text(12, 16, FontWeight.Normal),
+        labelLarge = text(if (cheerful) 14 else 13, if (cheerful) 20 else 18, label),
+        labelMedium = text(12, 16, label, 0.01.em),
+        labelSmall = text(11, 14, label, 0.02.em),
     )
 }
 
