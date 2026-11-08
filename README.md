@@ -37,6 +37,18 @@ Android 12+, English and Hebrew with full RTL.
 - **Four themes** — Mint, Lagoon, Navy and Deep teal, each with a light and a
   dark scheme, switched instantly from Settings.
 
+## Screenshots
+
+| Home | Song details |
+|---|---|
+| ![Home](design/_device-home.png) | ![Song details](design/_device-review-match.png) |
+
+| Saved | Home in dark mode |
+|---|---|
+| ![Saved](design/_device-result.png) | ![Home dark](design/_device-home-dark.png) |
+
+Captured on a 1080 × 2400 API 31 emulator, Mint palette, light and dark.
+
 ## Requirements
 
 - JDK 17+ (the project builds with 21).
@@ -94,7 +106,7 @@ the review screen says so and links straight to Settings.
 | `.../audio/` | FFmpeg command building, probing, progress parsing |
 | `.../ui/` | Compose screens, navigation, and the theme system (`ui/theme/`) |
 | `docs/` | Design plan, implementation phases, standards, ADRs |
-| `design/` | HTML mockups that the UI was built from |
+| `design/` | HTML mockups plus the on-device screenshots the UI was verified against |
 
 ## Documentation
 
