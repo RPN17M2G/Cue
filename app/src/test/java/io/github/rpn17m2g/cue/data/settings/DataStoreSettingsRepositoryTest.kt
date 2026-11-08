@@ -43,6 +43,17 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun `a restored two-character key is not mistaken for a real one`() {
+        val settings = mapPreferences(mutablePreferencesOf(acoustIdKey to "25"))
+
+        assertEquals(BuildConfig.ACOUSTID_API_KEY, settings.acoustIdKey)
+        assertEquals(
+            BuildConfig.ACOUSTID_API_KEY.isNotBlank(),
+            settings.fingerprintAvailable,
+        )
+    }
+
+    @Test
     fun `a missing palette falls back to mint`() {
         assertEquals(CuePalette.MINT, mapPreferences(mutablePreferencesOf()).palette)
     }

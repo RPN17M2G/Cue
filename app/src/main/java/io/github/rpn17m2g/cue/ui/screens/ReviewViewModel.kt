@@ -68,6 +68,11 @@ data class ReviewUiState(
     val ocrFailed: Boolean = false,
     val fingerprintAvailable: Boolean = false,
     val fingerprintKeyRejected: Boolean = false,
+    /** The last run actually asked AcoustID, and whether it answered. */
+    val fingerprintTried: Boolean = false,
+    val usedFingerprint: Boolean = false,
+    /** True while the last run was the manual "use fingerprint" action. */
+    val fingerprintRequested: Boolean = false,
     val artworkPickerOpen: Boolean = false,
     val artworkResults: List<ArtworkCandidate> = emptyList(),
     val artworkSearching: Boolean = false,
@@ -259,10 +264,23 @@ class ReviewViewModel(
     }
 
     fun retryIdentification() {
+        startIdentification(forceFingerprint = false)
+    }
+
+    /**
+     * The manual audio-fingerprint action. It runs before the text lookup
+     * instead of after it, so it can replace a wrong OCR guess; the text
+     * lookup still runs when the fingerprint has no answer.
+     */
+    fun fingerprintLookup() {
+        startIdentification(forceFingerprint = true)
+    }
+
+    private fun startIdentification(forceFingerprint: Boolean) {
         if (_state.value.identifying) return
         identifyJob?.cancel()
         identifyJob = viewModelScope.launch {
-            identifyNow()
+            identifyNow(forceFingerprint = forceFingerprint)
         }
     }
 
@@ -573,7 +591,7 @@ class ReviewViewModel(
         _state.update { it.copy(artworkPickerOpen = false, artworkApplying = false) }
     }
 
-    private suspend fun identifyNow() {
+    private suspend fun identifyNow(forceFingerprint: Boolean = false) {
         val input = _state.value.input ?: return
         val generation = ++identifyGeneration
         settings = container.settingsRepository.settings.first()
@@ -584,6 +602,9 @@ class ReviewViewModel(
                 fingerprintKeyRejected = false,
                 searchOffline = !settings.networkLookups,
                 fingerprintAvailable = settings.fingerprintAvailable,
+                fingerprintRequested = forceFingerprint,
+                fingerprintTried = false,
+                usedFingerprint = false,
             )
         }
         val result = try {
@@ -592,6 +613,7 @@ class ReviewViewModel(
                 embeddedTags = embeddedTags,
                 settings = settings,
                 preferHebrew = settings.language.prefersHebrew(systemLanguage()),
+                forceFingerprint = forceFingerprint,
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -695,6 +717,8 @@ class ReviewViewModel(
                 ocrAttempted = current.input?.kind == InputKind.VIDEO,
                 ocrFailed = result.ocrFailed,
                 fingerprintKeyRejected = result.outcome.fingerprintKeyRejected,
+                fingerprintTried = result.outcome.fingerprintTried,
+                usedFingerprint = result.outcome.usedFingerprint,
             )
         }
     }

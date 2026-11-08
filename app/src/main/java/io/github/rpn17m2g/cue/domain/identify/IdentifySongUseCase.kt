@@ -8,6 +8,7 @@ import io.github.rpn17m2g.cue.domain.ocr.FrameExtractor
 import io.github.rpn17m2g.cue.domain.ocr.FrameSampler
 import io.github.rpn17m2g.cue.domain.ocr.OcrCandidate
 import io.github.rpn17m2g.cue.settings.AppSettings
+import io.github.rpn17m2g.cue.settings.AcoustIdKey
 import io.github.rpn17m2g.cue.tags.TagStore
 import java.io.File
 import java.util.UUID
@@ -42,6 +43,7 @@ class IdentifySongUseCase(
         settings: AppSettings,
         preferHebrew: Boolean,
         cascade: IdentificationCascade,
+        forceFingerprint: Boolean = false,
     ): SongIdentification = withContext(ioDispatcher) {
         val embedded = embeddedTags ?: readEmbeddedTags(input)
         var candidates: List<OcrCandidate> = emptyList()
@@ -81,9 +83,10 @@ class IdentifySongUseCase(
             embeddedTags = embedded,
             networkEnabled = settings.networkLookups,
             fingerprintEnabled = settings.fingerprintEnabled,
-            acoustIdConfigured = settings.acoustIdKey.isNotBlank(),
+            acoustIdConfigured = AcoustIdKey.isPlausible(settings.acoustIdKey),
             rawOcrLines = rawLines,
             durationMs = input.durationMs,
+            forceFingerprint = forceFingerprint,
         )
         SongIdentification(outcome, ocrFailed, hebrewUsed)
     }

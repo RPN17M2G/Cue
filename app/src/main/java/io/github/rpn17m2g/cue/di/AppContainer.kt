@@ -189,11 +189,13 @@ class AppContainer(context: Context) {
         embeddedTags: TagDraft?,
         settings: AppSettings,
         preferHebrew: Boolean,
+        forceFingerprint: Boolean = false,
     ): SongIdentification = identifySongUseCase.identify(
         input = input,
         embeddedTags = embeddedTags,
         settings = settings,
         preferHebrew = preferHebrew,
         cascade = identificationCascade(input.path),
+        forceFingerprint = forceFingerprint,
     )
 }

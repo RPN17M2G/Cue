@@ -410,6 +410,99 @@ class IdentificationCascadeTest {
     }
 
     @Test
+    fun `manual fingerprint runs before the text lookup`() = runTest {
+        val calls = mutableListOf<String>()
+
+        val outcome = cascade(
+            lookup = {
+                calls += "text"
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                calls += "fingerprint"
+                FingerprintAttempt(
+                    listOf(
+                        cachedMatch.copy(
+                            score = 0.9,
+                            source = IdentificationSource.FINGERPRINT,
+                        ),
+                    ),
+                )
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertEquals(listOf("fingerprint"), calls)
+        assertTrue(outcome.usedFingerprint)
+        assertTrue(outcome.fingerprintTried)
+        assertEquals(IdentificationSource.FINGERPRINT, outcome.sources[TagField.ALBUM])
+    }
+
+    @Test
+    fun `manual fingerprint falls back to the text lookup when it has no match`() = runTest {
+        val calls = mutableListOf<String>()
+
+        val outcome = cascade(
+            lookup = {
+                calls += "text"
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                calls += "fingerprint"
+                FingerprintAttempt(emptyList())
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertEquals(listOf("fingerprint", "text"), calls)
+        assertFalse(outcome.usedFingerprint)
+        assertTrue(outcome.fingerprintTried)
+        assertEquals("Random Access Memories", outcome.tag.album)
+    }
+
+    @Test
+    fun `manual fingerprint is not scored against a wrong OCR title`() = runTest {
+        val outcome = cascade(
+            lookup = { emptyList() },
+            fingerprintLookup = {
+                FingerprintAttempt(
+                    listOf(
+                        cachedMatch.copy(
+                            score = 0.9,
+                            source = IdentificationSource.FINGERPRINT,
+                        ),
+                    ),
+                )
+            },
+        ).identify(
+            ocrCandidates = listOf(
+                OcrCandidate(title = "Totally Wrong", artist = "Nobody", score = 1.0),
+            ),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertTrue(outcome.usedFingerprint)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Random Access Memories", outcome.tag.album)
+    }
+
+    @Test
     fun `fingerprint failure returns the manual fallback`() = runTest {
         val outcome = cascade(
             fingerprintLookup = { throw IllegalStateException("fingerprint service down") },

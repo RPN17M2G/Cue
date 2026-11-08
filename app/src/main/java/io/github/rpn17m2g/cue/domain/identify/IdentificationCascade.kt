@@ -40,6 +40,7 @@ data class IdentificationOutcome(
     val usedFingerprint: Boolean,
     val usedEmbeddedTags: Boolean,
     val fingerprintKeyRejected: Boolean = false,
+    val fingerprintTried: Boolean = false,
     val bestMatch: MetadataMatch? = null,
 )
 
@@ -64,6 +65,13 @@ class IdentificationCascade(
         acoustIdConfigured: Boolean,
         rawOcrLines: List<String> = emptyList(),
         durationMs: Long? = null,
+        /**
+         * Manual "use fingerprint" asks the audio stage to run even when the
+         * text lookup would normally answer first. The text lookup still runs
+         * as a fallback, so a forced fingerprint that finds nothing cannot
+         * leave the user worse off than before.
+         */
+        forceFingerprint: Boolean = false,
     ): IdentificationOutcome {
         if (embeddedTags != null && embeddedTags.hasCoreTags) {
             return IdentificationOutcome(
@@ -77,8 +85,44 @@ class IdentificationCascade(
         }
 
         val seed = seed(embeddedTags, ocrCandidates.maxByOrNull { it.score })
+        var keyRejected = false
+        var fingerprintTried = false
 
-        if (networkEnabled && seed.tag.title.isNotBlank()) {
+        suspend fun tryFingerprint(): IdentificationOutcome? {
+            if (!networkEnabled || !fingerprintEnabled || !acoustIdConfigured) return null
+            val fingerprintSeed = FingerprintSeed(
+                title = seed.tag.title,
+                artist = seed.tag.artist.takeIf { it.isNotBlank() },
+                durationMs = durationMs,
+            )
+            val attempt = fingerprintSafely { fingerprintLookup(fingerprintSeed) }
+            fingerprintTried = true
+            keyRejected = attempt.keyRejected
+            val ranked = MetadataMatcher.rank(
+                // A manual run trusts the fingerprint over the text seed: OCR
+                // may have produced a wrong title, which would score the real
+                // fingerprint match down to nothing. With a blank query the
+                // provider's own score decides.
+                query = if (forceFingerprint) TagDraft() else seed.tag,
+                matches = attempt.matches,
+            ).accepted()
+            return if (ranked.isEmpty()) {
+                null
+            } else {
+                outcome(
+                    seed = seed,
+                    ranked = ranked,
+                    rawOcrLines = rawOcrLines,
+                    usedFingerprint = true,
+                    fingerprintTried = true,
+                    fingerprintKeyRejected = keyRejected,
+                    trustMatch = forceFingerprint,
+                )
+            }
+        }
+
+        suspend fun tryText(): IdentificationOutcome? {
+            if (!networkEnabled || seed.tag.title.isBlank()) return null
             val lookupSeed = LookupSeed(
                 title = seed.tag.title,
                 artist = seed.tag.artist.takeIf { it.isNotBlank() },
@@ -87,34 +131,26 @@ class IdentificationCascade(
             )
             val matches = lookupSafely { lookup(lookupSeed) }
             val ranked = MetadataMatcher.rank(seed.tag, matches).accepted()
-            if (ranked.isNotEmpty()) {
-                return outcome(seed, ranked, rawOcrLines, usedFingerprint = false)
-            }
-        }
-
-        if (networkEnabled && fingerprintEnabled && acoustIdConfigured) {
-            val fingerprintSeed = FingerprintSeed(
-                title = seed.tag.title,
-                artist = seed.tag.artist.takeIf { it.isNotBlank() },
-                durationMs = durationMs,
-            )
-            val attempt = fingerprintSafely { fingerprintLookup(fingerprintSeed) }
-            val ranked = MetadataMatcher.rank(seed.tag, attempt.matches).accepted()
-            if (ranked.isNotEmpty()) {
-                return outcome(seed, ranked, rawOcrLines, usedFingerprint = true)
-            }
-            if (attempt.keyRejected) {
-                return IdentificationOutcome(
-                    tag = seed.tag,
-                    sources = seed.sources,
-                    alternatives = emptyList(),
+            return if (ranked.isEmpty()) {
+                null
+            } else {
+                outcome(
+                    seed = seed,
+                    ranked = ranked,
                     rawOcrLines = rawOcrLines,
                     usedFingerprint = false,
-                    usedEmbeddedTags = seed.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
-                    fingerprintKeyRejected = true,
+                    fingerprintTried = fingerprintTried,
+                    fingerprintKeyRejected = keyRejected,
                 )
             }
         }
+
+        val result = if (forceFingerprint) {
+            tryFingerprint() ?: tryText()
+        } else {
+            tryText() ?: tryFingerprint()
+        }
+        if (result != null) return result
 
         return IdentificationOutcome(
             tag = seed.tag,
@@ -123,6 +159,8 @@ class IdentificationCascade(
             rawOcrLines = rawOcrLines,
             usedFingerprint = false,
             usedEmbeddedTags = seed.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
+            fingerprintKeyRejected = keyRejected,
+            fingerprintTried = fingerprintTried,
         )
     }
 
@@ -160,11 +198,27 @@ class IdentificationCascade(
         ranked: List<MetadataMatch>,
         rawOcrLines: List<String>,
         usedFingerprint: Boolean,
-    ): IdentificationOutcome {        val merged = MetadataMerger.merge(
-            base = seed.tag,
+        fingerprintTried: Boolean = false,
+        fingerprintKeyRejected: Boolean = false,
+        /**
+         * A manual fingerprint run trusts the provider over the text seed, so
+         * OCR-read fields are cleared before merging. Otherwise the merge
+         * keeps the (possibly wrong) on-screen title and the fingerprint only
+         * fills the blanks.
+         */
+        trustMatch: Boolean = false,
+    ): IdentificationOutcome {
+        val baseTag = if (trustMatch) seed.tag.withoutOcrFields(seed.sources) else seed.tag
+        val baseSources = if (trustMatch) {
+            seed.sources.filterValues { it != IdentificationSource.OCR_LATIN && it != IdentificationSource.OCR_HEBREW }
+        } else {
+            seed.sources
+        }
+        val merged = MetadataMerger.merge(
+            base = baseTag,
             matches = ranked,
             baseSource = seed.defaultSource,
-            baseFieldSources = seed.sources,
+            baseFieldSources = baseSources,
         )
         return IdentificationOutcome(
             tag = merged.tag,
@@ -173,7 +227,24 @@ class IdentificationCascade(
             rawOcrLines = rawOcrLines,
             usedFingerprint = usedFingerprint,
             usedEmbeddedTags = merged.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
+            fingerprintKeyRejected = fingerprintKeyRejected,
+            fingerprintTried = fingerprintTried,
             bestMatch = ranked.firstOrNull(),
+        )
+    }
+
+    private fun TagDraft.withoutOcrFields(
+        sources: Map<TagField, IdentificationSource>,
+    ): TagDraft {
+        fun ocr(field: TagField): Boolean {
+            val source = sources[field] ?: return false
+            return source == IdentificationSource.OCR_LATIN || source == IdentificationSource.OCR_HEBREW
+        }
+        return copy(
+            title = if (ocr(TagField.TITLE)) "" else title,
+            artist = if (ocr(TagField.ARTIST)) "" else artist,
+            album = if (ocr(TagField.ALBUM)) "" else album,
+            albumArtist = if (ocr(TagField.ALBUM_ARTIST)) "" else albumArtist,
         )
     }
 
