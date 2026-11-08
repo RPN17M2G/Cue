@@ -16,7 +16,6 @@
     <string name="home_search_clear">Clear search</string>
     <string name="home_day_today">Today</string>
     <string name="home_day_yesterday">Yesterday</string>
-    <string name="home_day_earlier">Earlier</string>
     <string name="home_chip_recording">Not converted</string>
     <string name="home_chip_cue">Made with Cue</string>
     <string name="home_chip_music">On this device</string>
@@ -88,6 +87,24 @@
     <string name="review_ocr_hide">Hide text</string>
     <string name="review_ocr_failed">Text recognition failed on this device.</string>
     <string name="review_ocr_empty">No readable text was found.</string>
+    <string name="review_section_identification">Identification</string>
+    <string name="review_section_after">After saving</string>
+    <string name="review_section_ocr">Recognised text</string>
+    <string name="review_add_cover">Add cover</string>
+    <string name="review_rerun_ocr">Re-run text scan</string>
+    <string name="review_use_fingerprint">Use fingerprint</string>
+    <string name="review_fingerprint_running">Listening to the clip and asking AcoustID.</string>
+    <string name="review_fingerprint_running_action">Fingerprinting…</string>
+    <string name="review_fingerprint_matched">Matched by audio fingerprint, so the text on screen was not needed.</string>
+    <string name="review_fingerprint_no_match">The fingerprint was checked and no song was found.</string>
+    <string name="review_fingerprint_short">Fingerprint %1$d%%</string>
+    <string name="review_identified_how">Identified from %1$s.</string>
+    <string name="review_identifying_short">Reading text and looking up the song.</string>
+    <string name="review_status_working">Working</string>
+    <string name="review_status_matched">Matched</string>
+    <string name="review_status_no_match">No match</string>
+    <string name="review_badge_fingerprint">Fingerprint</string>
+    <string name="review_ocr_lines">%1$d lines read</string>
 
     <string name="review_song_details">Song details</string>
     <string name="review_untitled">Untitled</string>
@@ -112,6 +129,7 @@
     <string name="review_look_up_again">Look up again</string>
     <string name="review_open_settings">Open settings</string>
     <string name="review_clip_quality">Clip &amp; quality</string>
+    <string name="review_clip_length_quality">Length &amp; quality</string>
     <string name="review_clip_summary">%1$s–%2$s · %3$s · %4$s</string>
     <string name="review_clip_summary_short">%1$s–%2$s · %3$s</string>
     <string name="review_trim_invalid">Use m:ss, for example 1:05</string>
@@ -214,7 +232,7 @@
 
     <string name="settings_appearance">Appearance</string>
     <string name="settings_palette">Palette</string>
-    <string name="settings_palette_hint">Applies to every screen. Tap to preview instantly.</string>
+    <string name="settings_palette_hint">Applies to every screen and to the launcher icon. Tap to preview instantly.</string>
     <string name="settings_mode">Mode</string>
     <string name="palette_mint">Mint</string>
     <string name="palette_lagoon">Lagoon</string>

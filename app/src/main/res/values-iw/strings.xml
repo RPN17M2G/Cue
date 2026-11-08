@@ -16,7 +16,6 @@
     <string name="home_search_clear">ניקוי החיפוש</string>
     <string name="home_day_today">היום</string>
     <string name="home_day_yesterday">אתמול</string>
-    <string name="home_day_earlier">קודם</string>
     <string name="home_chip_recording">טרם הומר</string>
     <string name="home_chip_cue">נוצר ב־Cue</string>
     <string name="home_chip_music">במכשיר</string>
@@ -88,6 +87,24 @@
     <string name="review_ocr_hide">הסתרת טקסט</string>
     <string name="review_ocr_failed">זיהוי הטקסט נכשל במכשיר הזה.</string>
     <string name="review_ocr_empty">לא נמצא טקסט קריא.</string>
+    <string name="review_section_identification">זיהוי</string>
+    <string name="review_section_after">אחרי השמירה</string>
+    <string name="review_section_ocr">טקסט שזוהה</string>
+    <string name="review_add_cover">הוספת עטיפה</string>
+    <string name="review_rerun_ocr">סריקת טקסט מחדש</string>
+    <string name="review_use_fingerprint">זיהוי לפי טביעת אצבע</string>
+    <string name="review_fingerprint_running">מאזין לקטע ושואל את AcoustID.</string>
+    <string name="review_fingerprint_running_action">מזהה לפי טביעת אצבע…</string>
+    <string name="review_fingerprint_matched">זוהה לפי טביעת אצבע של השמע, כך שהטקסט שעל המסך לא היה נחוץ.</string>
+    <string name="review_fingerprint_no_match">טביעת האצבע נבדקה ולא נמצא שיר.</string>
+    <string name="review_fingerprint_short">טביעת אצבע %1$d%%</string>
+    <string name="review_identified_how">זוהה לפי %1$s.</string>
+    <string name="review_identifying_short">קורא את הטקסט ומחפש את השיר.</string>
+    <string name="review_status_working">בעבודה</string>
+    <string name="review_status_matched">זוהה</string>
+    <string name="review_status_no_match">לא זוהה</string>
+    <string name="review_badge_fingerprint">טביעת אצבע</string>
+    <string name="review_ocr_lines">%1$d שורות נקראו</string>
 
     <string name="review_song_details">פרטי השיר</string>
     <string name="review_untitled">ללא שם</string>
@@ -112,6 +129,7 @@
     <string name="review_look_up_again">חיפוש מחדש</string>
     <string name="review_open_settings">פתיחת ההגדרות</string>
     <string name="review_clip_quality">קטע ואיכות</string>
+    <string name="review_clip_length_quality">אורך ואיכות</string>
     <string name="review_clip_summary">%1$s–%2$s · %3$s · %4$s</string>
     <string name="review_clip_summary_short">%1$s–%2$s · %3$s</string>
     <string name="review_trim_invalid">יש להזין דקות:שניות, למשל 1:05</string>
@@ -214,7 +232,7 @@
 
     <string name="settings_appearance">מראה</string>
     <string name="settings_palette">ערכת צבעים</string>
-    <string name="settings_palette_hint">חלה על כל המסכים. הקשה מציגה תצוגה מקדימה מיידית.</string>
+    <string name="settings_palette_hint">חלה על כל המסכים ועל סמל האפליקציה. הקשה מציגה תצוגה מקדימה מיידית.</string>
     <string name="settings_mode">מצב</string>
     <string name="palette_mint">מנטה</string>
     <string name="palette_lagoon">לגונה</string>
