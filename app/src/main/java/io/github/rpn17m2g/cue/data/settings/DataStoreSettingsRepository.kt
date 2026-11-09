@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.github.rpn17m2g.cue.BuildConfig
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
+import io.github.rpn17m2g.cue.settings.AcoustIdKey
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.AppTheme
@@ -75,9 +76,10 @@ internal fun mapPreferences(preferences: Preferences): AppSettings = AppSettings
     // build-time default still applies: "absent" and "" have to behave the
     // same way, otherwise an early build that stored the default writes ""
     // and disables fingerprint lookup for good.
-    acoustIdKey = preferences[Keys.ACOUSTID_KEY]
-        ?.takeIf { it.isNotBlank() }
-        ?: BuildConfig.ACOUSTID_API_KEY,
+    acoustIdKey = AcoustIdKey.orBuildDefault(
+        stored = preferences[Keys.ACOUSTID_KEY],
+        buildDefault = BuildConfig.ACOUSTID_API_KEY,
+    ),
     language = preferences[Keys.LANGUAGE]
         ?.let { name -> AppLanguage.entries.firstOrNull { it.name == name } }
         ?: AppLanguage.SYSTEM,

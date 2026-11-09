@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -47,18 +49,36 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TextSnippet
+import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -76,6 +96,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -101,6 +122,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -108,9 +130,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -118,6 +143,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -142,6 +168,7 @@ import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.estimateMp3Bytes
 import io.github.rpn17m2g.cue.ui.cueViewModel
 import io.github.rpn17m2g.cue.ui.navigation.appContainer
+import io.github.rpn17m2g.cue.ui.theme.CueMark
 import io.github.rpn17m2g.cue.ui.theme.LocalCueTokens
 import java.io.File
 import kotlin.math.roundToInt
@@ -211,7 +238,7 @@ fun ReviewScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.review_song_details)) },
+                title = { Text(stringResource(R.string.review_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -227,7 +254,10 @@ fun ReviewScreen(
             )
         },
         bottomBar = {
-            if (!state.loading && state.input != null) {
+            // While a field is being edited the keyboard owns the bottom of the
+            // screen: hiding the sticky Create bar gives Save/Cancel the room
+            // they need and stops the bar from covering the open editor.
+            if (!state.loading && state.input != null && editingField == null) {
                 CreateBar(
                     state = state,
                     onSave = {
@@ -287,6 +317,7 @@ fun ReviewScreen(
                 onSaveField = { commitField() },
                 onCancelField = ::cancelField,
                 onRetry = viewModel::retryIdentification,
+                onFingerprint = viewModel::fingerprintLookup,
                 onOpenSettings = onOpenSettings,
                 onSearch = viewModel::search,
                 onApplyMatch = viewModel::applyMatch,
@@ -296,6 +327,7 @@ fun ReviewScreen(
                 onChooseArtwork = viewModel::chooseArtwork,
                 onGalleryArtwork = viewModel::chooseGalleryArtwork,
                 onRemoveArtwork = viewModel::removeArtwork,
+                onUseOcrLine = viewModel::useOcrLine,
             )
         }
     }
@@ -316,6 +348,7 @@ private fun ReviewContent(
     onSaveField: () -> Unit,
     onCancelField: () -> Unit,
     onRetry: () -> Unit,
+    onFingerprint: () -> Unit,
     onOpenSettings: () -> Unit,
     onSearch: (String) -> Unit,
     onApplyMatch: (MetadataMatch) -> Unit,
@@ -325,6 +358,7 @@ private fun ReviewContent(
     onChooseArtwork: (ArtworkCandidate) -> Unit,
     onGalleryArtwork: (Uri) -> Unit,
     onRemoveArtwork: () -> Unit,
+    onUseOcrLine: (TagField, String) -> Unit,
 ) {
     val input = state.input ?: return
     val galleryPicker = rememberLauncherForActivityResult(
@@ -342,23 +376,38 @@ private fun ReviewContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
-            .padding(top = 4.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(top = 0.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         CoverHero(
             artwork = state.draft.artwork,
             title = state.draft.title.ifBlank { stringResource(R.string.review_untitled) },
             artist = state.draft.artist,
+            durationMs = state.effectiveDurationMs,
+            source = state.matched?.source ?: state.sources[TagField.TITLE],
+            score = state.matched?.score,
+            usedFingerprint = state.usedFingerprint,
             onChangeCover = onOpenArtworkPicker,
         )
 
         CheckBanner(
             flaggedField = state.flaggedFields.firstOrNull(),
-            identifying = state.identifying,
             onFix = { state.flaggedFields.firstOrNull()?.let(onOpenField) },
         )
+
+        IdentificationCard(
+            state = state,
+            onRetry = onRetry,
+            onFingerprint = onFingerprint,
+            onOpenSettings = onOpenSettings,
+            onOpenMatches = { matchesSheet = true },
+            onOpenSearch = { searchSheet = true },
+        )
+
+        SectionHeader(stringResource(R.string.review_song_details))
 
         FieldsCard(
             state = state,
@@ -375,13 +424,7 @@ private fun ReviewContent(
             onCancel = onCancelField,
         )
 
-        MatchCard(
-            state = state,
-            onRetry = onRetry,
-            onOpenSettings = onOpenSettings,
-            onOpenMatches = { matchesSheet = true },
-            onOpenSearch = { searchSheet = true },
-        )
+        SectionHeader(stringResource(R.string.review_clip_quality))
 
         ClipQualityCard(
             state = state,
@@ -393,13 +436,16 @@ private fun ReviewContent(
         )
 
         if (input.kind == InputKind.VIDEO) {
+            SectionHeader(stringResource(R.string.review_section_after))
             DeleteSourceCard(
                 checked = state.deleteSource,
                 onCheckedChange = onDeleteSource,
             )
         }
 
-        OcrDetails(state = state)
+        if (state.hasOcrDetails) {
+            OcrDetails(state = state, onUseLine = onUseOcrLine)
+        }
 
         Spacer(Modifier.height(2.dp))
     }
@@ -431,6 +477,9 @@ private fun ReviewContent(
     if (searchSheet) {
         SearchSheet(
             state = state,
+            initialQuery = listOf(state.draft.title, state.draft.artist)
+                .filter { it.isNotBlank() }
+                .joinToString(" "),
             onDismiss = { searchSheet = false },
             onSearch = onSearch,
             onChoose = { match ->
@@ -443,19 +492,28 @@ private fun ReviewContent(
 
 // ---------------------------------------------------------------- hero
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CoverHero(
     artwork: Artwork?,
     title: String,
     artist: String,
+    durationMs: Long?,
+    source: IdentificationSource?,
+    score: Double?,
+    usedFingerprint: Boolean,
     onChangeCover: () -> Unit,
 ) {
     val tokens = LocalCueTokens.current
     val bitmap = remember(artwork) { artwork?.let { decodeArtwork(it.bytes) } }
+    val fontScale = LocalDensity.current.fontScale
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(4f / 3f)
+            // A long title at a large accessibility font must not push the
+            // metadata chips out of the hero.
+            .heightIn(min = 232.dp * fontScale.coerceIn(1f, 1.5f))
+            .aspectRatio(1.5f)
             .shadow(
                 elevation = tokens.shadowElevation * 1.5f,
                 shape = tokens.cardShape,
@@ -476,42 +534,29 @@ private fun CoverHero(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(tokens.heroBrush),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                CueMark(
+                    modifier = Modifier.size(96.dp),
+                    tint = tokens.heroInk.copy(alpha = 0.14f),
+                    contentColor = tokens.heroInk.copy(alpha = 0.30f),
+                )
+            }
         }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
+                    // Bottom-heavy and monotonic: the title sits low, so the
+                    // scrim must never thin out under it.
                     Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.scrim.copy(alpha = 0f),
-                        0.45f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f),
-                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.82f),
+                        0f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.04f),
+                        0.38f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f),
+                        0.70f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.60f),
+                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.90f),
                     ),
                 ),
         )
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 18.dp, end = 18.dp, bottom = 16.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = tokens.heroInk,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (artist.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = artist,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = tokens.heroInk.copy(alpha = 0.86f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
         Surface(
             onClick = onChangeCover,
             shape = CircleShape,
@@ -527,15 +572,109 @@ private fun CoverHero(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Default.Edit,
+                    imageVector = if (artwork == null) {
+                        Icons.Default.AddPhotoAlternate
+                    } else {
+                        Icons.Default.Edit
+                    },
                     contentDescription = null,
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(14.dp),
                 )
                 Text(
-                    text = stringResource(R.string.review_change_cover),
+                    text = stringResource(
+                        if (artwork == null) {
+                            R.string.review_add_cover
+                        } else {
+                            R.string.review_change_cover
+                        },
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
+        }
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge,
+                color = tokens.heroInk,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (artist.isNotBlank()) {
+                Text(
+                    text = artist,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = tokens.heroInk.copy(alpha = 0.88f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                durationMs?.takeIf { it > 0 }?.let { duration ->
+                    HeroChip(text = TrimClock.format(duration))
+                }
+                source?.let { HeroChip(text = stringResource(it.labelRes())) }
+                score?.let { HeroScoreChip(score = it, usedFingerprint = usedFingerprint) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroChip(text: String) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.38f),
+        contentColor = LocalCueTokens.current.heroInk,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun HeroScoreChip(score: Double, usedFingerprint: Boolean) {
+    val tokens = LocalCueTokens.current
+    val accent = when (Confidence.tier(score)) {
+        ConfidenceTier.ACCEPTED -> tokens.success
+        ConfidenceTier.CHECK -> tokens.caution
+        ConfidenceTier.IGNORED -> tokens.heroInk.copy(alpha = 0.7f)
+    }
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.38f),
+        contentColor = tokens.heroInk,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(accent),
+            )
+            Text(
+                text = if (usedFingerprint) {
+                    stringResource(R.string.review_fingerprint_short, (score * 100).roundToInt())
+                } else {
+                    stringResource(R.string.review_score_percent, (score * 100).roundToInt())
+                },
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }
@@ -545,57 +684,103 @@ private fun CoverHero(
 @Composable
 private fun CheckBanner(
     flaggedField: TagField?,
-    identifying: Boolean,
     onFix: () -> Unit,
 ) {
     val tokens = LocalCueTokens.current
-    when {
-        identifying -> Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    if (flaggedField == null) return
+    Surface(
+        shape = tokens.cardShape,
+        color = tokens.caution.copy(alpha = 0.13f),
+        border = BorderStroke(1.dp, tokens.caution.copy(alpha = 0.35f)),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp),
-            ) {
+            Icon(
+                imageVector = Icons.Default.ErrorOutline,
+                contentDescription = null,
+                tint = tokens.caution,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = stringResource(
+                    R.string.review_check_banner,
+                    stringResource(flaggedField.labelRes()),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onFix) {
                 Text(
-                    text = stringResource(R.string.review_identifying),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.review_fix_it),
+                    color = tokens.caution,
                 )
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
-        flaggedField != null -> Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = tokens.caution.copy(alpha = 0.14f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(
-                        R.string.review_check_banner,
-                        stringResource(flaggedField.labelRes()),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onFix) {
-                    Text(
-                        text = stringResource(R.string.review_fix_it),
-                        color = tokens.caution,
-                    )
-                }
-            }
-        }
+    }
+}
+
+/** The same accent-dot divider the home timeline uses, so the screens rhyme. */
+@Composable
+private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = if (rtl) 0.em else 0.14.em,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(12.dp))
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+        )
+    }
+}
+
+/** One card treatment for the whole screen, so every section has equal weight. */
+@Composable
+private fun ReviewCard(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val tokens = LocalCueTokens.current
+    Surface(
+        shape = tokens.cardShape,
+        color = color,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = tokens.shadowElevation / 2,
+                shape = tokens.cardShape,
+                ambientColor = tokens.glow.copy(alpha = 0.16f),
+                spotColor = tokens.glow.copy(alpha = 0.20f),
+            ),
+    ) {
+        Column(content = content)
     }
 }
 
@@ -614,23 +799,7 @@ private fun FieldsCard(
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val tokens = LocalCueTokens.current
-    Surface(
-        shape = tokens.cardShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = tokens.shadowElevation / 2,
-                shape = tokens.cardShape,
-                ambientColor = tokens.glow.copy(alpha = 0.16f),
-                spotColor = tokens.glow.copy(alpha = 0.20f),
-            ),
-    ) {
+    ReviewCard {
         Column {
             PRIMARY_FIELDS.forEachIndexed { index, field ->
                 FieldRow(
@@ -696,6 +865,36 @@ private fun FieldsCard(
 }
 
 @Composable
+private fun FieldIcon(field: TagField) {
+    val tokens = LocalCueTokens.current
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(tokens.thumbnailShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = field.icon(),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(17.dp),
+        )
+    }
+}
+
+private fun TagField.icon(): ImageVector = when (this) {
+    TagField.TITLE -> Icons.Default.Title
+    TagField.ARTIST -> Icons.Default.Person
+    TagField.ALBUM -> Icons.Default.Album
+    TagField.ALBUM_ARTIST -> Icons.Default.Group
+    TagField.YEAR -> Icons.Default.CalendarMonth
+    TagField.GENRE -> Icons.Default.Category
+    TagField.TRACK_NUMBER -> Icons.Default.Numbers
+    TagField.ARTWORK -> Icons.Default.ImageIcon
+}
+
+@Composable
 private fun FieldRow(
     field: TagField,
     state: ReviewUiState,
@@ -715,9 +914,13 @@ private fun FieldRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = !editing, onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FieldIcon(field)
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -745,13 +948,13 @@ private fun FieldRow(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     text = value.ifBlank { stringResource(R.string.review_add_value) },
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = if (value.isBlank()) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (source != null && value.isNotBlank()) {
@@ -814,6 +1017,12 @@ private fun FieldEditor(
         delay(EDITOR_BRING_INTO_VIEW_MILLIS)
         bringIntoView.bringIntoView()
     }
+    // A long title grows the field while the user types. Re-run the request
+    // after the growth settles so the actions cannot slip under the keyboard.
+    LaunchedEffect(text) {
+        delay(EDITOR_TEXT_BRING_INTO_VIEW_MILLIS)
+        bringIntoView.bringIntoView()
+    }
     LaunchedEffect(error) {
         if (error) {
             // The validation line grows the editor; keep it visible too.
@@ -843,36 +1052,40 @@ private fun FieldEditor(
             },
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { candidate ->
+                val sanitized = candidate.text.sanitizedFor(field)
+                value = candidate.copy(text = sanitized)
+                onTextChange(sanitized)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+            // Long titles and artist names must wrap instead of scrolling
+            // sideways inside a box squeezed by the Save/Cancel buttons. The
+            // actions moved below the field so the full width is editable.
+            singleLine = field == TagField.YEAR || field == TagField.TRACK_NUMBER,
+            minLines = 1,
+            maxLines = 4,
+            isError = error,
+            shape = LocalCueTokens.current.fieldShape,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = field.keyboardType(),
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboard?.hide()
+                    onSave()
+                },
+            ),
+            colors = cueOutlinedFieldColors(),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.End,
         ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { candidate ->
-                    val sanitized = candidate.text.sanitizedFor(field)
-                    value = candidate.copy(text = sanitized)
-                    onTextChange(sanitized)
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                singleLine = true,
-                isError = error,
-                shape = LocalCueTokens.current.fieldShape,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = field.keyboardType(),
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        keyboard?.hide()
-                        onSave()
-                    },
-                ),
-                colors = cueOutlinedFieldColors(),
-            )
             TextButton(onClick = onCancel) {
                 Text(stringResource(R.string.review_field_cancel))
             }
@@ -900,66 +1113,106 @@ private fun FieldDivider() {
 
 // ---------------------------------------------------------------- match card
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MatchCard(
+private fun IdentificationCard(
     state: ReviewUiState,
     onRetry: () -> Unit,
+    onFingerprint: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenMatches: () -> Unit,
     onOpenSearch: () -> Unit,
 ) {
     val tokens = LocalCueTokens.current
     val match = state.matched
-    Surface(
-        shape = tokens.cardShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = tokens.shadowElevation / 2,
-                shape = tokens.cardShape,
-                ambientColor = tokens.glow.copy(alpha = 0.16f),
-                spotColor = tokens.glow.copy(alpha = 0.20f),
-            ),
-    ) {
-        Column(
+    val tier = match?.let { Confidence.tier(it.score) }
+    val accent = when (tier) {
+        ConfidenceTier.ACCEPTED -> tokens.success
+        ConfidenceTier.CHECK -> tokens.caution
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val isVideo = state.input?.kind == InputKind.VIDEO
+    val fingerprintRunning = state.identifying && state.fingerprintRequested
+
+    ReviewCard {
+        Row(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.review_section_online),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(22.dp),
                 )
-                IconButton(onClick = onRetry, enabled = !state.identifying) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = stringResource(R.string.review_look_up_again),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
             }
-            if (match != null) {
-                ConfidencePill(
-                    text = stringResource(
-                        R.string.review_match_line,
-                        (match.score * 100).roundToInt(),
-                        stringResource(match.source.labelRes()),
-                    ),
-                    score = match.score,
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.review_section_identification),
+                    style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = match.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    text = when {
+                        fingerprintRunning -> stringResource(R.string.review_fingerprint_running)
+                        state.identifying -> stringResource(R.string.review_identifying_short)
+                        match != null -> stringResource(
+                            R.string.review_identified_how,
+                            stringResource(match.source.labelRes()),
+                        )
+                        else -> stringResource(R.string.review_no_match_body)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            StatusPill(tier = tier, identifying = state.identifying)
+        }
+        if (state.identifying) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 14.dp),
+                color = accent,
+            )
+        }
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        )
+        if (match != null) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = match.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.usedFingerprint) {
+                        MiniBadge(
+                            text = stringResource(R.string.review_badge_fingerprint),
+                            color = tokens.success,
+                        )
+                    }
+                }
                 val subtitle = listOfNotNull(
                     match.artist.takeIf { it.isNotBlank() },
                     match.album?.takeIf { it.isNotBlank() },
@@ -968,13 +1221,27 @@ private fun MatchCard(
                 if (subtitle.isNotEmpty()) {
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-            } else {
+                Spacer(Modifier.height(2.dp))
+                ConfidencePill(
+                    text = stringResource(
+                        R.string.review_match_line,
+                        (match.score * 100).roundToInt(),
+                        stringResource(match.source.labelRes()),
+                    ),
+                    score = match.score,
+                )
+            }
+        } else if (!state.identifying) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = stringResource(R.string.review_no_match),
                     style = MaterialTheme.typography.titleMedium,
@@ -985,63 +1252,212 @@ private fun MatchCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (state.alternatives.isNotEmpty()) {
-                    TextButton(
-                        onClick = onOpenMatches,
-                        contentPadding = PaddingValues(horizontal = 4.dp),
-                    ) {
-                        Text(
-                            text = stringResource(
-                                R.string.review_other_matches_count,
-                                state.alternatives.size,
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                }
-                TextButton(
-                    onClick = onOpenSearch,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.review_search_manually),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-            }
-            if (state.searchOffline) {
-                MatchNote(
-                    text = stringResource(R.string.review_search_offline),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (state.fingerprintKeyRejected) {
-                MatchNote(
-                    text = stringResource(R.string.review_fingerprint_key_rejected),
-                    color = MaterialTheme.colorScheme.error,
-                )
-                TextButton(
-                    onClick = onOpenSettings,
-                    contentPadding = PaddingValues(horizontal = 4.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.review_open_settings),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-            }
-            if (
-                state.input?.kind == InputKind.VIDEO &&
-                !state.fingerprintAvailable &&
-                !state.identifying &&
-                state.rawOcrLines.isEmpty()
+        }
+
+        if (state.usedFingerprint) {
+            MatchNote(
+                text = stringResource(R.string.review_fingerprint_matched),
+                color = tokens.success,
+            )
+        }
+        if (state.searchOffline) {
+            MatchNote(
+                text = stringResource(R.string.review_search_offline),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (state.fingerprintKeyRejected) {
+            MatchNote(
+                text = stringResource(R.string.review_fingerprint_key_rejected),
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(
+                onClick = onOpenSettings,
+                contentPadding = PaddingValues(horizontal = 4.dp),
+                modifier = Modifier.padding(start = 12.dp),
             ) {
-                MatchNote(
-                    text = stringResource(R.string.review_fingerprint_unavailable),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(
+                    text = stringResource(R.string.review_open_settings),
+                    style = MaterialTheme.typography.labelLarge,
                 )
             }
+        }
+        if (
+            isVideo &&
+            !state.fingerprintAvailable &&
+            !state.identifying &&
+            state.rawOcrLines.isEmpty()
+        ) {
+            MatchNote(
+                text = stringResource(R.string.review_fingerprint_unavailable),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (
+            state.fingerprintRequested &&
+            state.fingerprintTried &&
+            !state.usedFingerprint &&
+            !state.fingerprintKeyRejected
+        ) {
+            MatchNote(
+                text = stringResource(R.string.review_fingerprint_no_match),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        FlowRow(
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (isVideo) {
+                ActionChip(
+                    label = stringResource(R.string.review_rerun_ocr),
+                    icon = Icons.Default.Refresh,
+                    enabled = !state.identifying,
+                    onClick = onRetry,
+                )
+                if (state.fingerprintAvailable) {
+                    ActionChip(
+                        label = stringResource(
+                            if (fingerprintRunning) {
+                                R.string.review_fingerprint_running_action
+                            } else {
+                                R.string.review_use_fingerprint
+                            },
+                        ),
+                        icon = Icons.Default.GraphicEq,
+                        enabled = !state.identifying,
+                        prominent = true,
+                        onClick = onFingerprint,
+                    )
+                }
+            } else {
+                ActionChip(
+                    label = stringResource(R.string.review_look_up_again),
+                    icon = Icons.Default.Refresh,
+                    enabled = !state.identifying,
+                    onClick = onRetry,
+                )
+            }
+            if (state.alternatives.isNotEmpty()) {
+                ActionChip(
+                    label = stringResource(
+                        R.string.review_other_matches_count,
+                        state.alternatives.size,
+                    ),
+                    icon = Icons.Default.FormatListBulleted,
+                    onClick = onOpenMatches,
+                )
+            }
+            ActionChip(
+                label = stringResource(R.string.review_search_manually),
+                icon = Icons.Default.Search,
+                onClick = onOpenSearch,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusPill(tier: ConfidenceTier?, identifying: Boolean) {
+    val tokens = LocalCueTokens.current
+    val text: String
+    val color: Color
+    when {
+        identifying -> {
+            text = stringResource(R.string.review_status_working)
+            color = MaterialTheme.colorScheme.primary
+        }
+        tier == ConfidenceTier.ACCEPTED -> {
+            text = stringResource(R.string.review_status_matched)
+            color = tokens.success
+        }
+        tier == ConfidenceTier.CHECK -> {
+            text = stringResource(R.string.review_check_chip)
+            color = tokens.caution
+        }
+        else -> {
+            text = stringResource(R.string.review_status_no_match)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    }
+    Surface(
+        shape = CircleShape,
+        color = color.copy(alpha = 0.14f),
+        contentColor = color,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun MiniBadge(text: String, color: Color) {
+    Surface(
+        shape = CircleShape,
+        color = color.copy(alpha = 0.14f),
+        contentColor = color,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun ActionChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    prominent: Boolean = false,
+) {
+    val tokens = LocalCueTokens.current
+    val container = when {
+        !enabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        prominent -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val content = when {
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        prominent -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = tokens.buttonShape,
+        color = container,
+        contentColor = content,
+        border = BorderStroke(
+            1.dp,
+            if (prominent) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            },
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
     }
 }
@@ -1052,6 +1468,7 @@ private fun MatchNote(text: String, color: Color) {
         text = text,
         style = MaterialTheme.typography.bodySmall,
         color = color,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
     )
 }
 
@@ -1090,118 +1507,134 @@ private fun ClipQualityCard(
 ) {
     val tokens = LocalCueTokens.current
     val quality = stringResource(state.quality.shortLabelRes())
-    val summary = when {
-        state.hasTrim && state.tagOnlyEdit -> stringResource(
-            R.string.review_clip_summary_short,
-            TrimClock.format(state.trimStartMs),
-            TrimClock.format(state.trimEndMs),
-            TrimClock.format(state.effectiveDurationMs ?: 0L),
-        )
-        state.hasTrim -> stringResource(
-            R.string.review_clip_summary,
-            TrimClock.format(state.trimStartMs),
-            TrimClock.format(state.trimEndMs),
-            TrimClock.format(state.effectiveDurationMs ?: 0L),
-            quality,
-        )
-        else -> quality
-    }
-    Surface(
-        shape = tokens.cardShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = tokens.shadowElevation / 2,
-                shape = tokens.cardShape,
-                ambientColor = tokens.glow.copy(alpha = 0.16f),
-                spotColor = tokens.glow.copy(alpha = 0.20f),
-            ),
-    ) {
-        Column {
-            Row(
+    ReviewCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onToggle)
-                    .padding(horizontal = 16.dp, vertical = 13.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.review_clip_quality),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 Icon(
-                    imageVector = if (expanded) {
-                        Icons.Default.ExpandLess
+                    imageVector = if (input.kind == InputKind.VIDEO) {
+                        Icons.Default.Movie
                     } else {
-                        Icons.Default.ExpandMore
+                        Icons.Default.MusicNote
                     },
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(21.dp),
                 )
             }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn(tween(FIELD_ANIM_MILLIS)) + expandVertically(tween(FIELD_ANIM_MILLIS)),
-                exit = fadeOut(tween(FIELD_ANIM_MILLIS)) + shrinkVertically(tween(FIELD_ANIM_MILLIS)),
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+                Text(
+                    text = stringResource(R.string.review_clip_length_quality),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (state.hasTrim) {
+                        SummaryChip(
+                            text = stringResource(
+                                R.string.review_clip_summary_short,
+                                TrimClock.format(state.trimStartMs),
+                                TrimClock.format(state.trimEndMs),
+                                TrimClock.format(state.effectiveDurationMs ?: 0L),
+                            ),
+                        )
+                    } else {
+                        SummaryChip(
+                            text = TrimClock.format(state.effectiveDurationMs ?: 0L),
+                        )
+                    }
+                    SummaryChip(text = quality)
+                }
+            }
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Default.ExpandLess
+                } else {
+                    Icons.Default.ExpandMore
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(tween(FIELD_ANIM_MILLIS)) + expandVertically(tween(FIELD_ANIM_MILLIS)),
+            exit = fadeOut(tween(FIELD_ANIM_MILLIS)) + shrinkVertically(tween(FIELD_ANIM_MILLIS)),
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                )
+                Text(
+                    text = stringResource(R.string.review_preview),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                MediaPreview(
+                    input = input,
+                    trimStartMs = state.trimStartMs,
+                    modifier = if (input.kind == InputKind.VIDEO) {
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                    },
+                )
+                if (state.hasTrim) {
+                    TrimControls(
+                        state = state,
+                        onTrim = onTrim,
+                    )
+                }
+                if (!state.tagOnlyEdit) {
                     Text(
-                        text = stringResource(R.string.review_preview),
+                        text = stringResource(R.string.review_quality),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    MediaPreview(
-                        input = input,
-                        trimStartMs = state.trimStartMs,
-                        modifier = if (input.kind == InputKind.VIDEO) {
-                            Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(16f / 9f)
-                        } else {
-                            Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        },
-                    )
-                    if (state.hasTrim) {
-                        TrimControls(
-                            state = state,
-                            onTrim = onTrim,
-                        )
-                    }
-                    if (!state.tagOnlyEdit) {
-                        Text(
-                            text = stringResource(R.string.review_quality),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            QualityPreset.entries.forEach { preset ->
-                                FilterChip(
-                                    selected = state.quality == preset,
-                                    onClick = { onQuality(preset) },
-                                    label = { Text(stringResource(preset.shortLabelRes())) },
-                                )
-                            }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        QualityPreset.entries.forEach { preset ->
+                            FilterChip(
+                                selected = state.quality == preset,
+                                onClick = { onQuality(preset) },
+                                label = { Text(stringResource(preset.shortLabelRes())) },
+                            )
                         }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = tokens.success,
+                            modifier = Modifier.size(15.dp),
+                        )
                         Text(
                             text = stringResource(
                                 R.string.review_estimated_size_value,
@@ -1220,6 +1653,23 @@ private fun ClipQualityCard(
                 }
             }
         }
+    }
+}
+
+/** A compact read-only pill for the clip card's summary row. */
+@Composable
+private fun SummaryChip(text: String) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -1399,28 +1849,38 @@ private fun DeleteSourceCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val tokens = LocalCueTokens.current
-    Surface(
-        shape = tokens.cardShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = tokens.shadowElevation / 2,
-                shape = tokens.cardShape,
-                ambientColor = tokens.glow.copy(alpha = 0.16f),
-                spotColor = tokens.glow.copy(alpha = 0.20f),
-            ),
+    val error = MaterialTheme.colorScheme.error
+    ReviewCard(
+        color = if (checked) {
+            error.copy(alpha = 0.06f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        borderColor = if (checked) {
+            error.copy(alpha = 0.35f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        },
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(error.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = null,
+                    tint = error,
+                    modifier = Modifier.size(21.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.review_delete_source),
@@ -1432,7 +1892,14 @@ private fun DeleteSourceCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onError,
+                    checkedTrackColor = error,
+                ),
+            )
         }
     }
 }
@@ -1440,52 +1907,208 @@ private fun DeleteSourceCard(
 // ---------------------------------------------------------------- OCR details
 
 @Composable
-private fun OcrDetails(state: ReviewUiState) {
+private fun OcrDetails(
+    state: ReviewUiState,
+    onUseLine: (TagField, String) -> Unit,
+) {
     if (!state.hasOcrDetails) return
-    var expanded by remember { mutableStateOf(false) }
-    Column {
-        TextButton(
-            onClick = { expanded = !expanded },
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    SectionHeader(stringResource(R.string.review_section_ocr))
+    ReviewCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = stringResource(
-                    if (expanded) R.string.review_ocr_hide else R.string.review_ocr_details,
-                ),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (expanded) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth(),
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    if (state.rawOcrLines.isNotEmpty()) {
-                        state.rawOcrLines.forEach { line ->
-                            Text(text = line, style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else if (state.ocrFailed) {
-                        Text(
-                            text = stringResource(R.string.review_ocr_failed),
-                            style = MaterialTheme.typography.bodyMedium,
+                Icon(
+                    imageVector = Icons.Default.TextSnippet,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(
+                        if (expanded) R.string.review_ocr_hide else R.string.review_ocr_details,
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = if (state.rawOcrLines.isEmpty()) {
+                        stringResource(
+                            if (state.ocrFailed) R.string.review_ocr_failed else R.string.review_ocr_empty,
                         )
                     } else {
-                        Text(
-                            text = stringResource(R.string.review_ocr_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        stringResource(R.string.review_ocr_lines, state.rawOcrLines.size)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Default.ExpandLess
+                } else {
+                    Icons.Default.ExpandMore
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(tween(FIELD_ANIM_MILLIS)) + expandVertically(tween(FIELD_ANIM_MILLIS)),
+            exit = fadeOut(tween(FIELD_ANIM_MILLIS)) + shrinkVertically(tween(FIELD_ANIM_MILLIS)),
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                )
+                if (state.rawOcrLines.isEmpty()) {
+                    Text(
+                        text = stringResource(
+                            if (state.ocrFailed) R.string.review_ocr_failed else R.string.review_ocr_empty,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.review_ocr_pick_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        shape = LocalCueTokens.current.fieldShape,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            state.rawOcrLines.forEach { line ->
+                                OcrLineRow(
+                                    line = line,
+                                    state = state,
+                                    onUse = onUseLine,
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+/**
+ * One recognised line, tappable so the user can say which field it belongs to.
+ * The extractor still guesses (that is what fills the form initially); this is
+ * the correction when the guess picked the wrong line.
+ */
+@Composable
+private fun OcrLineRow(
+    line: String,
+    state: ReviewUiState,
+    onUse: (TagField, String) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val assigned = OCR_FIELDS.firstOrNull { field -> ocrMatches(state.valueFor(field), line) }
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(LocalCueTokens.current.fieldShape)
+                .clickable { menuOpen = true }
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (assigned != null) Icons.Default.Check else Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.review_ocr_use_line),
+                tint = if (assigned != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                },
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.review_ocr_use_line)) },
+                enabled = false,
+                onClick = {},
+            )
+            OCR_FIELDS.forEach { field ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(field.labelRes())) },
+                    leadingIcon = if (field == assigned) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onUse(field, line.sanitizedFor(field))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** True when [line] is (or contains) the value already assigned to a field. */
+private fun ocrMatches(value: String, line: String): Boolean {
+    val current = ocrKey(value)
+    val candidate = ocrKey(line)
+    if (current.isEmpty() || candidate.isEmpty()) return false
+    if (current == candidate) return true
+    val shorter = minOf(current.length, candidate.length)
+    val longer = maxOf(current.length, candidate.length)
+    return shorter >= 4 &&
+        shorter.toDouble() / longer >= 0.6 &&
+        (current.contains(candidate) || candidate.contains(current))
+}
+
+private fun ocrKey(value: String): String =
+    value.lowercase().filter { it.isLetterOrDigit() }
+
+private val OCR_FIELDS = listOf(
+    TagField.TITLE,
+    TagField.ARTIST,
+    TagField.ALBUM,
+    TagField.YEAR,
+    TagField.GENRE,
+)
+
+@Composable
+private fun tokensFieldShape() = LocalCueTokens.current.fieldShape
 
 // ---------------------------------------------------------------- create bar
 
@@ -1524,25 +2147,46 @@ private fun CreateBar(
                     Spacer(Modifier.height(6.dp))
                 }
                 if (isVideo) {
-                    Text(
-                        text = stringResource(
-                            if (state.deleteSource) {
-                                R.string.review_create_note_delete
-                            } else {
-                                R.string.review_create_note_keep
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(6.dp))
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = if (state.deleteSource) {
+                                Icons.Default.DeleteOutline
+                            } else {
+                                Icons.Default.Movie
+                            },
+                            contentDescription = null,
+                            tint = if (state.deleteSource) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = stringResource(
+                                if (state.deleteSource) {
+                                    R.string.review_create_note_delete
+                                } else {
+                                    R.string.review_create_note_keep
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Spacer(Modifier.height(7.dp))
                 }
                 Button(
                     onClick = onSave,
                     enabled = !state.saving,
                     shape = tokens.buttonShape,
+                    contentPadding = PaddingValues(horizontal = 20.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
@@ -1560,6 +2204,17 @@ private fun CreateBar(
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
                         Spacer(Modifier.width(10.dp))
+                    } else {
+                        Icon(
+                            imageVector = if (state.tagOnlyEdit) {
+                                Icons.Default.Edit
+                            } else {
+                                Icons.Default.GraphicEq
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
                     }
                     Text(
                         text = stringResource(
@@ -1809,12 +2464,16 @@ private fun MatchesSheet(
 @Composable
 private fun SearchSheet(
     state: ReviewUiState,
+    initialQuery: String,
     onDismiss: () -> Unit,
     onSearch: (String) -> Unit,
     onChoose: (MetadataMatch) -> Unit,
 ) {
     val tokens = LocalCueTokens.current
-    var query by rememberSaveable { mutableStateOf("") }
+    // Prefilled from the edit area so the user can correct a word instead of
+    // retyping the whole song. rememberSaveable keeps that text across
+    // rotation; the sheet is composed fresh each time it opens.
+    var query by rememberSaveable { mutableStateOf(initialQuery) }
     LaunchedEffect(query) {
         val term = query.trim()
         if (term.length >= 2) {
@@ -2317,3 +2976,6 @@ private val TRIM_TRACK_HEIGHT = 6.dp
 private const val FIELD_ANIM_MILLIS = 180
 private const val SEARCH_DEBOUNCE_MILLIS = 350L
 private const val EDITOR_BRING_INTO_VIEW_MILLIS = 400L
+
+/** The field can grow by a few lines while typing; keep its actions visible. */
+private const val EDITOR_TEXT_BRING_INTO_VIEW_MILLIS = 250L

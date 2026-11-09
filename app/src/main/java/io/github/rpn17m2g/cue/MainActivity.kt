@@ -25,6 +25,7 @@ import io.github.rpn17m2g.cue.settings.localeTag
 import io.github.rpn17m2g.cue.ui.navigation.CueNavHost
 import io.github.rpn17m2g.cue.ui.navigation.Routes
 import io.github.rpn17m2g.cue.ui.theme.CueTheme
+import io.github.rpn17m2g.cue.ui.theme.LauncherIcon
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -116,6 +117,7 @@ class MainActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 container.settingsRepository.settings.collect { settings ->
                     applyLanguage(settings.language)
+                    LauncherIcon.apply(this@MainActivity, settings.palette)
                 }
             }
         }

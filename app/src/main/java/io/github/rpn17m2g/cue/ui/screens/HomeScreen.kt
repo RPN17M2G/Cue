@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
+import android.text.format.DateFormat
 import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,7 +43,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
@@ -84,6 +84,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -98,19 +99,19 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.rpn17m2g.cue.R
-import io.github.rpn17m2g.cue.data.library.DayBucket
 import io.github.rpn17m2g.cue.data.library.LibraryEntry
 import io.github.rpn17m2g.cue.data.library.LibraryGrouping
 import io.github.rpn17m2g.cue.data.library.LibraryKind
 import io.github.rpn17m2g.cue.data.library.LibrarySource
 import io.github.rpn17m2g.cue.data.library.LibraryTab
 import io.github.rpn17m2g.cue.data.library.MediaPermissions
-import io.github.rpn17m2g.cue.data.library.dayBucket
 import io.github.rpn17m2g.cue.data.library.requiredMediaPermissions
 import io.github.rpn17m2g.cue.ui.cueViewModel
 import io.github.rpn17m2g.cue.ui.navigation.appContainer
+import io.github.rpn17m2g.cue.ui.theme.CueMark
 import io.github.rpn17m2g.cue.ui.theme.LocalCueTokens
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun HomeScreen(
@@ -313,13 +314,8 @@ private fun HomeHeader(
                         letterSpacing = tokens.titleTracking,
                     ),
                 )
-                Spacer(Modifier.width(7.dp))
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
+                Spacer(Modifier.width(8.dp))
+                CueMark(modifier = Modifier.size(22.dp))
             }
             Text(
                 text = stringResource(R.string.home_subtitle),
@@ -608,26 +604,24 @@ private fun EntryList(
     onOpenEntry: (LibraryEntry) -> Unit,
     loadThumbnail: suspend (Uri) -> Bitmap?,
 ) {
-    val groups = remember(entries) {
-        val today = LocalDate.now()
-        entries.groupBy { dayBucket(it.dateAddedSeconds, now = today) }.toList()
-    }
+    val groups = remember(entries) { LibraryGrouping.groupByDay(entries) }
+    val today = LocalDate.now()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        groups.forEach { (bucket, bucketEntries) ->
-            stickyHeader(key = "day-${bucket.name}") {
+        groups.forEach { group ->
+            stickyHeader(key = "day-${group.date}") {
                 DayHeader(
-                    bucket = bucket,
+                    label = dayLabel(group.date, today),
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.background)
                         .padding(top = 16.dp, bottom = 6.dp),
                 )
             }
-            items(bucketEntries, key = { it.uri.toString() }) { entry ->
+            items(group.entries, key = { it.uri.toString() }) { entry ->
                 EntryRow(
                     entry = entry,
                     enabled = enabled,
@@ -639,8 +633,26 @@ private fun EntryList(
     }
 }
 
+/**
+ * Today and Yesterday stay words; every other day gets its real date so a
+ * library with months of history no longer collapses into one "Earlier" pile.
+ * The skeleton is resolved by the platform, which keeps the order and the month
+ * names right in Hebrew as well as English.
+ */
 @Composable
-private fun DayHeader(bucket: DayBucket, modifier: Modifier = Modifier) {
+private fun dayLabel(date: LocalDate, today: LocalDate): String {
+    if (date == today) return stringResource(R.string.home_day_today)
+    if (date == today.minusDays(1)) return stringResource(R.string.home_day_yesterday)
+    val locale = LocalConfiguration.current.locales[0]
+    return remember(date, today, locale) {
+        val skeleton = if (date.year == today.year) "EEEMMMd" else "yMMMEd"
+        val pattern = DateFormat.getBestDateTimePattern(locale, skeleton)
+        DateTimeFormatter.ofPattern(pattern, locale).format(date)
+    }
+}
+
+@Composable
+private fun DayHeader(label: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -656,7 +668,7 @@ private fun DayHeader(bucket: DayBucket, modifier: Modifier = Modifier) {
         // letters awkwardly, so drop it for RTL locales.
         val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
         Text(
-            text = stringResource(bucket.labelRes()).uppercase(),
+            text = label.uppercase(),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = if (rtl) 0.em else 0.14.em,
@@ -968,12 +980,6 @@ private fun LibraryTab.emptyBodyRes(): Int = when (this) {
     LibraryTab.RECENT -> R.string.home_empty_recent_body
     LibraryTab.RECORDINGS -> R.string.home_empty_recordings_body
     LibraryTab.MUSIC -> R.string.home_empty_music_body
-}
-
-private fun DayBucket.labelRes(): Int = when (this) {
-    DayBucket.TODAY -> R.string.home_day_today
-    DayBucket.YESTERDAY -> R.string.home_day_yesterday
-    DayBucket.EARLIER -> R.string.home_day_earlier
 }
 
 private fun LibrarySource.labelRes(): Int = when (this) {

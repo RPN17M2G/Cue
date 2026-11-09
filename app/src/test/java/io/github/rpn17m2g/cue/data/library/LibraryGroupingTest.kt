@@ -77,20 +77,37 @@ class LibraryGroupingTest {
     }
 
     @Test
-    fun `day buckets follow the device calendar`() {
+    fun `groups entries by real calendar day newest first`() {
         val zone = ZoneId.of("UTC")
-        val now = LocalDate.of(2026, 11, 1)
-        fun secondsOn(date: LocalDate): Long = date.atStartOfDay(zone).toEpochSecond()
+        val today = LocalDate.of(2026, 11, 8)
+        fun secondsOn(date: LocalDate, hour: Int = 12): Long =
+            date.atTime(hour, 0).atZone(zone).toEpochSecond()
 
-        assertEquals(DayBucket.TODAY, dayBucket(secondsOn(now), now = now, zone = zone))
-        assertEquals(
-            DayBucket.YESTERDAY,
-            dayBucket(secondsOn(now.minusDays(1)), now = now, zone = zone),
+        val entries = listOf(
+            entry(id = 1, kind = LibraryKind.VIDEO, added = secondsOn(today.minusDays(40))),
+            entry(id = 2, kind = LibraryKind.VIDEO, added = secondsOn(today, hour = 9)),
+            entry(id = 3, kind = LibraryKind.AUDIO, added = secondsOn(today.minusDays(1), 20)),
+            entry(id = 4, kind = LibraryKind.VIDEO, added = secondsOn(today, hour = 21)),
         )
+
+        val groups = LibraryGrouping.groupByDay(entries, zone = zone)
+
         assertEquals(
-            DayBucket.EARLIER,
-            dayBucket(secondsOn(now.minusDays(2)), now = now, zone = zone),
+            listOf(today, today.minusDays(1), today.minusDays(40)),
+            groups.map { it.date },
         )
+        assertEquals(listOf(2L, 4L), groups[0].entries.map { it.id() })
+        assertEquals(listOf(3L), groups[1].entries.map { it.id() })
+        assertEquals(listOf(1L), groups[2].entries.map { it.id() })
+    }
+
+    @Test
+    fun `day of a late-night row stays on its own date`() {
+        val zone = ZoneId.of("UTC")
+        val date = LocalDate.of(2026, 10, 30)
+        val seconds = date.atTime(23, 59).atZone(zone).toEpochSecond()
+
+        assertEquals(date, dayOf(seconds, zone))
     }
 
     private fun entry(

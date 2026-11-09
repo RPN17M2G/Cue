@@ -465,6 +465,60 @@ class OcrCandidateExtractorTest {
         assertEquals(2, candidates.size)
     }
 
+    @Test
+    fun `official video qualifiers are stripped from the title`() {
+        val frames = List(3) { index -> frame(index, "Believer (Official Music Video)") }
+
+        val candidate = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("Believer", candidate.title)
+    }
+
+    @Test
+    fun `a dash qualifier is stripped without eating the title`() {
+        val frames = List(3) { index -> frame(index, "Believer - Official Audio") }
+
+        val candidate = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("Believer", candidate.title)
+    }
+
+    @Test
+    fun `track number prefixes are stripped`() {
+        val frames = List(3) { index -> frame(index, "01. Believer") }
+
+        val candidate = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("Believer", candidate.title)
+    }
+
+    @Test
+    fun `a lyric caption is not offered as a title`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                "Believer",
+                "I was broken from a young age, taking my soul to the grave",
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("Believer", candidates.first().title)
+        assertTrue(candidates.none { it.title.contains("broken") })
+    }
+
+    @Test
+    fun `view counts and progress lines are chrome`() {
+        val frames = List(3) { index ->
+            frame(index, "Believer", "1.2M views", "0:12 / 3:45")
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals(listOf("Believer"), candidates.map { it.title })
+    }
+
     private fun frame(timestamp: Int, vararg lines: String): OcrFrameText =
         OcrFrameText(timestamp.toLong(), lines.map { OcrLine(it) })
 

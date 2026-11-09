@@ -44,7 +44,8 @@ data class AppSettings(
     val httpTimeoutMs: Long = DEFAULT_HTTP_TIMEOUT_MS,
     val httpRetries: Int = DEFAULT_HTTP_RETRIES,
 ) {
-    val fingerprintAvailable: Boolean get() = fingerprintEnabled && acoustIdKey.isNotBlank()
+    val fingerprintAvailable: Boolean
+        get() = fingerprintEnabled && AcoustIdKey.isPlausible(acoustIdKey)
 
     companion object {
         const val DEFAULT_SCAN_WINDOW_SECONDS = 15

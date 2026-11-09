@@ -105,14 +105,19 @@ class DualOcrRecognizer(
         }
     }
 
+    /**
+     * The lines the user can pick from. They come from the pass that won, not
+     * from both: a Hebrew pass over Latin text produces confident-looking
+     * gibberish ("6אוצה וסצוסא"), and offering that next to the real title is
+     * worse than useless. The other pass is only a fallback when the winner
+     * read nothing at all.
+     */
     private fun rawLines(
         selected: List<OcrFrameText>?,
         other: List<OcrFrameText>?,
     ): List<String> {
-        val lines = buildList {
-            selected.orEmpty().forEach { frame -> frame.lines.forEach { add(it.text) } }
-            other.orEmpty().forEach { frame -> frame.lines.forEach { add(it.text) } }
-        }
+        val winning = selected?.takeIf { frames -> frames.any { it.lines.isNotEmpty() } } ?: other
+        val lines = winning.orEmpty().flatMap { frame -> frame.lines.map { it.text } }
         val seen = HashSet<String>()
         return lines.asSequence()
             .map(::clean)

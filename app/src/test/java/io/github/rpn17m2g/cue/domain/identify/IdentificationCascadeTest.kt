@@ -109,14 +109,14 @@ class IdentificationCascadeTest {
     }
 
     @Test
-    fun `the highest scoring ocr candidate seeds the lookup`() = runTest {
-        var lastSeed: LookupSeed? = null
+    fun `the highest scoring ocr candidate seeds the lookup first`() = runTest {
+        val seeds = mutableListOf<LookupSeed>()
         val candidates = listOf(
             OcrCandidate(title = "Wrong Title", artist = "Wrong Artist", score = 0.2),
             OcrCandidate(title = "Get Lucky", artist = "Daft Punk", score = 0.9),
         )
 
-        val outcome = cascade(lookup = { seed -> lastSeed = seed; emptyList() }).identify(
+        val outcome = cascade(lookup = { seed -> seeds += seed; emptyList() }).identify(
             ocrCandidates = candidates,
             embeddedTags = null,
             networkEnabled = true,
@@ -124,9 +124,35 @@ class IdentificationCascadeTest {
             acoustIdConfigured = false,
         )
 
-        assertEquals("Get Lucky", lastSeed?.title)
-        assertEquals("Daft Punk", lastSeed?.artist)
+        assertEquals("Get Lucky", seeds.first().title)
+        assertEquals("Daft Punk", seeds.first().artist)
         assertEquals("Get Lucky", outcome.tag.title)
+    }
+
+    @Test
+    fun `a later ocr candidate answers when the top one does not`() = runTest {
+        val candidates = listOf(
+            OcrCandidate(title = "Wrong Title", artist = null, score = 0.9),
+            OcrCandidate(title = "Get Lucky", artist = "Daft Punk", score = 0.6),
+        )
+        val seeds = mutableListOf<String>()
+
+        val outcome = cascade(
+            lookup = { seed ->
+                seeds += seed.title
+                if (seed.title == "Get Lucky") listOf(cachedMatch) else emptyList()
+            },
+        ).identify(
+            ocrCandidates = candidates,
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+        )
+
+        assertEquals(listOf("Wrong Title", "Get Lucky"), seeds)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.TITLE])
     }
 
     @Test
@@ -407,6 +433,99 @@ class IdentificationCascadeTest {
         )
 
         assertFalse(outcome.fingerprintKeyRejected)
+    }
+
+    @Test
+    fun `manual fingerprint runs before the text lookup`() = runTest {
+        val calls = mutableListOf<String>()
+
+        val outcome = cascade(
+            lookup = {
+                calls += "text"
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                calls += "fingerprint"
+                FingerprintAttempt(
+                    listOf(
+                        cachedMatch.copy(
+                            score = 0.9,
+                            source = IdentificationSource.FINGERPRINT,
+                        ),
+                    ),
+                )
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertEquals(listOf("fingerprint"), calls)
+        assertTrue(outcome.usedFingerprint)
+        assertTrue(outcome.fingerprintTried)
+        assertEquals(IdentificationSource.FINGERPRINT, outcome.sources[TagField.ALBUM])
+    }
+
+    @Test
+    fun `manual fingerprint falls back to the text lookup when it has no match`() = runTest {
+        val calls = mutableListOf<String>()
+
+        val outcome = cascade(
+            lookup = {
+                calls += "text"
+                listOf(cachedMatch)
+            },
+            fingerprintLookup = {
+                calls += "fingerprint"
+                FingerprintAttempt(emptyList())
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertEquals(listOf("fingerprint", "text"), calls)
+        assertFalse(outcome.usedFingerprint)
+        assertTrue(outcome.fingerprintTried)
+        assertEquals("Random Access Memories", outcome.tag.album)
+    }
+
+    @Test
+    fun `manual fingerprint is not scored against a wrong OCR title`() = runTest {
+        val outcome = cascade(
+            lookup = { emptyList() },
+            fingerprintLookup = {
+                FingerprintAttempt(
+                    listOf(
+                        cachedMatch.copy(
+                            score = 0.9,
+                            source = IdentificationSource.FINGERPRINT,
+                        ),
+                    ),
+                )
+            },
+        ).identify(
+            ocrCandidates = listOf(
+                OcrCandidate(title = "Totally Wrong", artist = "Nobody", score = 1.0),
+            ),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertTrue(outcome.usedFingerprint)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Random Access Memories", outcome.tag.album)
     }
 
     @Test

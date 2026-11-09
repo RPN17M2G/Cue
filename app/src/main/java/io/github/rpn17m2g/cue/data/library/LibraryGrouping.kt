@@ -6,7 +6,11 @@ import java.time.ZoneId
 
 enum class LibraryTab { RECENT, RECORDINGS, MUSIC }
 
-enum class DayBucket { TODAY, YESTERDAY, EARLIER }
+/** One calendar day's rows, newest day first. */
+data class DayGroup(
+    val date: LocalDate,
+    val entries: List<LibraryEntry>,
+)
 
 /**
  * Pure list shaping, kept out of the ViewModel so the ordering rules can be
@@ -40,18 +44,26 @@ object LibraryGrouping {
         LibraryTab.RECORDINGS -> recordings(entries)
         LibraryTab.MUSIC -> music(entries)
     }
+
+    /**
+     * Splits an ordered list into calendar days, newest day first. A single
+     * "Earlier" bucket made months of history look like one undated pile; the
+     * screen needs the real date to label each day.
+     *
+     * The order inside a day is the order the tab produced, so Music keeps
+     * Cue's own output above the rest of that day's files.
+     */
+    fun groupByDay(
+        entries: List<LibraryEntry>,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): List<DayGroup> = entries
+        .groupBy { dayOf(it.dateAddedSeconds, zone) }
+        .map { (date, dayEntries) -> DayGroup(date, dayEntries) }
+        .sortedByDescending { it.date }
 }
 
-/** Today / Yesterday / Earlier, in the device's own time zone. */
-fun dayBucket(
+/** The calendar day a row belongs to, in the device's own time zone. */
+fun dayOf(
     dateAddedSeconds: Long,
-    now: LocalDate = LocalDate.now(),
     zone: ZoneId = ZoneId.systemDefault(),
-): DayBucket {
-    val day = Instant.ofEpochSecond(dateAddedSeconds).atZone(zone).toLocalDate()
-    return when (day) {
-        now -> DayBucket.TODAY
-        now.minusDays(1) -> DayBucket.YESTERDAY
-        else -> DayBucket.EARLIER
-    }
-}
+): LocalDate = Instant.ofEpochSecond(dateAddedSeconds).atZone(zone).toLocalDate()
