@@ -7,12 +7,14 @@ import io.github.rpn17m2g.cue.settings.CuePalette
 
 /**
  * The launcher icon follows the palette through four activity aliases, each
- * pointing at MainActivity with its own adaptive icon. Android has no API for
- * repainting an app icon in place, and an alias is the supported way to swap
- * it.
+ * carrying its own adaptive icon and forwarding through [LauncherActivity].
+ * Android has no API for repainting an app icon in place, and an alias is the
+ * supported way to swap it.
  *
  * [PackageManager.DONT_KILL_APP] keeps the running process alive; the launcher
- * picks up the new component the next time it refreshes.
+ * picks up the new component the next time it refreshes. The aliases never
+ * target MainActivity directly: an alias that does becomes the base of the
+ * task, and disabling it would tear that task down mid-session.
  */
 object LauncherIcon {
 

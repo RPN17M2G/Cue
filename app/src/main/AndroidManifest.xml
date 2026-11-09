@@ -58,6 +58,17 @@
             </intent-filter>
         </activity>
 
+        <!-- The aliases point here, not at MainActivity: an alias that targets
+             the real screen becomes the task's base, so disabling it when the
+             palette changes would destroy the running task. -->
+        <activity
+            android:name=".LauncherActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Cue.Launcher" />
+
         <!-- One launcher entry per palette. MainActivity itself has no
              MAIN/LAUNCHER filter: the aliases carry it so the home-screen icon
              can change colour with the app theme. LauncherIcon switches them. -->
@@ -68,8 +79,8 @@
             android:icon="@mipmap/ic_launcher_mint"
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_mint"
-            android:targetActivity=".MainActivity"
-            android:theme="@style/Theme.Cue">
+            android:targetActivity=".LauncherActivity"
+            android:theme="@style/Theme.Cue.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -83,8 +94,8 @@
             android:icon="@mipmap/ic_launcher_lagoon"
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_lagoon"
-            android:targetActivity=".MainActivity"
-            android:theme="@style/Theme.Cue">
+            android:targetActivity=".LauncherActivity"
+            android:theme="@style/Theme.Cue.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -98,8 +109,8 @@
             android:icon="@mipmap/ic_launcher_navy"
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_navy"
-            android:targetActivity=".MainActivity"
-            android:theme="@style/Theme.Cue">
+            android:targetActivity=".LauncherActivity"
+            android:theme="@style/Theme.Cue.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -113,8 +124,8 @@
             android:icon="@mipmap/ic_launcher_deep_teal"
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_deep_teal"
-            android:targetActivity=".MainActivity"
-            android:theme="@style/Theme.Cue">
+            android:targetActivity=".LauncherActivity"
+            android:theme="@style/Theme.Cue.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

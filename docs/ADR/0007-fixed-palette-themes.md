@@ -32,6 +32,10 @@ professional. Mint is the default.
   one function so the feature can return later.
 - A palette change applies instantly through the settings flow — no restart and
   no activity recreation.
+- The home-screen icon follows the palette through four activity aliases. They
+  forward through a transparent `LauncherActivity` instead of targeting
+  `MainActivity`: an alias that targets the real screen becomes the task's base,
+  and disabling it to swap the icon would tear the running task down.
 - All colour reaches screens through `MaterialTheme.colorScheme` and a small
   `LocalCueTokens`; no colour literals live outside `ui/theme/`.
 - Dark schemes are written by hand per palette. Material's defaults desaturate
