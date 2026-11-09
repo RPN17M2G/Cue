@@ -109,14 +109,14 @@ class IdentificationCascadeTest {
     }
 
     @Test
-    fun `the highest scoring ocr candidate seeds the lookup`() = runTest {
-        var lastSeed: LookupSeed? = null
+    fun `the highest scoring ocr candidate seeds the lookup first`() = runTest {
+        val seeds = mutableListOf<LookupSeed>()
         val candidates = listOf(
             OcrCandidate(title = "Wrong Title", artist = "Wrong Artist", score = 0.2),
             OcrCandidate(title = "Get Lucky", artist = "Daft Punk", score = 0.9),
         )
 
-        val outcome = cascade(lookup = { seed -> lastSeed = seed; emptyList() }).identify(
+        val outcome = cascade(lookup = { seed -> seeds += seed; emptyList() }).identify(
             ocrCandidates = candidates,
             embeddedTags = null,
             networkEnabled = true,
@@ -124,9 +124,35 @@ class IdentificationCascadeTest {
             acoustIdConfigured = false,
         )
 
-        assertEquals("Get Lucky", lastSeed?.title)
-        assertEquals("Daft Punk", lastSeed?.artist)
+        assertEquals("Get Lucky", seeds.first().title)
+        assertEquals("Daft Punk", seeds.first().artist)
         assertEquals("Get Lucky", outcome.tag.title)
+    }
+
+    @Test
+    fun `a later ocr candidate answers when the top one does not`() = runTest {
+        val candidates = listOf(
+            OcrCandidate(title = "Wrong Title", artist = null, score = 0.9),
+            OcrCandidate(title = "Get Lucky", artist = "Daft Punk", score = 0.6),
+        )
+        val seeds = mutableListOf<String>()
+
+        val outcome = cascade(
+            lookup = { seed ->
+                seeds += seed.title
+                if (seed.title == "Get Lucky") listOf(cachedMatch) else emptyList()
+            },
+        ).identify(
+            ocrCandidates = candidates,
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+        )
+
+        assertEquals(listOf("Wrong Title", "Get Lucky"), seeds)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.TITLE])
     }
 
     @Test

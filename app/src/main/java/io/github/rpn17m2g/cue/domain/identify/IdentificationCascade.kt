@@ -85,6 +85,23 @@ class IdentificationCascade(
         }
 
         val seed = seed(embeddedTags, ocrCandidates.maxByOrNull { it.score })
+        // A wrong top OCR line should not sink the whole lookup. The remaining
+        // candidates are tried in order only when the previous one produced no
+        // accepted match, so the common case still costs a single request.
+        val textSeeds = buildList {
+            add(seed)
+            ocrCandidates
+                .sortedByDescending { it.score }
+                .take(MAX_TEXT_SEEDS)
+                .forEach { candidate ->
+                    val alternative = seed(embeddedTags, candidate)
+                    val duplicate = any {
+                        it.tag.title == alternative.tag.title &&
+                            it.tag.artist == alternative.tag.artist
+                    }
+                    if (!duplicate) add(alternative)
+                }
+        }
         var keyRejected = false
         var fingerprintTried = false
 
@@ -122,27 +139,29 @@ class IdentificationCascade(
         }
 
         suspend fun tryText(): IdentificationOutcome? {
-            if (!networkEnabled || seed.tag.title.isBlank()) return null
-            val lookupSeed = LookupSeed(
-                title = seed.tag.title,
-                artist = seed.tag.artist.takeIf { it.isNotBlank() },
-                album = seed.tag.album.takeIf { it.isNotBlank() },
-                durationMs = durationMs,
-            )
-            val matches = lookupSafely { lookup(lookupSeed) }
-            val ranked = MetadataMatcher.rank(seed.tag, matches).accepted()
-            return if (ranked.isEmpty()) {
-                null
-            } else {
-                outcome(
-                    seed = seed,
-                    ranked = ranked,
-                    rawOcrLines = rawOcrLines,
-                    usedFingerprint = false,
-                    fingerprintTried = fingerprintTried,
-                    fingerprintKeyRejected = keyRejected,
+            if (!networkEnabled) return null
+            for (textSeed in textSeeds) {
+                if (textSeed.tag.title.isBlank()) continue
+                val lookupSeed = LookupSeed(
+                    title = textSeed.tag.title,
+                    artist = textSeed.tag.artist.takeIf { it.isNotBlank() },
+                    album = textSeed.tag.album.takeIf { it.isNotBlank() },
+                    durationMs = durationMs,
                 )
+                val matches = lookupSafely { lookup(lookupSeed) }
+                val ranked = MetadataMatcher.rank(textSeed.tag, matches).accepted()
+                if (ranked.isNotEmpty()) {
+                    return outcome(
+                        seed = textSeed,
+                        ranked = ranked,
+                        rawOcrLines = rawOcrLines,
+                        usedFingerprint = false,
+                        fingerprintTried = fingerprintTried,
+                        fingerprintKeyRejected = keyRejected,
+                    )
+                }
             }
+            return null
         }
 
         val result = if (forceFingerprint) {
@@ -322,5 +341,8 @@ class IdentificationCascade(
 
     private companion object {
         val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
+
+        /** How many OCR readings the text stage may try before giving up. */
+        const val MAX_TEXT_SEEDS = 3
     }
 }

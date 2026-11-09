@@ -124,6 +124,27 @@ object OcrCandidateExtractor {
         "Back",
         "Next",
         "Previous",
+        // Video and streaming chrome.
+        "Views",
+        "Subscribers",
+        "Premieres",
+        "Trending",
+        "Shorts",
+        "Play all",
+        "Mix",
+        "Autoplay",
+        "Save",
+        "Report",
+        "Not interested",
+        "Don't recommend channel",
+        "Show less",
+        "Show more",
+        "Comments",
+        "Description",
+        "Official Video",
+        "Official Music Video",
+        "Official Audio",
+        "Lyric Video",
     )
 
     private val WHITESPACE = Regex("[\\s\\u00A0]+")
@@ -148,6 +169,31 @@ object OcrCandidateExtractor {
             "^(?:$MONTHS),?\\s*\\d{2,4}$",
     )
     private val NUMERIC_DATE = Regex("^\\d{1,4}[./-]\\d{1,2}[./-]\\d{1,4}\\.?$")
+    private val PROGRESS = Regex(
+        "^\\d{1,2}:\\d{2}(?::\\d{2})?\\s*/\\s*\\d{1,2}:\\d{2}(?::\\d{2})?$",
+    )
+    private val VIEW_COUNT = Regex(
+        "(?i)^[\\d.,]+\\s*[km]?\\s+(?:views?|likes?|subscribers?|comments?)$",
+    )
+    /** Track numbers some players prefix to a title ("01. ", "3 - "). */
+    private val TRACK_PREFIX = Regex("^\\d{1,3}(?:[.)]\\s+|\\s*[-\\u2013\\u2014]\\s+)")
+    /** Bracketed qualifiers that are not part of the song's name. */
+    private val BRACKET_DECORATION = Regex(
+        "(?i)\\s*[\\[(]\\s*(?:official\\s+)?(?:music\\s+)?(?:video|audio|lyric\\s+video|lyrics?|" +
+            "visuali[sz]er|performance|live|remaster(?:ed)?(?:\\s+\\d{4})?|explicit|hd|4k|mv)" +
+            "\\s*[\\])]\\s*$",
+    )
+    /** The same qualifiers written after a dash, never a bare one-word title. */
+    private val TRAILING_DECORATION = Regex(
+        "(?i)\\s*[-\\u2013\\u2014|]\\s*(?:official\\s+(?:music\\s+)?(?:video|audio)|" +
+            "official\\s+lyric\\s+video|lyric\\s+video|lyrics|audio|visuali[sz]er|" +
+            "remaster(?:ed)?(?:\\s+\\d{4})?|explicit|hd|4k|live|performance)\\s*$",
+    )
+    /** Unambiguous multi-word qualifiers that need no separator. */
+    private val TRAILING_BARE = Regex(
+        "(?i)\\s*(?:official\\s+(?:music\\s+)?(?:video|audio)|" +
+            "official\\s+lyric\\s+video|lyric\\s+video)\\s*$",
+    )
     private val HAS_LETTER_OR_DIGIT = Regex("[\\p{L}\\p{Nd}]")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
@@ -357,11 +403,10 @@ object OcrCandidateExtractor {
         hasStatusClock: Boolean,
         frameLargest: Float,
     ): KeptLine? {
-        val text = clean(line.text) ?: return null
-        if (text.length > MAX_LINE_LENGTH) return null
-        if (text.length == 1) return null
-        if (!HAS_LETTER_OR_DIGIT.containsMatchIn(text)) return null
-        if (!hebrewAware && HEBREW.containsMatchIn(text)) return null
+        val raw = clean(line.text) ?: return null
+        if (raw.length > MAX_LINE_LENGTH) return null
+        if (!HAS_LETTER_OR_DIGIT.containsMatchIn(raw)) return null
+        if (!hebrewAware && HEBREW.containsMatchIn(raw)) return null
 
         val box = line.box
         val prominence = when {
@@ -369,8 +414,16 @@ object OcrCandidateExtractor {
             box.height <= 0f -> UNKNOWN_PROMINENCE
             else -> box.height
         }
-        if (isChrome(text, noiseKeys, hasStatusClock, prominence, frameLargest)) return null
         if (isStatusBarLine(box, prominence, frameLargest)) return null
+
+        // Track numbers and "Official Video"-style qualifiers are packaging,
+        // not the song's name. Removing them before scoring also lets a line
+        // match its cleaner reading from another frame, so the vote adds up
+        // instead of splitting into two candidates.
+        val text = stripDecorations(stripTrackPrefix(raw))
+        if (text.length < 2) return null
+        if (isChrome(text, noiseKeys, hasStatusClock, prominence, frameLargest)) return null
+        if (isLikelyLyric(text)) return null
 
         val inline = splitInline(text)
         return KeptLine(
@@ -379,6 +432,34 @@ object OcrCandidateExtractor {
             box = box,
             prominence = prominence,
         )
+    }
+
+    private fun stripTrackPrefix(text: String): String =
+        text.replaceFirst(TRACK_PREFIX, "").trim()
+
+    private fun stripDecorations(text: String): String {
+        var current = text.trim()
+        repeat(2) {
+            val next = current
+                .replace(BRACKET_DECORATION, "")
+                .replace(TRAILING_DECORATION, "")
+                .replace(TRAILING_BARE, "")
+                .trim()
+            if (next == current) return current
+            current = next
+        }
+        return current
+    }
+
+    /**
+     * Lyrics, captions and comment previews are long sentences. A song title is
+     * rarely more than a dozen words, and an eight-word line that starts in
+     * lower case and ends with sentence punctuation is prose, not a name.
+     */
+    private fun isLikelyLyric(text: String): Boolean {
+        val words = text.count { it == ' ' } + 1
+        if (words >= 14) return true
+        return words >= 10 && text.any { it == ',' || it == '.' || it == '?' || it == '!' }
     }
 
     private fun isChrome(
@@ -394,8 +475,10 @@ object OcrCandidateExtractor {
         }
         if (MERIDIEM.containsMatchIn(text)) return true
         if (DURATION.matches(text)) return true
+        if (PROGRESS.matches(text)) return true
         if (hasStatusClock && BARE_CLOCK.matches(text)) return true
         if (PERCENT_ANY.containsMatchIn(text)) return true
+        if (VIEW_COUNT.matches(text)) return true
         if (STATUS_HINT.containsMatchIn(text)) return true
         if (DOMAIN.containsMatchIn(text)) return true
         if (DATE_WITH_MONTH.matches(text)) return true

@@ -136,6 +136,16 @@ class DualOcrRecognizerTest {
         assertEquals(listOf("Daft Punk - Get Lucky"), recognition.rawLines)
     }
 
+    @Test
+    fun `raw lines come from the winning pass only`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Believer")),
+            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("6אוצה וסצוסא")),
+        ).recognize(frames, preferHebrew = false)
+
+        assertEquals(listOf("Believer"), recognition.rawLines)
+    }
+
     private fun repeated(line: String): List<List<OcrLine>> =
         frames.map { listOf(OcrLine(line)) }
 
