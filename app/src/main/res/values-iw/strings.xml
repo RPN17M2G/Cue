@@ -105,6 +105,8 @@
     <string name="review_status_no_match">לא זוהה</string>
     <string name="review_badge_fingerprint">טביעת אצבע</string>
     <string name="review_ocr_lines">%1$d שורות נקראו</string>
+    <string name="review_ocr_pick_hint">הקישו על שורה כדי להשתמש בה בשדה.</string>
+    <string name="review_ocr_use_line">שימוש בשורה בתור</string>
 
     <string name="review_song_details">פרטי השיר</string>
     <string name="review_untitled">ללא שם</string>

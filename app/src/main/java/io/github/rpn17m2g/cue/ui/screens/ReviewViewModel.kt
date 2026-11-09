@@ -222,6 +222,18 @@ class ReviewViewModel(
         _state.update { it.copy(deleteSource = enabled) }
     }
 
+    /**
+     * Assigns one recognised line to a field. The cascade's guess is only a
+     * starting point: when it picked the wrong line, this writes the chosen
+     * text as a manual edit so a later identification cannot replace it.
+     */
+    fun useOcrLine(field: TagField, value: String) {
+        val text = value.trim()
+        if (text.isEmpty()) return
+        updateDraft(field) { it.withField(field, text) }
+        commitField(field)
+    }
+
     /** Called when the user saves an inline editor, which settles its flag. */
     fun commitField(field: TagField) {
         editedBeforeEditor.remove(field)

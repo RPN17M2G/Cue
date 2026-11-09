@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -64,6 +65,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
@@ -75,6 +77,8 @@ import androidx.compose.material.icons.filled.TextSnippet
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -250,7 +254,10 @@ fun ReviewScreen(
             )
         },
         bottomBar = {
-            if (!state.loading && state.input != null) {
+            // While a field is being edited the keyboard owns the bottom of the
+            // screen: hiding the sticky Create bar gives Save/Cancel the room
+            // they need and stops the bar from covering the open editor.
+            if (!state.loading && state.input != null && editingField == null) {
                 CreateBar(
                     state = state,
                     onSave = {
@@ -320,6 +327,7 @@ fun ReviewScreen(
                 onChooseArtwork = viewModel::chooseArtwork,
                 onGalleryArtwork = viewModel::chooseGalleryArtwork,
                 onRemoveArtwork = viewModel::removeArtwork,
+                onUseOcrLine = viewModel::useOcrLine,
             )
         }
     }
@@ -350,6 +358,7 @@ private fun ReviewContent(
     onChooseArtwork: (ArtworkCandidate) -> Unit,
     onGalleryArtwork: (Uri) -> Unit,
     onRemoveArtwork: () -> Unit,
+    onUseOcrLine: (TagField, String) -> Unit,
 ) {
     val input = state.input ?: return
     val galleryPicker = rememberLauncherForActivityResult(
@@ -367,6 +376,7 @@ private fun ReviewContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(top = 0.dp, bottom = 28.dp),
@@ -434,7 +444,7 @@ private fun ReviewContent(
         }
 
         if (state.hasOcrDetails) {
-            OcrDetails(state = state)
+            OcrDetails(state = state, onUseLine = onUseOcrLine)
         }
 
         Spacer(Modifier.height(2.dp))
@@ -467,6 +477,9 @@ private fun ReviewContent(
     if (searchSheet) {
         SearchSheet(
             state = state,
+            initialQuery = listOf(state.draft.title, state.draft.artist)
+                .filter { it.isNotBlank() }
+                .joinToString(" "),
             onDismiss = { searchSheet = false },
             onSearch = onSearch,
             onChoose = { match ->
@@ -479,6 +492,7 @@ private fun ReviewContent(
 
 // ---------------------------------------------------------------- hero
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CoverHero(
     artwork: Artwork?,
@@ -600,9 +614,9 @@ private fun CoverHero(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 durationMs?.takeIf { it > 0 }?.let { duration ->
                     HeroChip(text = TrimClock.format(duration))
@@ -940,7 +954,7 @@ private fun FieldRow(
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (source != null && value.isNotBlank()) {
@@ -1003,6 +1017,12 @@ private fun FieldEditor(
         delay(EDITOR_BRING_INTO_VIEW_MILLIS)
         bringIntoView.bringIntoView()
     }
+    // A long title grows the field while the user types. Re-run the request
+    // after the growth settles so the actions cannot slip under the keyboard.
+    LaunchedEffect(text) {
+        delay(EDITOR_TEXT_BRING_INTO_VIEW_MILLIS)
+        bringIntoView.bringIntoView()
+    }
     LaunchedEffect(error) {
         if (error) {
             // The validation line grows the editor; keep it visible too.
@@ -1032,36 +1052,40 @@ private fun FieldEditor(
             },
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { candidate ->
+                val sanitized = candidate.text.sanitizedFor(field)
+                value = candidate.copy(text = sanitized)
+                onTextChange(sanitized)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+            // Long titles and artist names must wrap instead of scrolling
+            // sideways inside a box squeezed by the Save/Cancel buttons. The
+            // actions moved below the field so the full width is editable.
+            singleLine = field == TagField.YEAR || field == TagField.TRACK_NUMBER,
+            minLines = 1,
+            maxLines = 4,
+            isError = error,
+            shape = LocalCueTokens.current.fieldShape,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = field.keyboardType(),
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboard?.hide()
+                    onSave()
+                },
+            ),
+            colors = cueOutlinedFieldColors(),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.End,
         ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { candidate ->
-                    val sanitized = candidate.text.sanitizedFor(field)
-                    value = candidate.copy(text = sanitized)
-                    onTextChange(sanitized)
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                singleLine = true,
-                isError = error,
-                shape = LocalCueTokens.current.fieldShape,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = field.keyboardType(),
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        keyboard?.hide()
-                        onSave()
-                    },
-                ),
-                colors = cueOutlinedFieldColors(),
-            )
             TextButton(onClick = onCancel) {
                 Text(stringResource(R.string.review_field_cancel))
             }
@@ -1213,7 +1237,7 @@ private fun IdentificationCard(
                     score = match.score,
                 )
             }
-        } else {
+        } else if (!state.identifying) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -1883,7 +1907,10 @@ private fun DeleteSourceCard(
 // ---------------------------------------------------------------- OCR details
 
 @Composable
-private fun OcrDetails(state: ReviewUiState) {
+private fun OcrDetails(
+    state: ReviewUiState,
+    onUseLine: (TagField, String) -> Unit,
+) {
     if (!state.hasOcrDetails) return
     var expanded by rememberSaveable { mutableStateOf(false) }
     SectionHeader(stringResource(R.string.review_section_ocr))
@@ -1963,20 +1990,22 @@ private fun OcrDetails(state: ReviewUiState) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
+                    Text(
+                        text = stringResource(R.string.review_ocr_pick_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                         shape = LocalCueTokens.current.fieldShape,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             state.rawOcrLines.forEach { line ->
-                                Text(
-                                    text = line,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                OcrLineRow(
+                                    line = line,
+                                    state = state,
+                                    onUse = onUseLine,
                                 )
                             }
                         }
@@ -1986,6 +2015,97 @@ private fun OcrDetails(state: ReviewUiState) {
         }
     }
 }
+
+/**
+ * One recognised line, tappable so the user can say which field it belongs to.
+ * The extractor still guesses (that is what fills the form initially); this is
+ * the correction when the guess picked the wrong line.
+ */
+@Composable
+private fun OcrLineRow(
+    line: String,
+    state: ReviewUiState,
+    onUse: (TagField, String) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val assigned = OCR_FIELDS.firstOrNull { field -> ocrMatches(state.valueFor(field), line) }
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(LocalCueTokens.current.fieldShape)
+                .clickable { menuOpen = true }
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (assigned != null) Icons.Default.Check else Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.review_ocr_use_line),
+                tint = if (assigned != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                },
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.review_ocr_use_line)) },
+                enabled = false,
+                onClick = {},
+            )
+            OCR_FIELDS.forEach { field ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(field.labelRes())) },
+                    leadingIcon = if (field == assigned) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onUse(field, line.sanitizedFor(field))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** True when [line] is (or contains) the value already assigned to a field. */
+private fun ocrMatches(value: String, line: String): Boolean {
+    val current = ocrKey(value)
+    val candidate = ocrKey(line)
+    if (current.isEmpty() || candidate.isEmpty()) return false
+    if (current == candidate) return true
+    val shorter = minOf(current.length, candidate.length)
+    val longer = maxOf(current.length, candidate.length)
+    return shorter >= 4 &&
+        shorter.toDouble() / longer >= 0.6 &&
+        (current.contains(candidate) || candidate.contains(current))
+}
+
+private fun ocrKey(value: String): String =
+    value.lowercase().filter { it.isLetterOrDigit() }
+
+private val OCR_FIELDS = listOf(
+    TagField.TITLE,
+    TagField.ARTIST,
+    TagField.ALBUM,
+    TagField.YEAR,
+    TagField.GENRE,
+)
 
 @Composable
 private fun tokensFieldShape() = LocalCueTokens.current.fieldShape
@@ -2344,12 +2464,16 @@ private fun MatchesSheet(
 @Composable
 private fun SearchSheet(
     state: ReviewUiState,
+    initialQuery: String,
     onDismiss: () -> Unit,
     onSearch: (String) -> Unit,
     onChoose: (MetadataMatch) -> Unit,
 ) {
     val tokens = LocalCueTokens.current
-    var query by rememberSaveable { mutableStateOf("") }
+    // Prefilled from the edit area so the user can correct a word instead of
+    // retyping the whole song. rememberSaveable keeps that text across
+    // rotation; the sheet is composed fresh each time it opens.
+    var query by rememberSaveable { mutableStateOf(initialQuery) }
     LaunchedEffect(query) {
         val term = query.trim()
         if (term.length >= 2) {
@@ -2852,3 +2976,6 @@ private val TRIM_TRACK_HEIGHT = 6.dp
 private const val FIELD_ANIM_MILLIS = 180
 private const val SEARCH_DEBOUNCE_MILLIS = 350L
 private const val EDITOR_BRING_INTO_VIEW_MILLIS = 400L
+
+/** The field can grow by a few lines while typing; keep its actions visible. */
+private const val EDITOR_TEXT_BRING_INTO_VIEW_MILLIS = 250L
