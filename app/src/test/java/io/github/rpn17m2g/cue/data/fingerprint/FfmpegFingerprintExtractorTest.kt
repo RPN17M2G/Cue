@@ -23,37 +23,36 @@ class FfmpegFingerprintExtractorTest {
     }
 
     @Test
-    fun `writes a base64 fingerprint for the standard slice and reports its duration`() = runTest {
+    fun `writes a base64 fingerprint from the start and reports the track duration`() = runTest {
         val runner = WritingRunner(content = FINGERPRINT)
         val input = inputFile()
 
-        val result = extractor(runner).extract(input, clipDurationMs = 240_000)
+        val result = extractor(runner).extract(input, trackDurationMs = 240_000)
 
         assertEquals(FINGERPRINT, result?.value)
         assertEquals(240, result?.durationSeconds)
         val args = runner.invocations.single()
-        assertTrue(args.containsAll(listOf("-ss", "105.000", "-t", "30.000")))
+        assertTrue(args.containsAll(listOf("-ss", "0.000", "-t", "30.000")))
         assertTrue(args.containsAll(listOf("-f", "chromaprint", "-fp_format", "base64")))
         assertEquals(emptyList<String>(), outputDirectory.list()?.toList())
     }
 
     @Test
-    fun `short clips are fingerprinted from the start with the clip duration`() = runTest {
+    fun `a short clip still reports the whole track length it was told about`() = runTest {
         val runner = WritingRunner(content = FINGERPRINT)
 
-        val result = extractor(runner).extract(inputFile(), clipDurationMs = 45_000)
+        val result = extractor(runner).extract(inputFile(), trackDurationMs = 204_000)
 
-        assertEquals(45, result?.durationSeconds)
+        assertEquals(204, result?.durationSeconds)
         val args = runner.invocations.single()
-        assertTrue(args.containsAll(listOf("-ss", "0.000")))
-        assertTrue(!args.contains("-t"))
+        assertTrue(args.containsAll(listOf("-ss", "0.000", "-t", "30.000")))
     }
 
     @Test
     fun `unknown duration gets the standard slice duration`() = runTest {
         val runner = WritingRunner(content = FINGERPRINT)
 
-        val result = extractor(runner).extract(inputFile(), clipDurationMs = null)
+        val result = extractor(runner).extract(inputFile(), trackDurationMs = null)
 
         assertEquals(30, result?.durationSeconds)
     }
@@ -62,7 +61,7 @@ class FfmpegFingerprintExtractorTest {
     fun `clips shorter than a second are not fingerprinted`() = runTest {
         val runner = WritingRunner(content = FINGERPRINT)
 
-        val result = extractor(runner).extract(inputFile(), clipDurationMs = 900)
+        val result = extractor(runner).extract(inputFile(), trackDurationMs = 900)
 
         assertNull(result)
         assertTrue(runner.invocations.isEmpty())
@@ -86,7 +85,7 @@ class FfmpegFingerprintExtractorTest {
     fun `a failed ffmpeg run yields no fingerprint and leaves no file behind`() = runTest {
         val runner = WritingRunner(exitCode = 1, content = FINGERPRINT)
 
-        val result = extractor(runner).extract(inputFile(), clipDurationMs = 120_000)
+        val result = extractor(runner).extract(inputFile(), trackDurationMs = 120_000)
 
         assertNull(result)
         assertEquals(emptyList<String>(), outputDirectory.list()?.toList())
@@ -100,10 +99,26 @@ class FfmpegFingerprintExtractorTest {
     }
 
     @Test
+    fun `a real base64url fingerprint is accepted`() = runTest {
+        // Captured from FFmpeg's chromaprint muxer on device: the alphabet is
+        // base64url, so `-` and `_` appear. Rejecting them silently disabled
+        // fingerprint lookup for every real song.
+        val real = "AQAA3VGUqpGSFOkvXCJ-9PARDv-h4yhwwT905Md_9MfxH_nxH9p68HtxHWdw"
+
+        val result = extractor(WritingRunner(content = real)).extract(
+            inputFile(),
+            trackDurationMs = 323_000,
+        )
+
+        assertEquals(real, result?.value)
+        assertEquals(323, result?.durationSeconds)
+    }
+
+    @Test
     fun `runner failures degrade to no fingerprint`() = runTest {
         val runner = WritingRunner(failure = IllegalStateException("binary missing"))
 
-        val result = extractor(runner).extract(inputFile(), clipDurationMs = 120_000)
+        val result = extractor(runner).extract(inputFile(), trackDurationMs = 120_000)
 
         assertNull(result)
     }

@@ -214,17 +214,26 @@ object OcrCandidateExtractor {
         val totalWeight = weights.sum().takeIf { it > 0.0 } ?: frames.size.toDouble()
 
         frames.forEachIndexed { frameIndex, frame ->
-            val hasStatusClock = frame.lines.any { line ->
-                val text = clean(line.text).orEmpty()
+            val cleaned = frame.lines.map { clean(it.text).orEmpty() }
+            val hasStatusClock = cleaned.any { text ->
                 MERIDIEM.containsMatchIn(text) || DURATION.matches(text)
             }
+            // A player draws the position and the total together ("0:12" on
+            // the left, "5:23" on the right). Two clock readings in one frame
+            // are that progress row, not a title that happens to look like a
+            // time. Without this the total was read as the song's name and
+            // "5:23" was searched for as a title.
+            val clockReadings = cleaned.count { text ->
+                BARE_CLOCK.matches(text) || DURATION.matches(text) || PROGRESS.matches(text)
+            }
+            val bareClockIsChrome = hasStatusClock || clockReadings >= 2
             val frameLargest = frame.lines
                 .mapNotNull { it.box?.height }
                 .filter { it > 0f }
                 .maxOrNull() ?: 0f
             val kept = frame.lines
                 .mapNotNull { line ->
-                    keep(line, noiseKeys, hebrewAware, hasStatusClock, frameLargest)
+                    keep(line, noiseKeys, hebrewAware, bareClockIsChrome, frameLargest)
                 }
             if (kept.isEmpty()) return@forEachIndexed
 
@@ -400,7 +409,7 @@ object OcrCandidateExtractor {
         line: OcrLine,
         noiseKeys: Set<String>,
         hebrewAware: Boolean,
-        hasStatusClock: Boolean,
+        bareClockIsChrome: Boolean,
         frameLargest: Float,
     ): KeptLine? {
         val raw = clean(line.text) ?: return null
@@ -422,7 +431,7 @@ object OcrCandidateExtractor {
         // instead of splitting into two candidates.
         val text = stripDecorations(stripTrackPrefix(raw))
         if (text.length < 2) return null
-        if (isChrome(text, noiseKeys, hasStatusClock, prominence, frameLargest)) return null
+        if (isChrome(text, noiseKeys, bareClockIsChrome, prominence, frameLargest)) return null
         if (isLikelyLyric(text)) return null
 
         val inline = splitInline(text)
@@ -465,7 +474,7 @@ object OcrCandidateExtractor {
     private fun isChrome(
         text: String,
         noiseKeys: Set<String>,
-        hasStatusClock: Boolean,
+        bareClockIsChrome: Boolean,
         prominence: Float,
         frameLargest: Float,
     ): Boolean {
@@ -476,7 +485,7 @@ object OcrCandidateExtractor {
         if (MERIDIEM.containsMatchIn(text)) return true
         if (DURATION.matches(text)) return true
         if (PROGRESS.matches(text)) return true
-        if (hasStatusClock && BARE_CLOCK.matches(text)) return true
+        if (bareClockIsChrome && BARE_CLOCK.matches(text)) return true
         if (PERCENT_ANY.containsMatchIn(text)) return true
         if (VIEW_COUNT.matches(text)) return true
         if (STATUS_HINT.containsMatchIn(text)) return true

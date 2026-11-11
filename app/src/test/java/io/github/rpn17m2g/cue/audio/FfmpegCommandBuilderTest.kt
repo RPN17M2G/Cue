@@ -111,13 +111,13 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
-    fun `fingerprintCommand falls back to a twenty second offset when the clip length is unknown`() {
+    fun `fingerprintCommand always samples from the start of the audio`() {
         val args = FfmpegCommandBuilder.fingerprintCommand(input, outputPath = "fingerprint.tmp")
 
         assertEquals(
             listOf(
                 "-hide_banner", "-nostdin", "-y",
-                "-ss", "20.000", "-t", "30.000",
+                "-ss", "0.000", "-t", "30.000",
                 "-i", input,
                 "-vn", "-f", "chromaprint", "-fp_format", "base64", "fingerprint.tmp",
             ),
@@ -133,52 +133,10 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
-    fun `fingerprintCommand samples from the start without a duration for clips shorter than fifty seconds`() {
-        val args = FfmpegCommandBuilder.fingerprintCommand(
-            input,
-            outputPath = "fingerprint.tmp",
-            clipDurationMs = 49_999,
-        )
-
-        assertEquals(
-            listOf(
-                "-hide_banner", "-nostdin", "-y",
-                "-ss", "0.000",
-                "-i", input,
-                "-vn", "-f", "chromaprint", "-fp_format", "base64", "fingerprint.tmp",
-            ),
-            args,
-        )
-    }
-
-    @Test
-    fun `fingerprintCommand treats a fifty second clip as long enough for the standard slice`() {
-        val args = FfmpegCommandBuilder.fingerprintCommand(
-            input,
-            outputPath = "fingerprint.tmp",
-            clipDurationMs = 50_000,
-        )
-
-        assertTrue(args.containsAll(listOf("-ss", "10.000", "-t", "30.000")))
-    }
-
-    @Test
-    fun `fingerprintCommand samples a long clip from its middle`() {
-        val args = FfmpegCommandBuilder.fingerprintCommand(
-            input,
-            outputPath = "fingerprint.tmp",
-            clipDurationMs = 235_000,
-        )
-
-        assertTrue(args.containsAll(listOf("-ss", "102.500", "-t", "30.000")))
-    }
-
-    @Test
     fun `fingerprintCommand honours explicit slice bounds and output path`() {
         val args = FfmpegCommandBuilder.fingerprintCommand(
             inputPath = input,
             outputPath = "fingerprint.tmp",
-            clipDurationMs = 120_000,
             sliceStartMs = 5_000,
             sliceDurationMs = 10_500,
         )

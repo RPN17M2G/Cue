@@ -7,6 +7,8 @@ data class OcrRecognition(
     val rawLines: List<String>,
     val hebrewUsed: Boolean,
     val failed: Boolean,
+    /** Whole-track length read from the player UI, when one was visible. */
+    val trackDurationMs: Long? = null,
 )
 
 /**
@@ -46,6 +48,7 @@ class DualOcrRecognizer(
                 rawLines = rawLines(hebrewText, latinText),
                 hebrewUsed = true,
                 failed = latinText == null && hebrewText == null,
+                trackDurationMs = TrackDuration.fromFrameTexts(winningTexts(hebrewText, latinText)),
             )
         } else {
             OcrRecognition(
@@ -53,6 +56,7 @@ class DualOcrRecognizer(
                 rawLines = rawLines(latinText, hebrewText),
                 hebrewUsed = false,
                 failed = latinText == null && hebrewText == null,
+                trackDurationMs = TrackDuration.fromFrameTexts(winningTexts(latinText, hebrewText)),
             )
         }
     }
@@ -116,8 +120,7 @@ class DualOcrRecognizer(
         selected: List<OcrFrameText>?,
         other: List<OcrFrameText>?,
     ): List<String> {
-        val winning = selected?.takeIf { frames -> frames.any { it.lines.isNotEmpty() } } ?: other
-        val lines = winning.orEmpty().flatMap { frame -> frame.lines.map { it.text } }
+        val lines = winningTexts(selected, other).flatMap { frame -> frame.lines.map { it.text } }
         val seen = HashSet<String>()
         return lines.asSequence()
             .map(::clean)
@@ -125,6 +128,12 @@ class DualOcrRecognizer(
             .take(MAX_RAW_LINES)
             .toList()
     }
+
+    private fun winningTexts(
+        selected: List<OcrFrameText>?,
+        other: List<OcrFrameText>?,
+    ): List<OcrFrameText> =
+        selected?.takeIf { frames -> frames.any { it.lines.isNotEmpty() } } ?: other.orEmpty()
 
     private fun clean(line: String): String = line.replace(WHITESPACE, " ").trim()
 

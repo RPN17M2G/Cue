@@ -6,8 +6,9 @@ import java.io.File
 data class AudioFingerprint(
     val value: String,
     /**
-     * Length of the whole clip the fingerprint was sampled from, not of the
-     * sampled slice: AcoustID compares it against recording lengths.
+     * Length of the whole song when it is known, otherwise of the clip. AcoustID
+     * filters recordings by duration, so this must be the track length, not the
+     * length of the sampled slice.
      */
     val durationSeconds: Int,
 )
@@ -18,5 +19,5 @@ data class AudioFingerprint(
  * binary, unreadable audio, or an unusable fingerprint), not that no song matched.
  */
 fun interface FingerprintExtractor {
-    suspend fun extract(input: File, clipDurationMs: Long?): AudioFingerprint?
+    suspend fun extract(input: File, trackDurationMs: Long?): AudioFingerprint?
 }

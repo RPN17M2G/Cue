@@ -66,14 +66,28 @@ class IdentificationCascade(
         rawOcrLines: List<String> = emptyList(),
         durationMs: Long? = null,
         /**
+         * Length of the whole song when the player UI showed it. AcoustID is a
+         * full-file service: it filters candidates by the duration of the
+         * recording, so a 30 second excerpt of a 3:24 track must be reported as
+         * 204 seconds or the real recording is excluded before scoring.
+         */
+        trackDurationMs: Long? = null,
+        /**
          * Manual "use fingerprint" asks the audio stage to run even when the
          * text lookup would normally answer first. The text lookup still runs
          * as a fallback, so a forced fingerprint that finds nothing cannot
          * leave the user worse off than before.
          */
         forceFingerprint: Boolean = false,
+        /**
+         * The user corrected the title or artist and asked to search again.
+         * These values replace the OCR reading as the lookup seed, and
+         * embedded tags no longer short-circuit the run: the user explicitly
+         * asked for a fresh online search with what is on screen.
+         */
+        manualQuery: LookupSeed? = null,
     ): IdentificationOutcome {
-        if (embeddedTags != null && embeddedTags.hasCoreTags) {
+        if (manualQuery == null && embeddedTags != null && embeddedTags.hasCoreTags) {
             return IdentificationOutcome(
                 tag = embeddedTags,
                 sources = sourcesOf(embeddedTags),
@@ -84,23 +98,30 @@ class IdentificationCascade(
             )
         }
 
-        val seed = seed(embeddedTags, ocrCandidates.maxByOrNull { it.score })
+        val manualSeed = manualQuery?.takeIf { it.title.isNotBlank() }?.let(::manualSeed)
+        val seed = manualSeed ?: seed(embeddedTags, ocrCandidates.maxByOrNull { it.score })
         // A wrong top OCR line should not sink the whole lookup. The remaining
         // candidates are tried in order only when the previous one produced no
         // accepted match, so the common case still costs a single request.
-        val textSeeds = buildList {
-            add(seed)
-            ocrCandidates
-                .sortedByDescending { it.score }
-                .take(MAX_TEXT_SEEDS)
-                .forEach { candidate ->
-                    val alternative = seed(embeddedTags, candidate)
-                    val duplicate = any {
-                        it.tag.title == alternative.tag.title &&
-                            it.tag.artist == alternative.tag.artist
+        // A manual query is the user's correction: try it alone instead of
+        // falling back to the text they just replaced.
+        val textSeeds = if (manualSeed != null) {
+            listOf(manualSeed)
+        } else {
+            buildList {
+                add(seed)
+                ocrCandidates
+                    .sortedByDescending { it.score }
+                    .take(MAX_TEXT_SEEDS)
+                    .forEach { candidate ->
+                        val alternative = seed(embeddedTags, candidate)
+                        val duplicate = any {
+                            it.tag.title == alternative.tag.title &&
+                                it.tag.artist == alternative.tag.artist
+                        }
+                        if (!duplicate) add(alternative)
                     }
-                    if (!duplicate) add(alternative)
-                }
+            }
         }
         var keyRejected = false
         var fingerprintTried = false
@@ -110,7 +131,7 @@ class IdentificationCascade(
             val fingerprintSeed = FingerprintSeed(
                 title = seed.tag.title,
                 artist = seed.tag.artist.takeIf { it.isNotBlank() },
-                durationMs = durationMs,
+                durationMs = trackDurationMs ?: durationMs,
             )
             val attempt = fingerprintSafely { fingerprintLookup(fingerprintSeed) }
             fingerprintTried = true
@@ -264,6 +285,23 @@ class IdentificationCascade(
             artist = if (ocr(TagField.ARTIST)) "" else artist,
             album = if (ocr(TagField.ALBUM)) "" else album,
             albumArtist = if (ocr(TagField.ALBUM_ARTIST)) "" else albumArtist,
+        )
+    }
+
+    private fun manualSeed(query: LookupSeed): Seed {
+        val artist = query.artist?.trim().orEmpty()
+        val album = query.album?.trim().orEmpty()
+        val sources = linkedMapOf(TagField.TITLE to IdentificationSource.MANUAL)
+        if (artist.isNotEmpty()) sources[TagField.ARTIST] = IdentificationSource.MANUAL
+        if (album.isNotEmpty()) sources[TagField.ALBUM] = IdentificationSource.MANUAL
+        return Seed(
+            tag = TagDraft(
+                title = query.title.trim(),
+                artist = artist,
+                album = album,
+            ),
+            sources = sources,
+            defaultSource = IdentificationSource.MANUAL,
         )
     }
 

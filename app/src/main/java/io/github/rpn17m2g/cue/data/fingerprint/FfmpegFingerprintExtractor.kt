@@ -24,9 +24,9 @@ class FfmpegFingerprintExtractor(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : FingerprintExtractor {
 
-    override suspend fun extract(input: File, clipDurationMs: Long?): AudioFingerprint? =
+    override suspend fun extract(input: File, trackDurationMs: Long?): AudioFingerprint? =
         withContext(ioDispatcher) {
-            val durationSeconds = acoustIdDurationSeconds(clipDurationMs)
+            val durationSeconds = acoustIdDurationSeconds(trackDurationMs)
                 ?: return@withContext null
             outputDirectory.mkdirs()
             val output = File(outputDirectory, "${UUID.randomUUID()}.fingerprint")
@@ -34,7 +34,6 @@ class FfmpegFingerprintExtractor(
                 val args = FfmpegCommandBuilder.fingerprintCommand(
                     inputPath = input.absolutePath,
                     outputPath = output.absolutePath,
-                    clipDurationMs = clipDurationMs,
                 )
                 if (runner.run(args) {} != 0) return@withContext null
                 val value = output.takeIf { it.isFile }?.readText().orEmpty().trim()
@@ -50,28 +49,34 @@ class FfmpegFingerprintExtractor(
         }
 
     companion object {
-        private val FINGERPRINT = Regex("^[A-Za-z0-9+/]+={0,2}$")
+        /**
+         * Chromaprint writes base64url: real fingerprints contain `-` and `_`,
+         * not `+` and `/`. Accepting only the standard alphabet rejected every
+         * genuine fingerprint as garbled, so fingerprint lookup never ran even
+         * when FFmpeg produced a perfect result.
+         */
+        private val FINGERPRINT = Regex("^[A-Za-z0-9+/_-]+={0,2}$")
         private const val MIN_DURATION_MS = 1_000L
         private const val MIN_DURATION_SECONDS = 1
 
         /**
-         * The duration AcoustID has to be told about: the length of the whole clip
-         * the fingerprint came from, not the length of the sampled slice. AcoustID
-         * narrows candidate recordings by duration, so reporting the 30 second
-         * slice for a four minute track filters out the very recording being
-         * looked up. Measured: the same fingerprint matched at 0.94 with the real
-         * duration and returned no results at all with the slice length.
+         * The duration AcoustID has to be told about: the length of the whole
+         * song, not the length of the sampled slice. AcoustID filters candidates
+         * by duration, so reporting the 30 second slice for a four minute track
+         * filters out the very recording being looked up. Measured: the same
+         * fingerprint matched at 0.94 with the real duration and returned no
+         * results at all with the slice length.
          *
-         * An unknown clip length falls back to the slice length. That is only
-         * correct when the clip really is that short, but the probe normally
-         * knows the length and a lookup is still worth attempting.
+         * An unknown track length falls back to the slice length. That is only
+         * correct when the clip really is that short, but a lookup is still
+         * worth attempting.
          */
-        fun acoustIdDurationSeconds(clipDurationMs: Long?): Int? {
-            if (clipDurationMs == null) {
+        fun acoustIdDurationSeconds(trackDurationMs: Long?): Int? {
+            if (trackDurationMs == null) {
                 return (FfmpegCommandBuilder.DEFAULT_FINGERPRINT_DURATION_MS / 1_000L).toInt()
             }
-            if (clipDurationMs < MIN_DURATION_MS) return null
-            return (clipDurationMs / 1_000L).toInt().coerceAtLeast(MIN_DURATION_SECONDS)
+            if (trackDurationMs < MIN_DURATION_MS) return null
+            return (trackDurationMs / 1_000L).toInt().coerceAtLeast(MIN_DURATION_SECONDS)
         }
     }
 }

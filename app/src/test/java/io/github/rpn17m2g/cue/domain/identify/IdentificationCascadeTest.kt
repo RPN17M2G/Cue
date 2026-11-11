@@ -320,6 +320,28 @@ class IdentificationCascadeTest {
     }
 
     @Test
+    fun `fingerprint is told the whole track length read from the player`() = runTest {
+        var fingerprintSeed: FingerprintSeed? = null
+
+        cascade(
+            fingerprintLookup = { seed ->
+                fingerprintSeed = seed
+                FingerprintAttempt(listOf(cachedMatch.copy(source = IdentificationSource.FINGERPRINT)))
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            durationMs = 30_000,
+            trackDurationMs = 204_000,
+        )
+
+        assertEquals(204_000L, fingerprintSeed?.durationMs)
+    }
+
+    @Test
     fun `fingerprint is skipped when disabled or unconfigured`() = runTest {
         var fingerprintCalls = 0
         val cascade = cascade(
@@ -644,6 +666,91 @@ class IdentificationCascadeTest {
         assertTrue(outcome.sources.isEmpty())
         assertNull(outcome.sources[TagField.TITLE])
         assertEquals(0, lookupCalls)
+    }
+
+    @Test
+    fun `manual query searches with the corrected text instead of the ocr reading`() = runTest {
+        val seeds = mutableListOf<LookupSeed>()
+        val wrongOcr = OcrCandidate(title = "Wrong Title", artist = "Wrong Artist", score = 1.0)
+
+        val outcome = cascade(
+            lookup = { seed ->
+                seeds += seed
+                listOf(cachedMatch)
+            },
+        ).identify(
+            ocrCandidates = listOf(wrongOcr),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            durationMs = 12_345,
+            manualQuery = LookupSeed(
+                title = "Get Lucky",
+                artist = "Daft Punk",
+                durationMs = 12_345,
+            ),
+        )
+
+        assertEquals(1, seeds.size)
+        assertEquals("Get Lucky", seeds.single().title)
+        assertEquals("Daft Punk", seeds.single().artist)
+        assertEquals(12_345L, seeds.single().durationMs)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Random Access Memories", outcome.tag.album)
+        assertEquals(IdentificationSource.ITUNES, outcome.sources[TagField.ALBUM])
+    }
+
+    @Test
+    fun `manual query is not short circuited by embedded core tags`() = runTest {
+        var lookupCalls = 0
+        val embedded = TagDraft(
+            title = "Old Tag",
+            artist = "Old Artist",
+            album = "Old Album",
+        )
+
+        val outcome = cascade(
+            lookup = {
+                lookupCalls += 1
+                listOf(cachedMatch)
+            },
+        ).identify(
+            ocrCandidates = emptyList(),
+            embeddedTags = embedded,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            manualQuery = LookupSeed(title = "Get Lucky", artist = "Daft Punk"),
+        )
+
+        assertEquals(1, lookupCalls)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Daft Punk", outcome.tag.artist)
+        assertFalse(outcome.usedEmbeddedTags)
+    }
+
+    @Test
+    fun `manual query keeps the corrected text when the lookup finds nothing`() = runTest {
+        val outcome = cascade().identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            manualQuery = LookupSeed(
+                title = "My Title",
+                artist = "My Artist",
+                album = "My Album",
+            ),
+        )
+
+        assertEquals("My Title", outcome.tag.title)
+        assertEquals("My Artist", outcome.tag.artist)
+        assertEquals("My Album", outcome.tag.album)
+        assertEquals(IdentificationSource.MANUAL, outcome.sources[TagField.TITLE])
+        assertEquals(IdentificationSource.MANUAL, outcome.sources[TagField.ARTIST])
+        assertFalse(outcome.usedEmbeddedTags)
     }
 
     private fun cascade(

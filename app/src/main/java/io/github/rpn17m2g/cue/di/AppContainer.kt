@@ -29,6 +29,7 @@ import io.github.rpn17m2g.cue.domain.identify.FingerprintAttempt
 import io.github.rpn17m2g.cue.domain.identify.FingerprintExtractor
 import io.github.rpn17m2g.cue.domain.identify.IdentificationCascade
 import io.github.rpn17m2g.cue.domain.identify.IdentifySongUseCase
+import io.github.rpn17m2g.cue.domain.identify.LookupSeed
 import io.github.rpn17m2g.cue.domain.identify.SongIdentification
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.ocr.DualOcrRecognizer
@@ -190,6 +191,7 @@ class AppContainer(context: Context) {
         settings: AppSettings,
         preferHebrew: Boolean,
         forceFingerprint: Boolean = false,
+        manualQuery: LookupSeed? = null,
     ): SongIdentification = identifySongUseCase.identify(
         input = input,
         embeddedTags = embeddedTags,
@@ -197,5 +199,6 @@ class AppContainer(context: Context) {
         preferHebrew = preferHebrew,
         cascade = identificationCascade(input.path),
         forceFingerprint = forceFingerprint,
+        manualQuery = manualQuery,
     )
 }

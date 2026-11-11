@@ -268,6 +268,28 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `a position and a total in the same frame are not a title`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("0:12", 0.05f, 0.84f, 0.16f, 0.87f),
+                line("5:23", 0.80f, 0.84f, 0.95f, 0.87f),
+            )
+        }
+
+        assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
+    }
+
+    @Test
+    fun `a lone clock still survives when nothing else reads a time`() {
+        val frames = List(3) { index ->
+            frame(index, line("5:23", 0.30f, 0.45f, 0.70f, 0.52f))
+        }
+
+        assertEquals(listOf("5:23"), OcrCandidateExtractor.extract(frames).map { it.title })
+    }
+
+    @Test
     fun `meridiem and duration clocks are always filtered`() {
         assertTrue(OcrCandidateExtractor.extract(listOf(frame(0, "9:41 AM"))).isEmpty())
         assertTrue(OcrCandidateExtractor.extract(listOf(frame(0, "12:34:56 PM"))).isEmpty())

@@ -44,14 +44,19 @@ class IdentifySongUseCase(
         preferHebrew: Boolean,
         cascade: IdentificationCascade,
         forceFingerprint: Boolean = false,
+        manualQuery: LookupSeed? = null,
     ): SongIdentification = withContext(ioDispatcher) {
         val embedded = embeddedTags ?: readEmbeddedTags(input)
         var candidates: List<OcrCandidate> = emptyList()
         var rawLines: List<String> = emptyList()
+        var trackDurationMs: Long? = null
         var ocrFailed = false
         var hebrewUsed = false
 
-        if (input.kind == InputKind.VIDEO) {
+        // A manual search uses the text the user already corrected, so there
+        // is nothing to read from the frames and no reason to spend minutes
+        // running OCR again.
+        if (input.kind == InputKind.VIDEO && manualQuery == null) {
             val framesDir = File(framesRoot, UUID.randomUUID().toString())
             try {
                 val timestamps = FrameSampler.timestamps(
@@ -66,6 +71,7 @@ class IdentifySongUseCase(
                     val recognition = recognizer.recognize(frames, preferHebrew)
                     candidates = recognition.candidates
                     rawLines = recognition.rawLines
+                    trackDurationMs = recognition.trackDurationMs
                     ocrFailed = recognition.failed
                     hebrewUsed = recognition.hebrewUsed
                 }
@@ -86,7 +92,9 @@ class IdentifySongUseCase(
             acoustIdConfigured = AcoustIdKey.isPlausible(settings.acoustIdKey),
             rawOcrLines = rawLines,
             durationMs = input.durationMs,
+            trackDurationMs = trackDurationMs,
             forceFingerprint = forceFingerprint,
+            manualQuery = manualQuery,
         )
         SongIdentification(outcome, ocrFailed, hebrewUsed)
     }
