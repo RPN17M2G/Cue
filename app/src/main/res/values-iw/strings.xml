@@ -82,7 +82,7 @@
     <string name="review_no_matches">לא נמצאו התאמות.</string>
     <string name="review_search_offline">חיפושים מקוונים כבויים בהגדרות.</string>
     <string name="review_fingerprint_unavailable">לא נמצא טקסט קריא. הוסיפו מפתח AcoustID בהגדרות כדי לזהות שירים לפי טביעת אצבע של האודיו.</string>
-    <string name="review_fingerprint_key_rejected">AcoustID דחה את המפתח בהגדרות, ולכן זיהוי לפי טביעת אצבע כבוי. צריך מפתח אפליקציה מ־acoustid.org/new-application.</string>
+    <string name="review_fingerprint_key_rejected">AcoustID דחה את המפתח בהגדרות, ולכן זיהוי לפי טביעת אצבע כבוי. השתמשו במפתח האפליקציה מ־acoustid.org/my-applications ובדקו אותו בהגדרות.</string>
     <string name="review_ocr_details">טקסט מההקלטה</string>
     <string name="review_ocr_hide">הסתרת טקסט</string>
     <string name="review_ocr_failed">זיהוי הטקסט נכשל במכשיר הזה.</string>
@@ -92,6 +92,7 @@
     <string name="review_section_ocr">טקסט שזוהה</string>
     <string name="review_add_cover">הוספת עטיפה</string>
     <string name="review_rerun_ocr">סריקת טקסט מחדש</string>
+    <string name="review_search_again">חיפוש שוב</string>
     <string name="review_use_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="review_fingerprint_running">מאזין לקטע ושואל את AcoustID.</string>
     <string name="review_fingerprint_running_action">מזהה לפי טביעת אצבע…</string>
@@ -211,8 +212,14 @@
     <string name="settings_delete_source_note">פעיל כברירת מחדל לסרטונים. Cue עדיין שואל לפני מחיקה, ורק אחרי שה־MP3 נשמר והתגיות נקראו חזרה.</string>
     <string name="settings_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="settings_acoustid_key">מפתח API של AcoustID</string>
-    <string name="settings_acoustid_missing">זיהוי לפי טביעת אצבע מושבת עד להזנת מפתח AcoustID חינמי מ־acoustid.org.</string>
-    <string name="settings_acoustid_hint">משמש לזיהוי לפי טביעת אצבע כשאין טקסט קריא. נדרש מפתח אפליקציה מ־acoustid.org/new-application.</string>
+    <string name="settings_acoustid_missing">זיהוי לפי טביעת אצבע מושבת עד להזנת מפתח אפליקציה חינמי של AcoustID.</string>
+    <string name="settings_acoustid_hint">משמש לזיהוי לפי טביעת אצבע כשאין טקסט קריא. העתיקו את מפתח האפליקציה מ־acoustid.org/my-applications; מפתח המשתמש הקצר ב־acoustid.org/api-key מיועד רק לשליחת טביעות אצבע.</string>
+    <string name="settings_acoustid_check">בדיקת מפתח</string>
+    <string name="settings_acoustid_checking">בודק…</string>
+    <string name="settings_acoustid_valid">AcoustID קיבל את המפתח.</string>
+    <string name="settings_acoustid_rejected">AcoustID דחה את המפתח. השתמשו במפתח האפליקציה מ־acoustid.org/my-applications, ולא במפתח המשתמש מ־acoustid.org/api-key.</string>
+    <string name="settings_acoustid_unavailable">הפעילו חיפושים מקוונים לפני בדיקת המפתח.</string>
+    <string name="settings_acoustid_error">לא ניתן היה להגיע ל־AcoustID. בדקו את החיבור ונסו שוב.</string>
     <string name="settings_advanced">מתקדם</string>
     <string name="settings_filename_template">תבנית שם קובץ</string>
     <string name="settings_ocr_interval">מרווח פריימים ל־OCR (מילישניות)</string>

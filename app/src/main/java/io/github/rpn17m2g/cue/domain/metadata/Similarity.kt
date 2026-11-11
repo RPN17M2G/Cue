@@ -17,6 +17,15 @@ object Similarity {
     private val NON_WORD = Regex("[^\\p{L}\\p{N}\\s]+")
     private val WHITESPACE = Regex("[\\s\\u00A0]+")
 
+    /** "… feat RAYE", "… ft RAYE", "… featuring RAYE" at the end. */
+    private val FEATURE_TAIL = Regex("\\s+(?:feat|ft|featuring)\\s+.*$")
+
+    /** Common version labels a provider appends to the canonical title. */
+    private val VERSION_TAIL = Regex(
+        "\\s+(?:remaster(?:ed)?(?:\\s+\\d{4})?|radio\\s+edit|single\\s+version|" +
+            "album\\s+version|explicit|deluxe(?:\\s+edition)?|bonus\\s+track|mono|stereo)$",
+    )
+
     fun normalize(value: String): String {
         val decomposed = Normalizer.normalize(value, Normalizer.Form.NFD)
         return decomposed.replace(MARKS, "")
@@ -39,13 +48,35 @@ object Similarity {
     fun tokenOverlap(a: String, b: String): Double = tokenOverlapNormalized(normalize(a), normalize(b))
 
     fun textSimilarity(a: String, b: String): Double {
-        val left = normalize(a)
-        val right = normalize(b)
+        val left = comparable(normalize(a))
+        val right = comparable(normalize(b))
         if (left.isEmpty() && right.isEmpty()) return 1.0
         if (left.isEmpty() || right.isEmpty()) return 0.0
         val overlap = tokenOverlapNormalized(left, right)
         val edit = 1.0 - distance(left, right).toDouble() / maxOf(left.length, right.length)
         return 0.5 * overlap + 0.5 * edit
+    }
+
+    /**
+     * Drops a trailing feature credit or version qualifier from text that is
+     * already normalized, so "By Your Side (feat. RAYE)" and "By Your Side"
+     * compare as the same song.
+     *
+     * Without this the extra credit halves the title score, which is enough for
+     * a same-titled song by a different artist to outrank the real one. The
+     * match itself keeps the full title for display and tagging.
+     */
+    private fun comparable(normalized: String): String {
+        var current = normalized
+        repeat(2) {
+            val next = current
+                .replace(FEATURE_TAIL, "")
+                .replace(VERSION_TAIL, "")
+                .trim()
+            if (next == current) return current
+            current = next
+        }
+        return current
     }
 
     private fun tokenOverlapNormalized(left: String, right: String): Double {

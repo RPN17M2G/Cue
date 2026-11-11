@@ -12,6 +12,7 @@ import io.github.rpn17m2g.cue.di.AppContainer
 import io.github.rpn17m2g.cue.domain.identify.ArtworkPolicy
 import io.github.rpn17m2g.cue.domain.identify.Confidence
 import io.github.rpn17m2g.cue.domain.identify.ConfidenceTier
+import io.github.rpn17m2g.cue.domain.identify.LookupSeed
 import io.github.rpn17m2g.cue.domain.identify.SongIdentification
 import io.github.rpn17m2g.cue.domain.metadata.TagField
 import io.github.rpn17m2g.cue.domain.model.Artwork
@@ -66,6 +67,8 @@ data class ReviewUiState(
     val rawOcrLines: List<String> = emptyList(),
     val ocrAttempted: Boolean = false,
     val ocrFailed: Boolean = false,
+    /** Title or artist was corrected, so "search again" can use that text. */
+    val editedTitleOrArtist: Boolean = false,
     val fingerprintAvailable: Boolean = false,
     val fingerprintKeyRejected: Boolean = false,
     /** The last run actually asked AcoustID, and whether it answered. */
@@ -202,6 +205,7 @@ class ReviewViewModel(
                 draft = transform(current.draft),
                 sources = current.sources + (field to IdentificationSource.MANUAL),
                 errorRes = null,
+                editedTitleOrArtist = editedIdentityFields(),
             )
         }
     }
@@ -271,12 +275,13 @@ class ReviewViewModel(
                 draft = current.draft.withField(field, value),
                 sources = sources,
                 errorRes = null,
+                editedTitleOrArtist = editedIdentityFields(),
             )
         }
     }
 
     fun retryIdentification() {
-        startIdentification(forceFingerprint = false)
+        startIdentification(forceFingerprint = false, manualQuery = editedQuery())
     }
 
     /**
@@ -285,16 +290,42 @@ class ReviewViewModel(
      * lookup still runs when the fingerprint has no answer.
      */
     fun fingerprintLookup() {
-        startIdentification(forceFingerprint = true)
+        startIdentification(forceFingerprint = true, manualQuery = editedQuery())
     }
 
-    private fun startIdentification(forceFingerprint: Boolean) {
+    private fun startIdentification(forceFingerprint: Boolean, manualQuery: LookupSeed?) {
         if (_state.value.identifying) return
         identifyJob?.cancel()
         identifyJob = viewModelScope.launch {
-            identifyNow(forceFingerprint = forceFingerprint)
+            identifyNow(forceFingerprint = forceFingerprint, manualQuery = manualQuery)
         }
     }
+
+    /**
+     * The current title/artist when the user corrected either one. A plain
+     * retry keeps using the OCR reading; a corrected field means the user
+     * already knows better, so the next lookup has to use their text.
+     *
+     * The album is deliberately left out: the user corrected the song, not
+     * its release, and sending the old album would pin it as a manual value
+     * and stop the match from filling the right one.
+     */
+    private fun editedQuery(): LookupSeed? {
+        if (!editedIdentityFields()) return null
+        val draft = _state.value.draft
+        val title = draft.title.trim()
+        if (title.isEmpty()) return null
+        return LookupSeed(
+            title = title,
+            artist = draft.artist.trim().takeIf { it.isNotEmpty() },
+            durationMs = _state.value.durationMs,
+        )
+    }
+
+    private fun editedIdentityFields(): Boolean = editedFields.any(::isIdentityField)
+
+    private fun isIdentityField(field: TagField): Boolean =
+        field == TagField.TITLE || field == TagField.ARTIST
 
     fun search(query: String) {
         val term = query.trim()
@@ -414,6 +445,7 @@ class ReviewViewModel(
                 searchResults = current.searchResults - match,
                 flaggedFields = flagged,
                 errorRes = null,
+                editedTitleOrArtist = (editedFields + appliedFields).any(::isIdentityField),
             )
         }
         editedFields += appliedFields
@@ -603,7 +635,10 @@ class ReviewViewModel(
         _state.update { it.copy(artworkPickerOpen = false, artworkApplying = false) }
     }
 
-    private suspend fun identifyNow(forceFingerprint: Boolean = false) {
+    private suspend fun identifyNow(
+        forceFingerprint: Boolean = false,
+        manualQuery: LookupSeed? = null,
+    ) {
         val input = _state.value.input ?: return
         val generation = ++identifyGeneration
         settings = container.settingsRepository.settings.first()
@@ -626,6 +661,7 @@ class ReviewViewModel(
                 settings = settings,
                 preferHebrew = settings.language.prefersHebrew(systemLanguage()),
                 forceFingerprint = forceFingerprint,
+                manualQuery = manualQuery,
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -637,13 +673,21 @@ class ReviewViewModel(
             _state.update {
                 it.copy(
                     identifying = false,
-                    ocrAttempted = input.kind == InputKind.VIDEO,
-                    ocrFailed = input.kind == InputKind.VIDEO,
+                    ocrAttempted = if (manualQuery != null) {
+                        it.ocrAttempted
+                    } else {
+                        input.kind == InputKind.VIDEO
+                    },
+                    ocrFailed = if (manualQuery != null) {
+                        it.ocrFailed
+                    } else {
+                        input.kind == InputKind.VIDEO
+                    },
                 )
             }
             return
         }
-        applyIdentification(result)
+        applyIdentification(result, preserveOcr = manualQuery != null)
         applyAutoArtwork(result, generation)
         // The refresh button stays disabled until the cover settles, so a
         // second lookup cannot race the download.
@@ -691,7 +735,7 @@ class ReviewViewModel(
         }
     }
 
-    private fun applyIdentification(result: SongIdentification) {
+    private fun applyIdentification(result: SongIdentification, preserveOcr: Boolean = false) {
         _state.update { current ->
             val sources = current.sources.toMutableMap()
             // Only the fields this run actually took from the provider can be
@@ -725,9 +769,15 @@ class ReviewViewModel(
                 },
                 matched = best,
                 flaggedFields = flagged,
-                rawOcrLines = result.outcome.rawOcrLines,
-                ocrAttempted = current.input?.kind == InputKind.VIDEO,
-                ocrFailed = result.ocrFailed,
+                // A manual search skips OCR, so the lines and failure note
+                // already on screen stay valid instead of being wiped.
+                rawOcrLines = if (preserveOcr) current.rawOcrLines else result.outcome.rawOcrLines,
+                ocrAttempted = if (preserveOcr) {
+                    current.ocrAttempted
+                } else {
+                    current.input?.kind == InputKind.VIDEO
+                },
+                ocrFailed = if (preserveOcr) current.ocrFailed else result.ocrFailed,
                 fingerprintKeyRejected = result.outcome.fingerprintKeyRejected,
                 fingerprintTried = result.outcome.fingerprintTried,
                 usedFingerprint = result.outcome.usedFingerprint,

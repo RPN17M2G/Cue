@@ -1305,6 +1305,9 @@ private fun IdentificationCard(
             )
         }
 
+        // After a correction, the retry action searches with the text on
+        // screen instead of re-reading the frames.
+        val searchAgain = state.editedTitleOrArtist && state.draft.title.isNotBlank()
         FlowRow(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1312,8 +1315,10 @@ private fun IdentificationCard(
         ) {
             if (isVideo) {
                 ActionChip(
-                    label = stringResource(R.string.review_rerun_ocr),
-                    icon = Icons.Default.Refresh,
+                    label = stringResource(
+                        if (searchAgain) R.string.review_search_again else R.string.review_rerun_ocr,
+                    ),
+                    icon = if (searchAgain) Icons.Default.Search else Icons.Default.Refresh,
                     enabled = !state.identifying,
                     onClick = onRetry,
                 )
@@ -1334,8 +1339,10 @@ private fun IdentificationCard(
                 }
             } else {
                 ActionChip(
-                    label = stringResource(R.string.review_look_up_again),
-                    icon = Icons.Default.Refresh,
+                    label = stringResource(
+                        if (searchAgain) R.string.review_search_again else R.string.review_look_up_again,
+                    ),
+                    icon = if (searchAgain) Icons.Default.Search else Icons.Default.Refresh,
                     enabled = !state.identifying,
                     onClick = onRetry,
                 )
@@ -2506,6 +2513,8 @@ private fun SearchSheet(
                 singleLine = true,
                 shape = tokens.fieldShape,
                 colors = cueOutlinedFieldColors(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch(query.trim()) }),
                 trailingIcon = {
                     if (state.searching) {
                         CircularProgressIndicator(

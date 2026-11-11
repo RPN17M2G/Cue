@@ -82,7 +82,7 @@
     <string name="review_no_matches">No matches found.</string>
     <string name="review_search_offline">Online lookups are turned off in Settings.</string>
     <string name="review_fingerprint_unavailable">No readable text was found. Add an AcoustID key in Settings to identify songs by audio fingerprint.</string>
-    <string name="review_fingerprint_key_rejected">AcoustID rejected the key in Settings, so fingerprint lookup is off. It has to be an application key from acoustid.org/new-application.</string>
+    <string name="review_fingerprint_key_rejected">AcoustID rejected the key in Settings, so fingerprint lookup is off. Use the application key from acoustid.org/my-applications, then check it in Settings.</string>
     <string name="review_ocr_details">Text from the recording</string>
     <string name="review_ocr_hide">Hide text</string>
     <string name="review_ocr_failed">Text recognition failed on this device.</string>
@@ -92,6 +92,7 @@
     <string name="review_section_ocr">Recognised text</string>
     <string name="review_add_cover">Add cover</string>
     <string name="review_rerun_ocr">Re-run text scan</string>
+<string name="review_search_again">Search again</string>
     <string name="review_use_fingerprint">Use fingerprint</string>
     <string name="review_fingerprint_running">Listening to the clip and asking AcoustID.</string>
     <string name="review_fingerprint_running_action">Fingerprinting…</string>
@@ -211,8 +212,14 @@
     <string name="settings_delete_source_note">On by default for videos. Cue still asks before deleting, and only after the MP3 is saved and its tags are read back.</string>
     <string name="settings_fingerprint">Fingerprint matching</string>
     <string name="settings_acoustid_key">AcoustID API key</string>
-    <string name="settings_acoustid_missing">Fingerprint lookup is off until a free AcoustID key from acoustid.org is entered.</string>
-    <string name="settings_acoustid_hint">Used for fingerprint lookup when the text cannot be read. Lookup needs an application key from acoustid.org/new-application.</string>
+    <string name="settings_acoustid_missing">Fingerprint lookup is off until a free AcoustID application key is entered.</string>
+    <string name="settings_acoustid_hint">Used for fingerprint lookup when the text cannot be read. Copy the application key from acoustid.org/my-applications — the shorter user key on acoustid.org/api-key is only for submitting fingerprints.</string>
+    <string name="settings_acoustid_check">Check key</string>
+    <string name="settings_acoustid_checking">Checking…</string>
+    <string name="settings_acoustid_valid">AcoustID accepted this key.</string>
+    <string name="settings_acoustid_rejected">AcoustID rejected this key. Use the application key from acoustid.org/my-applications, not the user key from acoustid.org/api-key.</string>
+    <string name="settings_acoustid_unavailable">Turn on online lookups before checking the key.</string>
+    <string name="settings_acoustid_error">Could not reach AcoustID. Check the connection and try again.</string>
     <string name="settings_advanced">Advanced</string>
     <string name="settings_filename_template">Filename template</string>
     <string name="settings_ocr_interval">OCR frame interval (ms)</string>

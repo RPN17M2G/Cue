@@ -83,4 +83,46 @@ class SimilarityTest {
         assertEquals(IdentificationSource.ITUNES, ranked.first().source)
         assertTrue(ranked.first().score > ranked.last().score)
     }
+
+    @Test
+    fun `feature credit does not let a same-titled song outrank the right artist`() {
+        val query = TagDraft(title = "By Your Side", artist = "Jonas Blue")
+        val matches = listOf(
+            MetadataMatch(
+                title = "By Your Side",
+                artist = "Sade",
+                album = "Lovers Rock",
+                source = IdentificationSource.ITUNES,
+                score = 0.78,
+            ),
+            MetadataMatch(
+                title = "By Your Side (feat. RAYE)",
+                artist = "Jonas Blue",
+                album = "By Your Side (feat. RAYE) - Single",
+                source = IdentificationSource.ITUNES,
+                score = 0.68,
+            ),
+        )
+
+        val ranked = MetadataMatcher.rank(query, matches)
+
+        assertEquals("By Your Side (feat. RAYE)", ranked.first().title)
+        assertEquals("Jonas Blue", ranked.first().artist)
+        assertEquals(1.0, ranked.first().score, 0.0)
+    }
+
+    @Test
+    fun `version labels are ignored when comparing titles`() {
+        assertEquals(1.0, Similarity.textSimilarity("Get Lucky", "Get Lucky - Radio Edit"), 0.0)
+        assertEquals(1.0, Similarity.textSimilarity("Get Lucky", "Get Lucky (Remastered 2011)"), 0.0)
+        assertEquals(1.0, Similarity.textSimilarity("Get Lucky", "Get Lucky (Album Version)"), 0.0)
+    }
+
+    @Test
+    fun `a word that merely contains feat is not treated as a credit`() {
+        // "defeat" must not collapse to "de", which would make it a perfect
+        // match for any short query.
+        assertTrue(Similarity.textSimilarity("Defeat", "De") < 1.0)
+        assertEquals(1.0, Similarity.textSimilarity("Song feat Artist", "Song"), 0.0)
+    }
 }

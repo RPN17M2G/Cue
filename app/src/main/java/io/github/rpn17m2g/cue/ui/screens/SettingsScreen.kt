@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,16 +37,20 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -75,6 +80,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val viewModel = cueViewModel { SettingsViewModel(context.appContainer()) }
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val keyCheck by viewModel.keyCheck.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -114,7 +120,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onTheme = { theme -> viewModel.update { it.copy(theme = theme) } },
                 onNetwork = { enabled -> viewModel.update { it.copy(networkLookups = enabled) } },
                 onFingerprint = { enabled -> viewModel.update { it.copy(fingerprintEnabled = enabled) } },
-                onAcoustIdKey = { key -> viewModel.update { it.copy(acoustIdKey = key) } },
+                onAcoustIdKey = { key ->
+                    viewModel.clearKeyCheck()
+                    viewModel.update { it.copy(acoustIdKey = key) }
+                },
+                keyCheck = keyCheck,
+                onCheckKey = viewModel::checkAcoustIdKey,
                 onTemplate = { template -> viewModel.update { it.copy(filenameTemplate = template) } },
                 onDeleteSource = { enabled -> viewModel.update { it.copy(deleteSourceAfterSave = enabled) } },
                 onScanWindow = { seconds -> viewModel.update { it.copy(scanWindowSeconds = seconds) } },
@@ -137,6 +148,8 @@ private fun SettingsBody(
     onNetwork: (Boolean) -> Unit,
     onFingerprint: (Boolean) -> Unit,
     onAcoustIdKey: (String) -> Unit,
+    keyCheck: KeyCheck,
+    onCheckKey: () -> Unit,
     onTemplate: (String) -> Unit,
     onDeleteSource: (Boolean) -> Unit,
     onScanWindow: (Int) -> Unit,
@@ -151,14 +164,11 @@ private fun SettingsBody(
             labelRes = QualityPreset::labelRes,
             onSelect = onQuality,
         )
-        OutlinedTextField(
+        StoredTextField(
             value = settings.outputFolder,
             onValueChange = onOutputFolder,
             label = { Text(stringResource(R.string.settings_output_folder)) },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = MaterialTheme.shapes.medium,
-            colors = settingsFieldColors(),
         )
     }
 
@@ -227,7 +237,7 @@ private fun SettingsBody(
             onCheckedChange = onFingerprint,
         )
         SettingsDivider()
-        OutlinedTextField(
+        StoredTextField(
             value = settings.acoustIdKey,
             onValueChange = onAcoustIdKey,
             label = { Text(stringResource(R.string.settings_acoustid_key)) },
@@ -243,21 +253,55 @@ private fun SettingsBody(
                 )
             },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = MaterialTheme.shapes.medium,
-            colors = settingsFieldColors(),
         )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(
+                onClick = onCheckKey,
+                enabled = settings.acoustIdKey.isNotBlank() && keyCheck != KeyCheck.CHECKING,
+            ) {
+                if (keyCheck == KeyCheck.CHECKING) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                }
+                Text(
+                    stringResource(
+                        if (keyCheck == KeyCheck.CHECKING) {
+                            R.string.settings_acoustid_checking
+                        } else {
+                            R.string.settings_acoustid_check
+                        },
+                    ),
+                )
+            }
+        }
+        val checkMessage = when (keyCheck) {
+            KeyCheck.VALID -> R.string.settings_acoustid_valid
+            KeyCheck.REJECTED -> R.string.settings_acoustid_rejected
+            KeyCheck.UNAVAILABLE -> R.string.settings_acoustid_unavailable
+            KeyCheck.ERROR -> R.string.settings_acoustid_error
+            KeyCheck.IDLE, KeyCheck.CHECKING -> null
+        }
+        if (checkMessage != null) {
+            Text(
+                text = stringResource(checkMessage),
+                style = MaterialTheme.typography.bodySmall,
+                color = when (keyCheck) {
+                    KeyCheck.VALID -> MaterialTheme.colorScheme.primary
+                    KeyCheck.REJECTED, KeyCheck.ERROR -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
     }
 
     SettingsSection(R.string.settings_advanced) {
-        OutlinedTextField(
+        StoredTextField(
             value = settings.filenameTemplate,
             onValueChange = onTemplate,
             label = { Text(stringResource(R.string.settings_filename_template)) },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = MaterialTheme.shapes.medium,
-            colors = settingsFieldColors(),
         )
         IntSettingField(
             value = settings.scanWindowSeconds,
@@ -284,6 +328,45 @@ private fun SettingsBody(
             onValue = onHttpRetries,
         )
     }
+}
+
+/**
+ * A text setting that lives in DataStore.
+ *
+ * Binding the field straight to the stored value drops keystrokes: the write
+ * is asynchronous, so the next letter can arrive before the flow emits the
+ * previous one and the field re-renders with stale text. An API key typed that
+ * way ends up scrambled and then rejected. The local draft makes typing
+ * immediate; the stored value is adopted only while the field is not focused,
+ * so an external change still lands.
+ */
+@Composable
+private fun StoredTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    supportingText: (@Composable () -> Unit)? = null,
+) {
+    var draft by rememberSaveable { mutableStateOf(value) }
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(value, focused) {
+        if (!focused && value != draft) draft = value
+    }
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { input ->
+            draft = input
+            onValueChange(input)
+        },
+        label = label,
+        supportingText = supportingText,
+        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        singleLine = singleLine,
+        shape = MaterialTheme.shapes.medium,
+        colors = settingsFieldColors(),
+    )
 }
 
 @Composable
