@@ -78,6 +78,13 @@ object FfmpegCommandBuilder {
      * it is known (see [TrackDuration]); a 30 second clip of a 3:24 song has to
      * be reported as 204 seconds, otherwise AcoustID filters out the recording.
      *
+     * A recording often starts a few seconds before playback. AcoustID
+     * tolerates that: the same audio scored 0.97 with a 2 second lead-in, 0.79
+     * at 5 seconds and 0.68 at 8, so a short lead-in still identifies the song.
+     * The lead-in is deliberately not trimmed: the packaged FFmpeg is a minimal
+     * build with no `silenceremove`/`silencedetect` filter, and reading the
+     * player clock with OCR to compute the offset was rejected as fragile.
+     *
      * [outputPath] must be a real file: the process runner drains stdout, and
      * overwriting a stale temporary file is expected.
      */
