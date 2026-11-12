@@ -1,6 +1,10 @@
 package io.github.rpn17m2g.cue.domain.ocr
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class OcrRecognition(
     val candidates: List<OcrCandidate>,
@@ -9,6 +13,10 @@ data class OcrRecognition(
     val failed: Boolean,
     /** Whole-track length read from the player UI, when one was visible. */
     val trackDurationMs: Long? = null,
+    /** Wall time each pass took, and the wall time of the parallel section. */
+    val latinOcrMs: Long = 0,
+    val hebrewOcrMs: Long = 0,
+    val ocrMs: Long = 0,
 )
 
 /**
@@ -25,6 +33,15 @@ class DualOcrRecognizer(
     private val hebrew: OcrEngine,
 ) {
 
+    /**
+     * ML Kit's recognizer is shared and the review screen can start a second
+     * identification before the first one is done (the generation guard drops
+     * the stale result, not the work). One OCR batch at a time keeps the shared
+     * engine out of two callers' hands; the two scripts still run in parallel
+     * inside a batch.
+     */
+    private val batchLock = Mutex()
+
     suspend fun recognize(
         frames: List<OcrFrame>,
         preferHebrew: Boolean,
@@ -33,33 +50,64 @@ class DualOcrRecognizer(
             return OcrRecognition(emptyList(), emptyList(), hebrewUsed = false, failed = true)
         }
 
-        val latinText = readSafely(latin, frames)
-        val latinCandidates = candidates(frames, latinText)
-        val latinScore = strongScore(latinCandidates)
+        return batchLock.withLock {
+            coroutineScope {
+                val sectionStarted = System.nanoTime()
+                // The two engines read the same frames independently, so there
+                // is no reason to pay for one after the other. Both always run;
+                // only the wall time changes.
+                val latinJob = async { timed { readSafely(latin, frames) } }
+                val hebrewJob = async { timed { readSafely(hebrew, frames) } }
+                val (latinText, latinMs) = latinJob.await()
+                val (hebrewText, hebrewMs) = hebrewJob.await()
+                val ocrMs = elapsedMs(sectionStarted)
 
-        val hebrewText = readSafely(hebrew, frames)
-        val hebrewCandidates = candidates(frames, hebrewText)
-        val hebrewScore = strongScore(hebrewCandidates)
-        val useHebrew = chooseHebrew(preferHebrew, latinScore, hebrewScore)
+                val latinCandidates = candidates(frames, latinText)
+                val latinScore = strongScore(latinCandidates)
 
-        return if (useHebrew) {
-            OcrRecognition(
-                candidates = hebrewCandidates,
-                rawLines = rawLines(hebrewText, latinText),
-                hebrewUsed = true,
-                failed = latinText == null && hebrewText == null,
-                trackDurationMs = TrackDuration.fromFrameTexts(winningTexts(hebrewText, latinText)),
-            )
-        } else {
-            OcrRecognition(
-                candidates = latinCandidates,
-                rawLines = rawLines(latinText, hebrewText),
-                hebrewUsed = false,
-                failed = latinText == null && hebrewText == null,
-                trackDurationMs = TrackDuration.fromFrameTexts(winningTexts(latinText, hebrewText)),
-            )
+                val hebrewCandidates = candidates(frames, hebrewText)
+                val hebrewScore = strongScore(hebrewCandidates)
+                val useHebrew = chooseHebrew(preferHebrew, latinScore, hebrewScore)
+
+                if (useHebrew) {
+                    OcrRecognition(
+                        candidates = hebrewCandidates,
+                        rawLines = rawLines(hebrewText, latinText),
+                        hebrewUsed = true,
+                        failed = latinText == null && hebrewText == null,
+                        trackDurationMs = TrackDuration.fromFrameTexts(
+                            winningTexts(hebrewText, latinText),
+                        ),
+                        latinOcrMs = latinMs,
+                        hebrewOcrMs = hebrewMs,
+                        ocrMs = ocrMs,
+                    )
+                } else {
+                    OcrRecognition(
+                        candidates = latinCandidates,
+                        rawLines = rawLines(latinText, hebrewText),
+                        hebrewUsed = false,
+                        failed = latinText == null && hebrewText == null,
+                        trackDurationMs = TrackDuration.fromFrameTexts(
+                            winningTexts(latinText, hebrewText),
+                        ),
+                        latinOcrMs = latinMs,
+                        hebrewOcrMs = hebrewMs,
+                        ocrMs = ocrMs,
+                    )
+                }
+            }
         }
     }
+
+    private suspend fun <T> timed(block: suspend () -> T): Pair<T, Long> {
+        val started = System.nanoTime()
+        val value = block()
+        return value to elapsedMs(started)
+    }
+
+    private fun elapsedMs(startedNanos: Long): Long =
+        (System.nanoTime() - startedNanos) / 1_000_000L
 
     /**
      * The preferred script wins a near tie, but a clearly better reading from

@@ -17,6 +17,7 @@ class CompositeMetadataResolver(
     private val primary: MetadataProvider,
     private val fallback: MetadataProvider,
     private val networkGate: NetworkGate = NetworkGate.Enabled,
+    private val cache: LookupCache = LookupCache(),
 ) : MetadataResolver {
 
     override suspend fun search(query: MetadataQuery): List<MetadataMatch> =
@@ -27,22 +28,28 @@ class CompositeMetadataResolver(
 
     suspend fun searchResult(query: MetadataQuery): LookupResult<List<MetadataMatch>> {
         if (!networkGate.isNetworkEnabled()) return LookupResult.Success(emptyList())
+        cache.get(query)?.let { return LookupResult.Success(it) }
 
         val primaryResult = primary.search(query)
         val primaryMatches = primaryResult.matchesOrEmpty()
         if (primaryMatches.isNotEmpty()) {
-            return LookupResult.Success(primaryMatches.dedupeAndSort())
+            return LookupResult.Success(primaryMatches.dedupeAndSort().cached(query))
         }
 
         val fallbackResult = fallback.search(query)
         val fallbackMatches = fallbackResult.matchesOrEmpty()
         if (fallbackMatches.isNotEmpty()) {
-            return LookupResult.Success(fallbackMatches.dedupeAndSort())
+            return LookupResult.Success(fallbackMatches.dedupeAndSort().cached(query))
         }
 
         val error = (fallbackResult as? LookupResult.Failure)?.error
             ?: (primaryResult as? LookupResult.Failure)?.error
         return error?.let { LookupResult.Failure(it) } ?: LookupResult.Success(emptyList())
+    }
+
+    private fun List<MetadataMatch>.cached(query: MetadataQuery): List<MetadataMatch> {
+        cache.put(query, this)
+        return this
     }
 
     private fun LookupResult<List<MetadataMatch>>.matchesOrEmpty(): List<MetadataMatch> =

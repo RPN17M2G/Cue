@@ -173,6 +173,70 @@ class CompositeMetadataResolverTest {
         assertTrue(server.requestCount >= 2)
     }
 
+    @Test
+    fun `a repeated query is served from the cache`() = runTest {
+        val primary = FakeProvider(
+            IdentificationSource.ITUNES,
+            LookupResult.Success(listOf(match("Hello", "Adele", 0.95))),
+        )
+        val fallback = FakeProvider(IdentificationSource.MUSICBRAINZ, LookupResult.Success(emptyList()))
+        val resolver = CompositeMetadataResolver(primary, fallback)
+
+        resolver.search(MetadataQuery("Hello", "Adele"))
+        val second = resolver.search(MetadataQuery("Hello", "Adele"))
+
+        assertEquals(1, primary.calls)
+        assertEquals(0, fallback.calls)
+        assertEquals("Hello", second.single().title)
+    }
+
+    @Test
+    fun `queries that normalize the same share a cache entry`() = runTest {
+        val primary = FakeProvider(
+            IdentificationSource.ITUNES,
+            LookupResult.Success(listOf(match("Hello", "Adele", 0.95))),
+        )
+        val fallback = FakeProvider(IdentificationSource.MUSICBRAINZ, LookupResult.Success(emptyList()))
+        val resolver = CompositeMetadataResolver(primary, fallback)
+
+        resolver.search(MetadataQuery("Hello", "Adele"))
+        resolver.search(MetadataQuery("hello!", "ADELE"))
+
+        assertEquals(1, primary.calls)
+    }
+
+    @Test
+    fun `a failed lookup is retried instead of cached`() = runTest {
+        val primary = FakeProvider(
+            IdentificationSource.ITUNES,
+            LookupResult.Failure(LookupError.Network()),
+        )
+        val fallback = FakeProvider(
+            IdentificationSource.MUSICBRAINZ,
+            LookupResult.Failure(LookupError.Network()),
+        )
+        val resolver = CompositeMetadataResolver(primary, fallback)
+
+        resolver.searchResult(MetadataQuery("Hello", "Adele"))
+        resolver.searchResult(MetadataQuery("Hello", "Adele"))
+
+        assertEquals(2, primary.calls)
+        assertEquals(2, fallback.calls)
+    }
+
+    @Test
+    fun `an empty answer is retried instead of cached`() = runTest {
+        val primary = FakeProvider(IdentificationSource.ITUNES, LookupResult.Success(emptyList()))
+        val fallback = FakeProvider(IdentificationSource.MUSICBRAINZ, LookupResult.Success(emptyList()))
+        val resolver = CompositeMetadataResolver(primary, fallback)
+
+        resolver.search(MetadataQuery("Hello", "Adele"))
+        resolver.search(MetadataQuery("Hello", "Adele"))
+
+        assertEquals(2, primary.calls)
+        assertEquals(2, fallback.calls)
+    }
+
     private companion object {
         const val MB_RESPONSE = """
             {

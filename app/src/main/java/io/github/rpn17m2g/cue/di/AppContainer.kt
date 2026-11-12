@@ -1,6 +1,8 @@
 package io.github.rpn17m2g.cue.di
 
 import android.content.Context
+import android.util.Log
+import io.github.rpn17m2g.cue.BuildConfig
 import io.github.rpn17m2g.cue.audio.FfmpegProcessRunner
 import io.github.rpn17m2g.cue.audio.FfmpegRuntime
 import io.github.rpn17m2g.cue.data.artwork.ArtworkRepository
@@ -232,18 +234,25 @@ class AppContainer(context: Context) {
             forceFingerprint = forceFingerprint,
             manualQuery = manualQuery,
         )
-        if (!settings.networkLookups || !settings.enrichmentEnabled) return identification
+        if (!settings.networkLookups || !settings.enrichmentEnabled) {
+            logTimings(input, identification)
+            return identification
+        }
 
         val outcome = identification.outcome
         val confident = outcome.usedEmbeddedTags ||
             outcome.bestMatch?.let { Confidence.tier(it.score) == ConfidenceTier.ACCEPTED } == true
-        if (!confident) return identification
+        if (!confident) {
+            logTimings(input, identification)
+            return identification
+        }
 
         val clients = metadataClients()
         val durationSeconds = (identification.trackDurationMs ?: input.durationMs)
             ?.takeIf { it > 0L }
             ?.let { (it / 1_000L).toInt() }
             ?.takeIf { it > 0 }
+        val enrichmentStarted = System.nanoTime()
         val enriched = MetadataEnricher(
             lyrics = { title, artist, album, duration ->
                 clients.lyrics.fetchOrNull(title, artist, album, duration)
@@ -253,12 +262,37 @@ class AppContainer(context: Context) {
             },
             networkGate = NetworkGate { settings.networkLookups },
         ).enrich(outcome.tag, durationSeconds)
+        val enrichmentMs = (System.nanoTime() - enrichmentStarted) / 1_000_000L
 
-        return identification.copy(
+        val enrichedIdentification = identification.copy(
             outcome = outcome.copy(
                 tag = enriched.tag,
                 sources = outcome.sources + enriched.sources,
             ),
+            timings = identification.timings.copy(enrichmentMs = enrichmentMs),
         )
+        logTimings(input, enrichedIdentification)
+        return enrichedIdentification
+    }
+
+    /**
+     * One line per identification in debug builds. Stage timings make a slow
+     * recording attributable: frame extraction, the parallel OCR passes, the
+     * network cascade, and enrichment are reported separately.
+     */
+    private fun logTimings(input: ResolvedInput, identification: SongIdentification) {
+        if (!BuildConfig.DEBUG) return
+        val timings = identification.timings
+        Log.d(
+            TAG,
+            "identify ${input.displayName}: frames=${timings.framesMs}ms " +
+                "ocr=${timings.ocrMs}ms (latin=${timings.latinOcrMs}ms, " +
+                "hebrew=${timings.hebrewOcrMs}ms) cascade=${timings.cascadeMs}ms " +
+                "enrichment=${timings.enrichmentMs}ms total=${timings.totalMs}ms",
+        )
+    }
+
+    private companion object {
+        const val TAG = "CueTimings"
     }
 }

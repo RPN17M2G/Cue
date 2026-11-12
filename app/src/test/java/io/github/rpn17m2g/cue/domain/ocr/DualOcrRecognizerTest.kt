@@ -2,6 +2,8 @@ package io.github.rpn17m2g.cue.domain.ocr
 
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -144,6 +146,44 @@ class DualOcrRecognizerTest {
         ).recognize(frames, preferHebrew = false)
 
         assertEquals(listOf("Believer"), recognition.rawLines)
+    }
+
+    @Test
+    fun `the two passes run concurrently`() = runTest {
+        val active = AtomicInteger(0)
+        val peak = AtomicInteger(0)
+
+        fun engine(source: IdentificationSource): OcrEngine = object : OcrEngine {
+            override val source: IdentificationSource = source
+
+            override suspend fun recognize(frames: List<OcrFrame>): List<OcrFrameText> {
+                val running = active.incrementAndGet()
+                peak.updateAndGet { maxOf(it, running) }
+                delay(50)
+                active.decrementAndGet()
+                return frames.map { frame ->
+                    OcrFrameText(frame.timestampMs, listOf(OcrLine("Daft Punk - Get Lucky")))
+                }
+            }
+        }
+
+        DualOcrRecognizer(
+            latin = engine(IdentificationSource.OCR_LATIN),
+            hebrew = engine(IdentificationSource.OCR_HEBREW),
+        ).recognize(frames, preferHebrew = false)
+
+        assertEquals(2, peak.get())
+    }
+
+    @Test
+    fun `both passes always run even when the first one is plausible`() = runTest {
+        val latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky"))
+        val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("דפט פאנק - גט לאקי"))
+
+        DualOcrRecognizer(latin = latin, hebrew = hebrew).recognize(frames, preferHebrew = false)
+
+        assertEquals(1, latin.calls)
+        assertEquals(1, hebrew.calls)
     }
 
     private fun repeated(line: String): List<List<OcrLine>> =

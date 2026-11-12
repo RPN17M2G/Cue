@@ -23,6 +23,8 @@ data class SongIdentification(
     val hebrewOcrUsed: Boolean,
     /** Length shown by the player, when OCR read it; used for lyrics and AcoustID. */
     val trackDurationMs: Long? = null,
+    /** Where the wall time went; logged in debug builds. */
+    val timings: StageTimings = StageTimings(),
 )
 
 /**
@@ -54,6 +56,10 @@ class IdentifySongUseCase(
         var trackDurationMs: Long? = null
         var ocrFailed = false
         var hebrewUsed = false
+        var framesMs = 0L
+        var latinOcrMs = 0L
+        var hebrewOcrMs = 0L
+        var ocrMs = 0L
 
         // A manual search uses the text the user already corrected, so there
         // is nothing to read from the frames and no reason to spend minutes
@@ -66,7 +72,9 @@ class IdentifySongUseCase(
                     scanWindowSeconds = settings.scanWindowSeconds,
                     intervalMs = settings.ocrIntervalMs,
                 )
+                val framesStarted = System.nanoTime()
                 val frames = frameExtractor.extract(File(input.path), timestamps, framesDir)
+                framesMs = elapsedMs(framesStarted)
                 if (frames.isEmpty()) {
                     ocrFailed = true
                 } else {
@@ -76,6 +84,9 @@ class IdentifySongUseCase(
                     trackDurationMs = recognition.trackDurationMs
                     ocrFailed = recognition.failed
                     hebrewUsed = recognition.hebrewUsed
+                    latinOcrMs = recognition.latinOcrMs
+                    hebrewOcrMs = recognition.hebrewOcrMs
+                    ocrMs = recognition.ocrMs
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -86,6 +97,7 @@ class IdentifySongUseCase(
             }
         }
 
+        val cascadeStarted = System.nanoTime()
         val outcome = cascade.identify(
             ocrCandidates = candidates,
             embeddedTags = embedded,
@@ -99,8 +111,18 @@ class IdentifySongUseCase(
             forceFingerprint = forceFingerprint,
             manualQuery = manualQuery,
         )
-        SongIdentification(outcome, ocrFailed, hebrewUsed, trackDurationMs)
+        val timings = StageTimings(
+            framesMs = framesMs,
+            latinOcrMs = latinOcrMs,
+            hebrewOcrMs = hebrewOcrMs,
+            ocrMs = ocrMs,
+            cascadeMs = elapsedMs(cascadeStarted),
+        )
+        SongIdentification(outcome, ocrFailed, hebrewUsed, trackDurationMs, timings)
     }
+
+    private fun elapsedMs(startedNanos: Long): Long =
+        (System.nanoTime() - startedNanos) / 1_000_000L
 
     private fun readEmbeddedTags(input: ResolvedInput): TagDraft? {
         if (input.kind != InputKind.MP3) return null
