@@ -10,10 +10,20 @@ enum class TagField {
     GENRE,
     TRACK_NUMBER,
     ARTWORK,
+    LYRICS,
+    BPM,
+    ISRC,
+    LABEL,
+    MUSICBRAINZ,
+    REPLAY_GAIN,
     ;
 
     companion object {
-        /** The fields a normal text-only edit updates; artwork is deliberately excluded. */
+        /**
+         * The fields a normal text-only edit updates; artwork is deliberately
+         * excluded. Enrichment fields are included because they are part of the
+         * same draft and must survive a re-encode or an in-place edit.
+         */
         val TEXT_FIELDS: Set<TagField> = setOf(
             TITLE,
             ARTIST,
@@ -22,6 +32,12 @@ enum class TagField {
             YEAR,
             GENRE,
             TRACK_NUMBER,
+            LYRICS,
+            BPM,
+            ISRC,
+            LABEL,
+            MUSICBRAINZ,
+            REPLAY_GAIN,
         )
 
         val ALL_FIELDS: Set<TagField> = entries.toSet()

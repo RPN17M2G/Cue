@@ -30,6 +30,19 @@ android {
             .replace("\"", "\\\"")
         buildConfigField("String", "ACOUSTID_API_KEY", "\"$acoustIdKey\"")
 
+        // ACRCloud project credentials, same rule as the AcoustID key: the
+        // untracked local.properties provides defaults, Settings overrides.
+        listOf(
+            "ACRCLOUD_HOST" to "acrcloud.host",
+            "ACRCLOUD_ACCESS_KEY" to "acrcloud.accessKey",
+            "ACRCLOUD_ACCESS_SECRET" to "acrcloud.accessSecret",
+        ).forEach { (field, property) ->
+            val value = localProperties.getProperty(property, "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+            buildConfigField("String", field, "\"$value\"")
+        }
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -32,6 +32,12 @@ data class FingerprintAttempt(
     val keyRejected: Boolean = false,
 )
 
+/** The same shape for ACRCloud, which recognizes a fragment from anywhere. */
+data class AudioRecognitionAttempt(
+    val matches: List<MetadataMatch> = emptyList(),
+    val keyRejected: Boolean = false,
+)
+
 data class IdentificationOutcome(
     val tag: TagDraft,
     val sources: Map<TagField, IdentificationSource>,
@@ -41,6 +47,8 @@ data class IdentificationOutcome(
     val usedEmbeddedTags: Boolean,
     val fingerprintKeyRejected: Boolean = false,
     val fingerprintTried: Boolean = false,
+    val usedAcrCloud: Boolean = false,
+    val acrCloudKeyRejected: Boolean = false,
     val bestMatch: MetadataMatch? = null,
 )
 
@@ -55,6 +63,12 @@ data class IdentificationOutcome(
 class IdentificationCascade(
     private val lookup: suspend (LookupSeed) -> List<MetadataMatch>,
     private val fingerprintLookup: suspend (FingerprintSeed) -> FingerprintAttempt,
+    /**
+     * ACRCloud, or another recognizer that accepts a fragment from anywhere in
+     * the song. Null when the feature is not wired; the cascade then behaves
+     * exactly as before. The argument is the known whole-track length.
+     */
+    private val audioLookup: (suspend (Long?) -> AudioRecognitionAttempt)? = null,
 ) {
 
     suspend fun identify(
@@ -63,6 +77,7 @@ class IdentificationCascade(
         networkEnabled: Boolean,
         fingerprintEnabled: Boolean,
         acoustIdConfigured: Boolean,
+        acrCloudConfigured: Boolean = false,
         rawOcrLines: List<String> = emptyList(),
         durationMs: Long? = null,
         /**
@@ -125,6 +140,8 @@ class IdentificationCascade(
         }
         var keyRejected = false
         var fingerprintTried = false
+        var acrCloudKeyRejected = false
+        var acrCloudTried = false
 
         suspend fun tryFingerprint(): IdentificationOutcome? {
             if (!networkEnabled || !fingerprintEnabled || !acoustIdConfigured) return null
@@ -159,6 +176,35 @@ class IdentificationCascade(
             }
         }
 
+        suspend fun tryAcrCloud(): IdentificationOutcome? {
+            val recognize = audioLookup ?: return null
+            if (!networkEnabled || !acrCloudConfigured) return null
+            val attempt = audioSafely { recognize(trackDurationMs ?: durationMs) }
+            acrCloudTried = true
+            acrCloudKeyRejected = attempt.keyRejected
+            val ranked = MetadataMatcher.rank(
+                // A manual audio run trusts the recognizer over the text seed,
+                // for the same reason a manual fingerprint run does.
+                query = if (forceFingerprint) TagDraft() else seed.tag,
+                matches = attempt.matches,
+            ).accepted()
+            return if (ranked.isEmpty()) {
+                null
+            } else {
+                outcome(
+                    seed = seed,
+                    ranked = ranked,
+                    rawOcrLines = rawOcrLines,
+                    usedFingerprint = false,
+                    fingerprintTried = fingerprintTried,
+                    fingerprintKeyRejected = keyRejected,
+                    usedAcrCloud = true,
+                    acrCloudKeyRejected = acrCloudKeyRejected,
+                    trustMatch = forceFingerprint,
+                )
+            }
+        }
+
         suspend fun tryText(): IdentificationOutcome? {
             if (!networkEnabled) return null
             for (textSeed in textSeeds) {
@@ -186,9 +232,9 @@ class IdentificationCascade(
         }
 
         val result = if (forceFingerprint) {
-            tryFingerprint() ?: tryText()
+            tryFingerprint() ?: tryAcrCloud() ?: tryText()
         } else {
-            tryText() ?: tryFingerprint()
+            tryText() ?: tryFingerprint() ?: tryAcrCloud()
         }
         if (result != null) return result
 
@@ -201,6 +247,7 @@ class IdentificationCascade(
             usedEmbeddedTags = seed.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
             fingerprintKeyRejected = keyRejected,
             fingerprintTried = fingerprintTried,
+            acrCloudKeyRejected = acrCloudKeyRejected,
         )
     }
 
@@ -224,6 +271,17 @@ class IdentificationCascade(
             FingerprintAttempt()
         }
 
+    private suspend fun audioSafely(
+        block: suspend () -> AudioRecognitionAttempt,
+    ): AudioRecognitionAttempt =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            AudioRecognitionAttempt()
+        }
+
     /**
      * Below the ignore threshold a match is noise: it would populate fields the
      * user has to undo, and it must not stop the cascade from trying the next
@@ -240,6 +298,8 @@ class IdentificationCascade(
         usedFingerprint: Boolean,
         fingerprintTried: Boolean = false,
         fingerprintKeyRejected: Boolean = false,
+        usedAcrCloud: Boolean = false,
+        acrCloudKeyRejected: Boolean = false,
         /**
          * A manual fingerprint run trusts the provider over the text seed, so
          * OCR-read fields are cleared before merging. Otherwise the merge
@@ -269,6 +329,8 @@ class IdentificationCascade(
             usedEmbeddedTags = merged.sources.containsValue(IdentificationSource.EMBEDDED_TAGS),
             fingerprintKeyRejected = fingerprintKeyRejected,
             fingerprintTried = fingerprintTried,
+            usedAcrCloud = usedAcrCloud,
+            acrCloudKeyRejected = acrCloudKeyRejected,
             bestMatch = ranked.firstOrNull(),
         )
     }

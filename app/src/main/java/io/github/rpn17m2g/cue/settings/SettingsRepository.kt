@@ -43,9 +43,26 @@ data class AppSettings(
     val ocrIntervalMs: Long = DEFAULT_OCR_INTERVAL_MS,
     val httpTimeoutMs: Long = DEFAULT_HTTP_TIMEOUT_MS,
     val httpRetries: Int = DEFAULT_HTTP_RETRIES,
+    /**
+     * ACRCloud project credentials. Like the AcoustID key they are secrets:
+     * the build default comes from the untracked `local.properties`, and the
+     * Settings fields override it once saved.
+     */
+    val acrCloudHost: String = "",
+    val acrCloudAccessKey: String = "",
+    val acrCloudAccessSecret: String = "",
+    /** Fetch lyrics and standard codes for a confident match. */
+    val enrichmentEnabled: Boolean = true,
 ) {
     val fingerprintAvailable: Boolean
         get() = fingerprintEnabled && AcoustIdKey.isPlausible(acoustIdKey)
+
+    val acrCloudConfigured: Boolean
+        get() = AcrCloudCredentials.isConfigured(
+            host = acrCloudHost,
+            accessKey = acrCloudAccessKey,
+            accessSecret = acrCloudAccessSecret,
+        )
 
     companion object {
         const val DEFAULT_SCAN_WINDOW_SECONDS = 15

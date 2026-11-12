@@ -76,6 +76,34 @@ object MetadataMerger {
         val genre = choose(TagField.GENRE, base.genre, String::isBlank, best?.genre)
         val trackNumber = choose(TagField.TRACK_NUMBER, base.trackNumber, { false }, best?.trackNumber)
         val artwork = choose(TagField.ARTWORK, base.artwork, { false }, best?.artwork)
+        val lyrics = choose(TagField.LYRICS, base.lyrics, String::isBlank, null)
+        val bpm = choose(TagField.BPM, base.bpm, { it <= 0 }, best?.bpm)
+        val isrc = choose(TagField.ISRC, base.isrc, String::isBlank, best?.isrc)
+        val label = choose(TagField.LABEL, base.label, String::isBlank, best?.label)
+        val replayGain = choose(
+            TagField.REPLAY_GAIN,
+            base.replayGainDb,
+            { false },
+            best?.replayGainDb,
+        )
+        val recordingMbid = choose(
+            TagField.MUSICBRAINZ,
+            base.recordingMbid,
+            String::isBlank,
+            best?.recordingMbid,
+        )
+        val releaseMbid = choose(
+            TagField.MUSICBRAINZ,
+            base.releaseMbid,
+            String::isBlank,
+            best?.releaseMbid,
+        )
+        val artistMbid = choose(
+            TagField.MUSICBRAINZ,
+            base.artistMbid,
+            String::isBlank,
+            best?.artistMbid,
+        )
 
         return TagMergeResult(
             tag = TagDraft(
@@ -87,6 +115,15 @@ object MetadataMerger {
                 genre = genre,
                 trackNumber = trackNumber,
                 artwork = artwork,
+                trackTotal = base.trackTotal,
+                lyrics = lyrics,
+                bpm = bpm,
+                isrc = isrc,
+                label = label,
+                replayGainDb = replayGain,
+                recordingMbid = recordingMbid,
+                releaseMbid = releaseMbid,
+                artistMbid = artistMbid,
             ),
             sources = sources,
         )

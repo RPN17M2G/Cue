@@ -111,6 +111,7 @@ class MusicBrainzClient internal constructor(
             .distinct()
             .joinToString(" & ")
         val release = releases.firstOrNull { !it.title.isNullOrBlank() }
+        val releaseMbid = release?.id?.trim()?.takeIf { it.isNotEmpty() }
         return MappedMatch(
             match = MetadataMatch(
                 title = resolvedTitle,
@@ -119,8 +120,12 @@ class MusicBrainzClient internal constructor(
                 year = firstReleaseDate.toYear() ?: releases.firstNotNullOfOrNull { it.date.toYear() },
                 source = IdentificationSource.MUSICBRAINZ,
                 score = MetadataScorer.score(query, resolvedTitle, resolvedArtist),
+                recordingMbid = id?.trim()?.takeIf { it.isNotEmpty() },
+                releaseMbid = releaseMbid,
+                artistMbid = artistCredit
+                    .firstNotNullOfOrNull { it.artist?.id?.trim()?.takeIf(String::isNotEmpty) },
             ),
-            releaseMbid = release?.id?.trim()?.takeIf { it.isNotEmpty() },
+            releaseMbid = releaseMbid,
         )
     }
 

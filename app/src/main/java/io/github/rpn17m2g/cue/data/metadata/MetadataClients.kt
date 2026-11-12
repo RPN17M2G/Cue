@@ -7,6 +7,8 @@ object MetadataEndpoints {
     const val MUSICBRAINZ = "https://musicbrainz.org/"
     const val ACOUSTID = "https://api.acoustid.org/"
     const val COVER_ART_ARCHIVE = "https://coverartarchive.org/"
+    const val LRCLIB = "https://lrclib.net/"
+    const val DEEZER = "https://api.deezer.com/"
 }
 
 /**
@@ -86,7 +88,33 @@ class MetadataClients(
         networkGate = gate,
     )
 
+    /**
+     * Null when the three project values are not all present. A partially
+     * configured project would sign every request with a blank secret and be
+     * rejected, which looks like a broken app rather than a missing setting.
+     */
+    val acrCloud: AcrCloudClient? = policy.acrCloudBaseUrl
+        ?.takeIf { policy.acrCloudAccessKey.isNotBlank() && policy.acrCloudAccessSecret.isNotBlank() }
+        ?.let { baseUrl ->
+            AcrCloudClient(
+                api = http.api(baseUrl, AcrCloudApi::class.java),
+                accessKey = policy.acrCloudAccessKey,
+                accessSecret = policy.acrCloudAccessSecret,
+                networkGate = gate,
+            )
+        }
+
     val resolver: CompositeMetadataResolver = CompositeMetadataResolver(iTunes, musicBrainz, gate)
+
+    val lyrics: LrcLibClient = LrcLibClient(
+        api = http.api(MetadataEndpoints.LRCLIB, LrcLibApi::class.java),
+        networkGate = gate,
+    )
+
+    val deezer: DeezerClient = DeezerClient(
+        api = http.api(MetadataEndpoints.DEEZER, DeezerApi::class.java),
+        networkGate = gate,
+    )
 
     val artworkSearch: ArtworkSearch get() = iTunes
 

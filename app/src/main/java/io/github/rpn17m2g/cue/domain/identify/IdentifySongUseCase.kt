@@ -21,6 +21,8 @@ data class SongIdentification(
     val outcome: IdentificationOutcome,
     val ocrFailed: Boolean,
     val hebrewOcrUsed: Boolean,
+    /** Length shown by the player, when OCR read it; used for lyrics and AcoustID. */
+    val trackDurationMs: Long? = null,
 )
 
 /**
@@ -90,13 +92,14 @@ class IdentifySongUseCase(
             networkEnabled = settings.networkLookups,
             fingerprintEnabled = settings.fingerprintEnabled,
             acoustIdConfigured = AcoustIdKey.isPlausible(settings.acoustIdKey),
+            acrCloudConfigured = settings.acrCloudConfigured,
             rawOcrLines = rawLines,
             durationMs = input.durationMs,
             trackDurationMs = trackDurationMs,
             forceFingerprint = forceFingerprint,
             manualQuery = manualQuery,
         )
-        SongIdentification(outcome, ocrFailed, hebrewUsed)
+        SongIdentification(outcome, ocrFailed, hebrewUsed, trackDurationMs)
     }
 
     private fun readEmbeddedTags(input: ResolvedInput): TagDraft? {

@@ -97,6 +97,78 @@ class Mp3TagStoreTest {
     }
 
     @Test
+    fun `round trip keeps lyrics bpm isrc label replaygain and musicbrainz ids`() {
+        val file = taggedFile("enrichment.mp3")
+        val draft = TagDraft(
+            title = "By Your Side",
+            artist = "Jonas Blue",
+            album = "Blue",
+            lyrics = "I want to be by your side\nEvery day and every night",
+            bpm = 124,
+            isrc = "GBUM71700001",
+            label = "Positiva",
+            replayGainDb = -6.3,
+            recordingMbid = "rec-1",
+            releaseMbid = "release-1",
+            artistMbid = "artist-1",
+        )
+
+        store.writeInPlace(file, draft, TagField.ALL_FIELDS)
+
+        val read = checkNotNull(store.read(file))
+        assertEquals("I want to be by your side\nEvery day and every night", read.lyrics)
+        assertEquals(124, read.bpm)
+        assertEquals("GBUM71700001", read.isrc)
+        assertEquals("Positiva", read.label)
+        assertEquals(-6.3, read.replayGainDb!!, 0.0001)
+        assertEquals("rec-1", read.recordingMbid)
+        assertEquals("release-1", read.releaseMbid)
+        assertEquals("artist-1", read.artistMbid)
+    }
+
+    @Test
+    fun `clearing enrichment fields removes the frames`() {
+        val file = taggedFile("enrichment-clear.mp3")
+        store.writeInPlace(
+            file,
+            TagDraft(
+                title = "Song",
+                lyrics = "words",
+                bpm = 120,
+                isrc = "ISRC1",
+                label = "Label",
+                replayGainDb = -6.3,
+                recordingMbid = "rec-1",
+            ),
+            TagField.ALL_FIELDS,
+        )
+
+        store.writeInPlace(
+            file,
+            TagDraft(title = "Song"),
+            fields = setOf(
+                TagField.LYRICS,
+                TagField.BPM,
+                TagField.ISRC,
+                TagField.LABEL,
+                TagField.REPLAY_GAIN,
+                TagField.MUSICBRAINZ,
+            ),
+        )
+
+        val read = checkNotNull(store.read(file))
+        assertEquals("Song", read.title)
+        assertNull(read.lyrics)
+        assertNull(read.bpm)
+        assertNull(read.isrc)
+        assertNull(read.label)
+        assertNull(read.replayGainDb)
+        assertNull(read.recordingMbid)
+        assertNull(read.releaseMbid)
+        assertNull(read.artistMbid)
+    }
+
+    @Test
     fun `written tag is v23 with utf16 text frames`() {
         val file = taggedFile("version.mp3")
         store.writeInPlace(

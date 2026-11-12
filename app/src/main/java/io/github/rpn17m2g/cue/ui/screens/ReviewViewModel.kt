@@ -83,6 +83,11 @@ data class ReviewUiState(
     val artworkOffline: Boolean = false,
     val artworkFailed: Boolean = false,
     val artworkApplying: Boolean = false,
+    val lyricsFetching: Boolean = false,
+    val lyricsFailed: Boolean = false,
+    val lyricsOffline: Boolean = false,
+    /** Length shown by the player, when OCR read it; better for lyrics lookup. */
+    val trackDurationMs: Long? = null,
 ) {
     val hasTrim: Boolean get() = durationMs != null && durationMs > TrimMath.MIN_DURATION_MS
 
@@ -293,6 +298,63 @@ class ReviewViewModel(
         startIdentification(forceFingerprint = true, manualQuery = editedQuery())
     }
 
+    /**
+     * Fetches lyrics for the current title and artist. The automatic run after
+     * identification normally fills this, but the database may have gained the
+     * song since, or the user corrected the title afterwards.
+     */
+    fun fetchLyrics() {
+        if (_state.value.lyricsFetching) return
+        viewModelScope.launch {
+            val current = _state.value
+            val draft = current.draft
+            if (draft.title.isBlank() || draft.artist.isBlank()) return@launch
+            val latest = try {
+                container.settingsRepository.settings.first()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                settings
+            }
+            settings = latest
+            if (!latest.networkLookups) {
+                _state.update { it.copy(lyricsOffline = true, lyricsFailed = false) }
+                return@launch
+            }
+            _state.update {
+                it.copy(lyricsFetching = true, lyricsFailed = false, lyricsOffline = false)
+            }
+            val duration = (current.trackDurationMs ?: current.durationMs)
+                ?.div(1_000L)
+                ?.toInt()
+                ?.takeIf { it > 0 }
+            val lyrics = try {
+                container.metadataClients().lyrics.fetchOrNull(
+                    title = draft.title,
+                    artist = draft.artist,
+                    album = draft.album.takeIf { it.isNotBlank() },
+                    durationSeconds = duration,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            _state.update { state ->
+                if (lyrics == null) {
+                    state.copy(lyricsFetching = false, lyricsFailed = true)
+                } else {
+                    state.copy(
+                        lyricsFetching = false,
+                        lyricsFailed = false,
+                        draft = state.draft.copy(lyrics = lyrics.text),
+                        sources = state.sources + (TagField.LYRICS to IdentificationSource.LRCLIB),
+                    )
+                }
+            }
+        }
+    }
+
     private fun startIdentification(forceFingerprint: Boolean, manualQuery: LookupSeed?) {
         if (_state.value.identifying) return
         identifyJob?.cancel()
@@ -427,6 +489,29 @@ class ReviewViewModel(
                 } else {
                     optionalValue(TagField.ARTWORK, match.artwork, current.draft.artwork)
                 },
+                bpm = optionalValue(TagField.BPM, match.bpm, current.draft.bpm),
+                isrc = optional(TagField.ISRC, match.isrc, current.draft.isrc),
+                label = optional(TagField.LABEL, match.label, current.draft.label),
+                replayGainDb = optionalValue(
+                    TagField.REPLAY_GAIN,
+                    match.replayGainDb,
+                    current.draft.replayGainDb,
+                ),
+                recordingMbid = optional(
+                    TagField.MUSICBRAINZ,
+                    match.recordingMbid,
+                    current.draft.recordingMbid,
+                ),
+                releaseMbid = optional(
+                    TagField.MUSICBRAINZ,
+                    match.releaseMbid,
+                    current.draft.releaseMbid,
+                ),
+                artistMbid = optional(
+                    TagField.MUSICBRAINZ,
+                    match.artistMbid,
+                    current.draft.artistMbid,
+                ),
             )
             if (dropAutoArtwork) sources.remove(TagField.ARTWORK)
             appliedFields = applied
@@ -781,6 +866,7 @@ class ReviewViewModel(
                 fingerprintKeyRejected = result.outcome.fingerprintKeyRejected,
                 fingerprintTried = result.outcome.fingerprintTried,
                 usedFingerprint = result.outcome.usedFingerprint,
+                trackDurationMs = result.trackDurationMs ?: current.trackDurationMs,
             )
         }
     }
@@ -830,6 +916,30 @@ class ReviewViewModel(
                 identified.trackNumber,
             ),
             artwork = optionalValue(TagField.ARTWORK, current.artwork, identified.artwork),
+            lyrics = optional(TagField.LYRICS, current.lyrics, identified.lyrics),
+            bpm = optionalValue(TagField.BPM, current.bpm, identified.bpm),
+            isrc = optional(TagField.ISRC, current.isrc, identified.isrc),
+            label = optional(TagField.LABEL, current.label, identified.label),
+            replayGainDb = optionalValue(
+                TagField.REPLAY_GAIN,
+                current.replayGainDb,
+                identified.replayGainDb,
+            ),
+            recordingMbid = optional(
+                TagField.MUSICBRAINZ,
+                current.recordingMbid,
+                identified.recordingMbid,
+            ),
+            releaseMbid = optional(
+                TagField.MUSICBRAINZ,
+                current.releaseMbid,
+                identified.releaseMbid,
+            ),
+            artistMbid = optional(
+                TagField.MUSICBRAINZ,
+                current.artistMbid,
+                identified.artistMbid,
+            ),
         )
     }
 
@@ -846,6 +956,19 @@ class ReviewViewModel(
             put(TagField.TRACK_NUMBER, IdentificationSource.EMBEDDED_TAGS)
         }
         if (tag.artwork != null) put(TagField.ARTWORK, IdentificationSource.EMBEDDED_TAGS)
+        if (!tag.lyrics.isNullOrBlank()) put(TagField.LYRICS, IdentificationSource.EMBEDDED_TAGS)
+        if (tag.bpm != null) put(TagField.BPM, IdentificationSource.EMBEDDED_TAGS)
+        if (!tag.isrc.isNullOrBlank()) put(TagField.ISRC, IdentificationSource.EMBEDDED_TAGS)
+        if (!tag.label.isNullOrBlank()) put(TagField.LABEL, IdentificationSource.EMBEDDED_TAGS)
+        if (tag.replayGainDb != null) {
+            put(TagField.REPLAY_GAIN, IdentificationSource.EMBEDDED_TAGS)
+        }
+        if (!tag.recordingMbid.isNullOrBlank() ||
+            !tag.releaseMbid.isNullOrBlank() ||
+            !tag.artistMbid.isNullOrBlank()
+        ) {
+            put(TagField.MUSICBRAINZ, IdentificationSource.EMBEDDED_TAGS)
+        }
     }
 
     private fun systemLanguage(): String =
@@ -891,4 +1014,10 @@ internal fun TagDraft.withField(field: TagField, value: String): TagDraft = when
     TagField.GENRE -> copy(genre = value)
     TagField.TRACK_NUMBER -> copy(trackNumber = value.takeIf { it.isNotBlank() }?.toIntOrNull())
     TagField.ARTWORK -> this
+    TagField.LYRICS -> copy(lyrics = value.takeIf { it.isNotBlank() })
+    TagField.BPM -> copy(bpm = value.trim().toIntOrNull()?.takeIf { it > 0 })
+    TagField.ISRC -> copy(isrc = value.takeIf { it.isNotBlank() })
+    TagField.LABEL -> copy(label = value.takeIf { it.isNotBlank() })
+    TagField.MUSICBRAINZ -> this
+    TagField.REPLAY_GAIN -> copy(replayGainDb = value.trim().toDoubleOrNull())
 }

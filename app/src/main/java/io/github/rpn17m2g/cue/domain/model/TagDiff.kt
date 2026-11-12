@@ -17,6 +17,12 @@ fun TagDraft.changedFieldsFrom(base: TagDraft): Set<TagField> = buildSet {
         add(TagField.TRACK_NUMBER)
     }
     if (artwork != base.artwork) add(TagField.ARTWORK)
+    if (lyrics.orEmpty() != base.lyrics.orEmpty()) add(TagField.LYRICS)
+    if (bpm != base.bpm) add(TagField.BPM)
+    if (isrc.orEmpty() != base.isrc.orEmpty()) add(TagField.ISRC)
+    if (label.orEmpty() != base.label.orEmpty()) add(TagField.LABEL)
+    if (musicBrainzKey() != base.musicBrainzKey()) add(TagField.MUSICBRAINZ)
+    if (!replayGainDb.replayGainMatches(base.replayGainDb)) add(TagField.REPLAY_GAIN)
 }
 
 /**
@@ -37,12 +43,34 @@ fun TagDraft.matchesWritten(expected: TagDraft, fields: Set<TagField>): Boolean 
         expected.trackTotal != null &&
         trackTotal != expected.trackTotal -> false
     TagField.ARTWORK in fields && artwork != expected.artwork -> false
+    TagField.LYRICS in fields &&
+        !lyrics.sameTagText(expected.lyrics) -> false
+    TagField.BPM in fields && bpm != expected.bpm -> false
+    TagField.ISRC in fields && !isrc.sameTagText(expected.isrc) -> false
+    TagField.LABEL in fields && !label.sameTagText(expected.label) -> false
+    TagField.MUSICBRAINZ in fields && musicBrainzKey() != expected.musicBrainzKey() -> false
+    TagField.REPLAY_GAIN in fields &&
+        !replayGainDb.replayGainMatches(expected.replayGainDb) -> false
     else -> true
 }
 
 /** The writer drops a blank frame, so `" "` and `""` both read back as absent. */
 private fun String?.sameTagText(other: String?): Boolean =
     orEmpty().trim() == other.orEmpty().trim()
+
+/**
+ * ReplayGain is written with one decimal; a provider may hand over more
+ * precision, so compare at the precision the tag actually stores.
+ */
+private fun Double?.replayGainMatches(other: Double?): Boolean {
+    if (this == null || other == null) return this == other
+    return kotlin.math.abs(this - other) < 0.05
+}
+
+/** The three MusicBrainz identifiers are one logical tag field. */
+private fun TagDraft.musicBrainzKey(): String =
+    listOf(recordingMbid, releaseMbid, artistMbid)
+        .joinToString("|") { it.orEmpty().trim() }
 
 private fun TagDraft.yearKey(): String? = year
     ?.trim()

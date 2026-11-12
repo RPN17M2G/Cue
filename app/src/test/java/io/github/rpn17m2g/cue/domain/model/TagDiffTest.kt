@@ -95,4 +95,78 @@ class TagDiffTest {
 
         assertTrue(written.matchesWritten(expected, setOf(TagField.TRACK_NUMBER)))
     }
+
+    @Test
+    fun `enrichment fields are reported individually`() {
+        val enriched = base.copy(
+            lyrics = "la la",
+            bpm = 120,
+            isrc = "ISRC1",
+            label = "Label",
+            replayGainDb = -6.3,
+            recordingMbid = "rec",
+        )
+
+        assertEquals(
+            setOf(
+                TagField.LYRICS,
+                TagField.BPM,
+                TagField.ISRC,
+                TagField.LABEL,
+                TagField.REPLAY_GAIN,
+                TagField.MUSICBRAINZ,
+            ),
+            enriched.changedFieldsFrom(base),
+        )
+    }
+
+    @Test
+    fun `a replay gain difference below the stored precision is not a change`() {
+        val base = base.copy(replayGainDb = -6.3)
+
+        assertTrue(base.copy(replayGainDb = -6.32).changedFieldsFrom(base).isEmpty())
+        assertEquals(
+            setOf(TagField.REPLAY_GAIN),
+            base.copy(replayGainDb = -5.0).changedFieldsFrom(base),
+        )
+    }
+
+    @Test
+    fun `the three musicbrainz ids count as one changed field`() {
+        val base = base.copy(recordingMbid = "rec")
+
+        assertEquals(
+            setOf(TagField.MUSICBRAINZ),
+            base.copy(releaseMbid = "release").changedFieldsFrom(base),
+        )
+        assertEquals(
+            setOf(TagField.MUSICBRAINZ),
+            base.copy(artistMbid = "artist").changedFieldsFrom(base),
+        )
+    }
+
+    @Test
+    fun `a written enrichment tag matches the expected values`() {
+        val expected = base.copy(
+            lyrics = "la la",
+            bpm = 120,
+            isrc = "ISRC1",
+            label = "Label",
+            replayGainDb = -6.3,
+            recordingMbid = "rec",
+        )
+        val written = expected.copy(replayGainDb = -6.3, isrc = " ISRC1 ")
+
+        assertTrue(written.matchesWritten(expected, TagField.TEXT_FIELDS))
+        assertFalse(
+            written.copy(bpm = 121).matchesWritten(expected, setOf(TagField.BPM)),
+        )
+        assertFalse(
+            written.copy(lyrics = "other").matchesWritten(expected, setOf(TagField.LYRICS)),
+        )
+        assertFalse(
+            written.copy(recordingMbid = "other")
+                .matchesWritten(expected, setOf(TagField.MUSICBRAINZ)),
+        )
+    }
 }

@@ -8,6 +8,8 @@ import java.io.IOException
 object FfmpegCommandBuilder {
 
     const val DEFAULT_FINGERPRINT_DURATION_MS = 30_000L
+    const val ACRCLOUD_SAMPLE_DURATION_MS = 12_000L
+    const val ACRCLOUD_SAMPLE_BITRATE = "64k"
     const val PROBE_EXPECTED_EXIT = 1
 
     private val basePrefix = listOf("-hide_banner", "-nostdin", "-y")
@@ -113,6 +115,50 @@ object FfmpegCommandBuilder {
             // AcoustID expects the base64 form; make the muxer default explicit.
             "-fp_format",
             "base64",
+            outputPath,
+        )
+        return args
+    }
+
+    /**
+     * Extracts a short, low-bitrate MP3 for ACRCloud.
+     *
+     * ACRCloud matches a fragment from anywhere in the song, so the sample is
+     * taken from the middle of the recording rather than from 0: a recording
+     * that begins before playback would otherwise spend its first seconds on
+     * silence. Twelve seconds at 64 kbps mono is around 100 KB, far below the
+     * 5 MB request limit, and keeps the upload quick on mobile data.
+     */
+    fun acrCloudSampleCommand(
+        inputPath: String,
+        outputPath: String,
+        startMs: Long = 0L,
+        durationMs: Long = ACRCLOUD_SAMPLE_DURATION_MS,
+    ): List<String> {
+        requireFileOutput(outputPath)
+        requireNeverOverwritesInput(inputPath, outputPath)
+        require(startMs >= 0) { "startMs must be non-negative" }
+        require(durationMs > 0) { "durationMs must be positive" }
+
+        val args = basePrefix.toMutableList()
+        args += listOf(
+            "-ss", FfmpegTime.formatSeconds(startMs),
+            "-t", FfmpegTime.formatSeconds(durationMs),
+        )
+        args += listOf(
+            "-i",
+            inputPath,
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "44100",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            ACRCLOUD_SAMPLE_BITRATE,
+            "-map_metadata",
+            "-1",
             outputPath,
         )
         return args

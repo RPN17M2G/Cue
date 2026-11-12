@@ -16,6 +16,19 @@ data class TagDraft(
     val trackNumber: Int? = null,
     val artwork: Artwork? = null,
     val trackTotal: Int? = null,
+    /**
+     * Enrichment written after a confident match: lyrics and the standard codes
+     * that players and DJ tools understand. They never replace a value the user
+     * or an earlier stage supplied, only fill blanks.
+     */
+    val lyrics: String? = null,
+    val bpm: Int? = null,
+    val isrc: String? = null,
+    val label: String? = null,
+    val replayGainDb: Double? = null,
+    val recordingMbid: String? = null,
+    val releaseMbid: String? = null,
+    val artistMbid: String? = null,
 ) {
     val hasCoreTags: Boolean
         get() = title.isNotBlank() && artist.isNotBlank() && album.isNotBlank()

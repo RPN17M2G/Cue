@@ -22,6 +22,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
+import java.util.Locale
 
 /**
  * Reads and rewrites ID3 tags with mp3agic. Audio frames are copied byte-for-byte and
@@ -105,6 +106,24 @@ class Mp3TagStore internal constructor(
             if (TagField.ARTWORK in fields) {
                 writeArtwork(id3, tag.artwork, artworkMime)
             }
+            if (TagField.LYRICS in fields) {
+                writeLyrics(id3, tag.lyrics)
+            }
+            if (TagField.BPM in fields) {
+                writeBpm(id3, tag.bpm)
+            }
+            if (TagField.ISRC in fields) {
+                writeText(id3, ID_ISRC, tag.isrc)
+            }
+            if (TagField.LABEL in fields) {
+                writeText(id3, AbstractID3v2Tag.ID_PUBLISHER, tag.label)
+            }
+            if (TagField.MUSICBRAINZ in fields) {
+                writeMusicBrainz(id3, tag)
+            }
+            if (TagField.REPLAY_GAIN in fields) {
+                writeReplayGain(id3, tag.replayGainDb)
+            }
 
             if (id3.frameSets.isEmpty()) {
                 id3.padding = true
@@ -145,6 +164,15 @@ class Mp3TagStore internal constructor(
             trackNumber = track.first,
             trackTotal = track.second,
             artwork = readArtwork(tag),
+            lyrics = safeText { tag.lyrics }?.takeIf { it.isNotBlank() },
+            bpm = runCatching { tag.bpm }.getOrNull()?.takeIf { it > 0 },
+            isrc = rawText(tag, ID_ISRC)?.takeIf { it.isNotBlank() },
+            label = safeText { tag.publisher }?.takeIf { it.isNotBlank() }
+                ?: rawText(tag, AbstractID3v2Tag.ID_PUBLISHER)?.takeIf { it.isNotBlank() },
+            replayGainDb = readCustomText(tag, REPLAY_GAIN_TRACK)?.let(::parseReplayGain),
+            recordingMbid = readCustomText(tag, MB_RECORDING_ID)?.takeIf { it.isNotBlank() },
+            releaseMbid = readCustomText(tag, MB_ALBUM_ID)?.takeIf { it.isNotBlank() },
+            artistMbid = readCustomText(tag, MB_ARTIST_ID)?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -271,6 +299,113 @@ class Mp3TagStore internal constructor(
             writeUtf16Frame(tag, frameId, year)
         }
     }
+
+    private fun writeLyrics(tag: ID3v2, lyrics: String?) {
+        if (lyrics.isNullOrBlank()) {
+            tag.clearFrameSet(AbstractID3v2Tag.ID_TEXT_LYRICS)
+        } else {
+            tag.lyrics = lyrics
+        }
+    }
+
+    private fun writeBpm(tag: ID3v2, bpm: Int?) {
+        if (bpm == null || bpm <= 0) {
+            tag.clearFrameSet(AbstractID3v2Tag.ID_BPM)
+        } else {
+            tag.bpm = bpm
+        }
+    }
+
+    private fun writeMusicBrainz(tag: ID3v2, draft: TagDraft) {
+        writeCustomText(tag, MB_RECORDING_ID, draft.recordingMbid)
+        writeCustomText(tag, MB_ALBUM_ID, draft.releaseMbid)
+        writeCustomText(tag, MB_ARTIST_ID, draft.artistMbid)
+    }
+
+    private fun writeReplayGain(tag: ID3v2, gainDb: Double?) {
+        val value = gainDb?.let { String.format(Locale.ROOT, "%.1f dB", it) }
+        writeCustomText(tag, REPLAY_GAIN_TRACK, value)
+    }
+
+    /**
+     * A TXXX frame carries a description and a value in the same encoding. The
+     * identifiers Cue writes are ASCII, so the frame is written as ISO-8859-1;
+     * reading accepts the UTF-16/UTF-8 variants other taggers produce.
+     */
+    private fun writeCustomText(tag: ID3v2, description: String, value: String?) {
+        val remaining = tag.frameSets[ID_TXXX]
+            ?.frames
+            .orEmpty()
+            .filterNot { frame ->
+                runCatching {
+                    parseTxxx(frame.data)?.first.equals(description, ignoreCase = true)
+                }.getOrDefault(false)
+            }
+        if (remaining.isEmpty()) {
+            tag.clearFrameSet(ID_TXXX)
+        } else {
+            tag.frameSets[ID_TXXX] = ID3v2FrameSet(ID_TXXX).also { set ->
+                remaining.forEach(set::addFrame)
+            }
+        }
+        if (value.isNullOrBlank()) return
+        val payload = byteArrayOf(EncodedText.TEXT_ENCODING_ISO_8859_1) +
+            description.toByteArray(Charsets.ISO_8859_1) +
+            byteArrayOf(0) +
+            value.toByteArray(Charsets.ISO_8859_1)
+        val frames = tag.frameSets[ID_TXXX]
+            ?: ID3v2FrameSet(ID_TXXX).also { tag.frameSets[ID_TXXX] = it }
+        frames.addFrame(frameFor(tag, ID_TXXX, payload))
+    }
+
+    private fun readCustomText(tag: ID3v2, description: String): String? {
+        val frames = tag.frameSets[ID_TXXX]?.frames.orEmpty()
+        for (frame in frames) {
+            val parsed = runCatching { parseTxxx(frame.data) }.getOrNull() ?: continue
+            if (parsed.first.equals(description, ignoreCase = true)) return parsed.second
+        }
+        return null
+    }
+
+    private fun parseTxxx(data: ByteArray): Pair<String, String>? {
+        if (data.size < 2) return null
+        val encoding = data[0]
+        val utf16 = encoding == EncodedText.TEXT_ENCODING_UTF_16 ||
+            encoding == EncodedText.TEXT_ENCODING_UTF_16BE
+        val start = if (encoding == EncodedText.TEXT_ENCODING_UTF_16) 3 else 1
+        val step = if (utf16) 2 else 1
+        var separator = -1
+        var index = start
+        while (index < data.size) {
+            // A UTF-16 frame separates the description from the value with two
+            // null bytes; the single-byte encodings use one. Looking for two in
+            // an ISO-8859-1 frame misses the separator entirely.
+            val found = if (utf16) {
+                index + 1 < data.size &&
+                    data[index].toInt() == 0 &&
+                    data[index + 1].toInt() == 0
+            } else {
+                data[index].toInt() == 0
+            }
+            if (found) {
+                separator = index
+                break
+            }
+            index += step
+        }
+        if (separator < 0) return null
+        val description = decodeText(encoding, data.copyOfRange(start, separator))
+        val valueStart = separator + if (utf16) 2 else 1
+        val value = decodeText(encoding, data.copyOfRange(valueStart, data.size))
+        return description to value
+    }
+
+    private fun decodeText(encoding: Byte, bytes: ByteArray): String = runCatching {
+        EncodedText(encoding, bytes).toString()
+    }.getOrDefault("")
+
+    private fun parseReplayGain(value: String): Double? =
+        REPLAY_GAIN_NUMBER.find(value)?.value?.toDoubleOrNull()
 
     private fun writeTrack(tag: ID3v2, draft: TagDraft) {
         val number = draft.trackNumber
@@ -595,6 +730,13 @@ class Mp3TagStore internal constructor(
         const val V23_VERSION = "3.0"
         const val V24_VERSION = "4.0"
         const val TYER_IN_V24 = "TDRC"
+        const val ID_ISRC = "TSRC"
+        const val ID_TXXX = "TXXX"
+        const val MB_RECORDING_ID = "MusicBrainz Recording Id"
+        const val MB_ALBUM_ID = "MusicBrainz Album Id"
+        const val MB_ARTIST_ID = "MusicBrainz Artist Id"
+        const val REPLAY_GAIN_TRACK = "REPLAYGAIN_TRACK_GAIN"
+        val REPLAY_GAIN_NUMBER = Regex("""[-+]?\d+(?:\.\d+)?""")
         const val DEFAULT_MIME_TYPE = "image/jpeg"
         const val TEMP_PREFIX = ".cue-tag-"
         const val TEMP_SUFFIX = ".tmp"

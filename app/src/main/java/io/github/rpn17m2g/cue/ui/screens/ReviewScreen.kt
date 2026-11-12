@@ -328,6 +328,7 @@ fun ReviewScreen(
                 onGalleryArtwork = viewModel::chooseGalleryArtwork,
                 onRemoveArtwork = viewModel::removeArtwork,
                 onUseOcrLine = viewModel::useOcrLine,
+                onFetchLyrics = viewModel::fetchLyrics,
             )
         }
     }
@@ -359,6 +360,7 @@ private fun ReviewContent(
     onGalleryArtwork: (Uri) -> Unit,
     onRemoveArtwork: () -> Unit,
     onUseOcrLine: (TagField, String) -> Unit,
+    onFetchLyrics: () -> Unit,
 ) {
     val input = state.input ?: return
     val galleryPicker = rememberLauncherForActivityResult(
@@ -423,6 +425,8 @@ private fun ReviewContent(
             onSave = onSaveField,
             onCancel = onCancelField,
         )
+
+        EnrichmentCard(state = state, onFetchLyrics = onFetchLyrics)
 
         SectionHeader(stringResource(R.string.review_clip_quality))
 
@@ -864,6 +868,135 @@ private fun FieldsCard(
     }
 }
 
+/**
+ * Lyrics and the standard codes fetched after a confident match. The card is
+ * read-only: the fields are written by enrichment and by "fetch lyrics", not
+ * typed by hand, so it never competes with the inline editor above.
+ */
+@Composable
+private fun EnrichmentCard(
+    state: ReviewUiState,
+    onFetchLyrics: () -> Unit,
+) {
+    val draft = state.draft
+    val lyrics = draft.lyrics?.trim().orEmpty()
+    val details = buildList {
+        draft.bpm?.let { add(TagField.BPM to it.toString()) }
+        draft.isrc?.takeIf { it.isNotBlank() }?.let { add(TagField.ISRC to it) }
+        draft.label?.takeIf { it.isNotBlank() }?.let { add(TagField.LABEL to it) }
+        draft.replayGainDb?.let {
+            add(TagField.REPLAY_GAIN to String.format(java.util.Locale.ROOT, "%.1f dB", it))
+        }
+        val mbids = listOfNotNull(draft.recordingMbid, draft.releaseMbid, draft.artistMbid)
+        if (mbids.isNotEmpty()) {
+            add(TagField.MUSICBRAINZ to mbids.joinToString("\n"))
+        }
+    }
+    val canLookup = draft.title.isNotBlank() && draft.artist.isNotBlank()
+    if (lyrics.isEmpty() && details.isEmpty() && !canLookup) return
+
+    SectionHeader(stringResource(R.string.review_section_enrichment))
+    ReviewCard {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FieldIcon(TagField.LYRICS)
+                Text(
+                    text = stringResource(R.string.review_field_lyrics),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                when {
+                    state.lyricsFetching -> CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    canLookup -> TextButton(onClick = onFetchLyrics) {
+                        Text(
+                            stringResource(
+                                if (lyrics.isEmpty()) {
+                                    R.string.review_lyrics_fetch
+                                } else {
+                                    R.string.review_lyrics_refresh
+                                },
+                            ),
+                        )
+                    }
+                }
+            }
+
+            if (lyrics.isNotEmpty()) {
+                var expanded by rememberSaveable { mutableStateOf(false) }
+                val lineCount = lyrics.lines().size
+                Text(
+                    text = lyrics,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (expanded) Int.MAX_VALUE else LYRICS_PREVIEW_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (lineCount > LYRICS_PREVIEW_LINES) {
+                    TextButton(
+                        onClick = { expanded = !expanded },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (expanded) R.string.review_show_less else R.string.review_show_all,
+                            ),
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.review_lyrics_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            when {
+                state.lyricsOffline -> Text(
+                    text = stringResource(R.string.review_lyrics_offline),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                state.lyricsFailed -> Text(
+                    text = stringResource(R.string.review_lyrics_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            details.forEach { (field, value) ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = stringResource(field.labelRes()),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(96.dp),
+                    )
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    state.sources[field]?.let { SourceLabel(it) }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun FieldIcon(field: TagField) {
     val tokens = LocalCueTokens.current
@@ -892,6 +1025,12 @@ private fun TagField.icon(): ImageVector = when (this) {
     TagField.GENRE -> Icons.Default.Category
     TagField.TRACK_NUMBER -> Icons.Default.Numbers
     TagField.ARTWORK -> Icons.Default.ImageIcon
+    TagField.LYRICS -> Icons.Default.TextSnippet
+    TagField.BPM -> Icons.Default.GraphicEq
+    TagField.ISRC -> Icons.Default.Numbers
+    TagField.LABEL -> Icons.Default.Album
+    TagField.MUSICBRAINZ -> Icons.Default.MusicNote
+    TagField.REPLAY_GAIN -> Icons.Default.GraphicEq
 }
 
 @Composable
@@ -2907,6 +3046,18 @@ private fun ReviewUiState.valueFor(field: TagField): String = when (field) {
     TagField.GENRE -> draft.genre.orEmpty()
     TagField.TRACK_NUMBER -> draft.trackNumber?.toString().orEmpty()
     TagField.ARTWORK -> ""
+    TagField.LYRICS -> draft.lyrics.orEmpty()
+    TagField.BPM -> draft.bpm?.toString().orEmpty()
+    TagField.ISRC -> draft.isrc.orEmpty()
+    TagField.LABEL -> draft.label.orEmpty()
+    TagField.MUSICBRAINZ -> listOfNotNull(
+        draft.recordingMbid,
+        draft.releaseMbid,
+        draft.artistMbid,
+    ).joinToString(", ")
+    TagField.REPLAY_GAIN -> draft.replayGainDb
+        ?.let { String.format(java.util.Locale.ROOT, "%.1f dB", it) }
+        .orEmpty()
 }
 
 private fun String.sanitizedFor(field: TagField): String = when (field) {
@@ -2916,7 +3067,7 @@ private fun String.sanitizedFor(field: TagField): String = when (field) {
 }
 
 private fun TagField.keyboardType(): KeyboardType = when (this) {
-    TagField.TRACK_NUMBER -> KeyboardType.Number
+    TagField.TRACK_NUMBER, TagField.BPM -> KeyboardType.Number
     else -> KeyboardType.Text
 }
 
@@ -2929,6 +3080,12 @@ private fun TagField.labelRes(): Int = when (this) {
     TagField.GENRE -> R.string.review_field_genre
     TagField.TRACK_NUMBER -> R.string.review_field_track
     TagField.ARTWORK -> R.string.review_field_artwork
+    TagField.LYRICS -> R.string.review_field_lyrics
+    TagField.BPM -> R.string.review_field_bpm
+    TagField.ISRC -> R.string.review_field_isrc
+    TagField.LABEL -> R.string.review_field_label
+    TagField.MUSICBRAINZ -> R.string.review_field_musicbrainz
+    TagField.REPLAY_GAIN -> R.string.review_field_replay_gain
 }
 
 @Composable
@@ -2947,6 +3104,9 @@ private fun IdentificationSource.labelRes(): Int = when (this) {
     IdentificationSource.ITUNES -> R.string.source_itunes
     IdentificationSource.MUSICBRAINZ -> R.string.source_musicbrainz
     IdentificationSource.FINGERPRINT -> R.string.source_fingerprint
+    IdentificationSource.ACRCLOUD -> R.string.source_acrcloud
+    IdentificationSource.LRCLIB -> R.string.source_lrclib
+    IdentificationSource.DEEZER -> R.string.source_deezer
     IdentificationSource.MANUAL -> R.string.source_manual
 }
 
@@ -2981,6 +3141,7 @@ private val EXTRA_FIELDS = listOf(
 )
 
 private val YEAR_PATTERN = Regex("""^\d{4}(?:-\d{2}(?:-\d{2})?)?$""")
+private const val LYRICS_PREVIEW_LINES = 6
 private val TRIM_TRACK_HEIGHT = 6.dp
 private const val FIELD_ANIM_MILLIS = 180
 private const val SEARCH_DEBOUNCE_MILLIS = 350L

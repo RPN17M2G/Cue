@@ -9,4 +9,10 @@ enum class TagField {
     GENRE,
     TRACK_NUMBER,
     ARTWORK,
+    LYRICS,
+    BPM,
+    ISRC,
+    LABEL,
+    MUSICBRAINZ,
+    REPLAY_GAIN,
 }

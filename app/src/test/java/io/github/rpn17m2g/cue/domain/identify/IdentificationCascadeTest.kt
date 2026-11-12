@@ -753,8 +753,157 @@ class IdentificationCascadeTest {
         assertFalse(outcome.usedEmbeddedTags)
     }
 
+    @Test
+    fun `acrcloud identifies a recording when text and fingerprint find nothing`() = runTest {
+        val acrMatch = cachedMatch.copy(
+            source = IdentificationSource.ACRCLOUD,
+            score = 0.97,
+        )
+        var audioCalls = 0
+
+        val outcome = cascade(
+            lookup = { emptyList() },
+            audioLookup = {
+                audioCalls += 1
+                AudioRecognitionAttempt(listOf(acrMatch))
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            acrCloudConfigured = true,
+        )
+
+        assertEquals(1, audioCalls)
+        assertTrue(outcome.usedAcrCloud)
+        assertFalse(outcome.usedFingerprint)
+        assertEquals("Get Lucky", outcome.tag.title)
+        assertEquals("Random Access Memories", outcome.tag.album)
+        assertEquals(IdentificationSource.ACRCLOUD, outcome.sources[TagField.ALBUM])
+        assertEquals("Get Lucky", outcome.bestMatch?.title)
+        assertEquals(IdentificationSource.ACRCLOUD, outcome.bestMatch?.source)
+    }
+
+    @Test
+    fun `acrcloud is skipped when the project is not configured`() = runTest {
+        var audioCalls = 0
+
+        val outcome = cascade(
+            lookup = { emptyList() },
+            audioLookup = {
+                audioCalls += 1
+                AudioRecognitionAttempt(listOf(cachedMatch.copy(source = IdentificationSource.ACRCLOUD)))
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            acrCloudConfigured = false,
+        )
+
+        assertEquals(0, audioCalls)
+        assertFalse(outcome.usedAcrCloud)
+        assertEquals("Get Lucky", outcome.tag.title)
+    }
+
+    @Test
+    fun `a forced audio run tries acrcloud before text`() = runTest {
+        var lookupCalls = 0
+        var audioCalls = 0
+
+        val outcome = cascade(
+            lookup = {
+                lookupCalls += 1
+                listOf(cachedMatch)
+            },
+            audioLookup = {
+                audioCalls += 1
+                AudioRecognitionAttempt(
+                    listOf(cachedMatch.copy(source = IdentificationSource.ACRCLOUD, score = 0.95)),
+                )
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = true,
+            acoustIdConfigured = true,
+            acrCloudConfigured = true,
+            forceFingerprint = true,
+        )
+
+        assertEquals(1, audioCalls)
+        assertEquals(0, lookupCalls)
+        assertTrue(outcome.usedAcrCloud)
+    }
+
+    @Test
+    fun `acrcloud receives the whole track duration when it is known`() = runTest {
+        var received: Long? = null
+
+        cascade(
+            audioLookup = { durationMs ->
+                received = durationMs
+                AudioRecognitionAttempt()
+            },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            acrCloudConfigured = true,
+            durationMs = 30_000,
+            trackDurationMs = 204_000,
+        )
+
+        assertEquals(204_000L, received)
+    }
+
+    @Test
+    fun `a rejected acrcloud key is surfaced when no other stage answers`() = runTest {
+        val outcome = cascade(
+            lookup = { emptyList() },
+            audioLookup = { AudioRecognitionAttempt(keyRejected = true) },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            acrCloudConfigured = true,
+        )
+
+        assertTrue(outcome.acrCloudKeyRejected)
+        assertFalse(outcome.usedAcrCloud)
+        assertEquals("Get Lucky", outcome.tag.title)
+    }
+
+    @Test
+    fun `an acrcloud failure does not abort the cascade`() = runTest {
+        val outcome = cascade(
+            lookup = { emptyList() },
+            audioLookup = { error("provider exploded") },
+        ).identify(
+            ocrCandidates = listOf(getLucky),
+            embeddedTags = null,
+            networkEnabled = true,
+            fingerprintEnabled = false,
+            acoustIdConfigured = false,
+            acrCloudConfigured = true,
+        )
+
+        assertFalse(outcome.usedAcrCloud)
+        assertEquals("Get Lucky", outcome.tag.title)
+    }
+
     private fun cascade(
         lookup: suspend (LookupSeed) -> List<MetadataMatch> = { emptyList() },
         fingerprintLookup: suspend (FingerprintSeed) -> FingerprintAttempt = { FingerprintAttempt() },
-    ): IdentificationCascade = IdentificationCascade(lookup, fingerprintLookup)
+        audioLookup: (suspend (Long?) -> AudioRecognitionAttempt)? = null,
+    ): IdentificationCascade = IdentificationCascade(lookup, fingerprintLookup, audioLookup)
 }

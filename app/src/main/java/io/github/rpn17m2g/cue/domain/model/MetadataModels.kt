@@ -8,10 +8,13 @@ enum class IdentificationSource {
     ITUNES,
     MUSICBRAINZ,
     FINGERPRINT,
+    ACRCLOUD,
+    LRCLIB,
+    DEEZER,
     MANUAL,
 }
 
-/** A candidate song returned by a metadata provider or the fingerprint service. */
+/** A candidate song returned by a metadata provider or an audio recognizer. */
 data class MetadataMatch(
     val title: String,
     val artist: String,
@@ -24,6 +27,14 @@ data class MetadataMatch(
     val artwork: Artwork? = null,
     val source: IdentificationSource,
     val score: Double = 0.0,
+    /** Standard codes and identifiers providers return alongside the names. */
+    val isrc: String? = null,
+    val label: String? = null,
+    val bpm: Int? = null,
+    val replayGainDb: Double? = null,
+    val recordingMbid: String? = null,
+    val releaseMbid: String? = null,
+    val artistMbid: String? = null,
 )
 
 /** Input accepted by Cue, normalized away from Android types. */

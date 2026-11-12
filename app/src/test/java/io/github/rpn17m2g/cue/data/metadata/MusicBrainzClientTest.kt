@@ -52,6 +52,9 @@ class MusicBrainzClientTest {
         assertEquals("A Night at the Opera", match.album)
         assertEquals("1975", match.year)
         assertEquals(IdentificationSource.MUSICBRAINZ, match.source)
+        assertEquals("rec-1", match.recordingMbid)
+        assertEquals("release-1", match.releaseMbid)
+        assertEquals("artist-1", match.artistMbid)
         assertNull(match.artworkUrl)
         assertTrue(match.score > 0.9)
     }

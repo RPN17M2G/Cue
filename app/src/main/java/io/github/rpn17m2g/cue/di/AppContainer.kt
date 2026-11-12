@@ -4,6 +4,7 @@ import android.content.Context
 import io.github.rpn17m2g.cue.audio.FfmpegProcessRunner
 import io.github.rpn17m2g.cue.audio.FfmpegRuntime
 import io.github.rpn17m2g.cue.data.artwork.ArtworkRepository
+import io.github.rpn17m2g.cue.data.audio.FfmpegAudioSampleExtractor
 import io.github.rpn17m2g.cue.data.fingerprint.FfmpegFingerprintExtractor
 import io.github.rpn17m2g.cue.data.input.ContentResolverDocumentEditor
 import io.github.rpn17m2g.cue.data.input.DocumentEditor
@@ -16,7 +17,9 @@ import io.github.rpn17m2g.cue.data.metadata.LookupError
 import io.github.rpn17m2g.cue.data.metadata.LookupPolicy
 import io.github.rpn17m2g.cue.data.metadata.LookupResult
 import io.github.rpn17m2g.cue.data.metadata.MetadataClients
+import io.github.rpn17m2g.cue.data.metadata.MetadataEnricher
 import io.github.rpn17m2g.cue.data.metadata.MetadataQuery
+import io.github.rpn17m2g.cue.data.metadata.NetworkGate
 import io.github.rpn17m2g.cue.data.ocr.MediaVideoFrameExtractor
 import io.github.rpn17m2g.cue.data.ocr.MlKitOcrEngine
 import io.github.rpn17m2g.cue.data.ocr.TesseractHebrewOcrEngine
@@ -27,6 +30,9 @@ import io.github.rpn17m2g.cue.data.session.SessionRepository
 import io.github.rpn17m2g.cue.data.settings.DataStoreSettingsRepository
 import io.github.rpn17m2g.cue.domain.identify.FingerprintAttempt
 import io.github.rpn17m2g.cue.domain.identify.FingerprintExtractor
+import io.github.rpn17m2g.cue.domain.identify.AudioRecognitionAttempt
+import io.github.rpn17m2g.cue.domain.identify.Confidence
+import io.github.rpn17m2g.cue.domain.identify.ConfidenceTier
 import io.github.rpn17m2g.cue.domain.identify.IdentificationCascade
 import io.github.rpn17m2g.cue.domain.identify.IdentifySongUseCase
 import io.github.rpn17m2g.cue.domain.identify.LookupSeed
@@ -135,6 +141,13 @@ class AppContainer(context: Context) {
         )
     }
 
+    private val audioSampleExtractor by lazy {
+        FfmpegAudioSampleExtractor(
+            runner = ffmpegRunner,
+            outputDirectory = File(appContext.cacheDir, "samples"),
+        )
+    }
+
     private val metadataLock = Mutex()
     private var metadataCache: MetadataCache? = null
 
@@ -182,6 +195,23 @@ class AppContainer(context: Context) {
                     )
                 }
             },
+            audioLookup = audioLookup@{ durationMs ->
+                val input = File(inputPath)
+                if (!input.isFile) return@audioLookup AudioRecognitionAttempt()
+                val client = clients.acrCloud ?: return@audioLookup AudioRecognitionAttempt()
+                val sample = audioSampleExtractor.extract(input, durationMs)
+                    ?: return@audioLookup AudioRecognitionAttempt()
+                try {
+                    when (val result = client.identify(sample)) {
+                        is LookupResult.Success -> AudioRecognitionAttempt(result.value)
+                        is LookupResult.Failure -> AudioRecognitionAttempt(
+                            keyRejected = result.error == LookupError.RejectedKey,
+                        )
+                    }
+                } finally {
+                    sample.delete()
+                }
+            },
         )
     }
 
@@ -192,13 +222,43 @@ class AppContainer(context: Context) {
         preferHebrew: Boolean,
         forceFingerprint: Boolean = false,
         manualQuery: LookupSeed? = null,
-    ): SongIdentification = identifySongUseCase.identify(
-        input = input,
-        embeddedTags = embeddedTags,
-        settings = settings,
-        preferHebrew = preferHebrew,
-        cascade = identificationCascade(input.path),
-        forceFingerprint = forceFingerprint,
-        manualQuery = manualQuery,
-    )
+    ): SongIdentification {
+        val identification = identifySongUseCase.identify(
+            input = input,
+            embeddedTags = embeddedTags,
+            settings = settings,
+            preferHebrew = preferHebrew,
+            cascade = identificationCascade(input.path),
+            forceFingerprint = forceFingerprint,
+            manualQuery = manualQuery,
+        )
+        if (!settings.networkLookups || !settings.enrichmentEnabled) return identification
+
+        val outcome = identification.outcome
+        val confident = outcome.usedEmbeddedTags ||
+            outcome.bestMatch?.let { Confidence.tier(it.score) == ConfidenceTier.ACCEPTED } == true
+        if (!confident) return identification
+
+        val clients = metadataClients()
+        val durationSeconds = (identification.trackDurationMs ?: input.durationMs)
+            ?.takeIf { it > 0L }
+            ?.let { (it / 1_000L).toInt() }
+            ?.takeIf { it > 0 }
+        val enriched = MetadataEnricher(
+            lyrics = { title, artist, album, duration ->
+                clients.lyrics.fetchOrNull(title, artist, album, duration)
+            },
+            bpm = { title, artist ->
+                clients.deezer.lookupOrNull(title, artist)
+            },
+            networkGate = NetworkGate { settings.networkLookups },
+        ).enrich(outcome.tag, durationSeconds)
+
+        return identification.copy(
+            outcome = outcome.copy(
+                tag = enriched.tag,
+                sources = outcome.sources + enriched.sources,
+            ),
+        )
+    }
 }

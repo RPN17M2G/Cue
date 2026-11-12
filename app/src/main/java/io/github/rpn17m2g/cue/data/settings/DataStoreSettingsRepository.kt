@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.github.rpn17m2g.cue.BuildConfig
 import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.settings.AcoustIdKey
+import io.github.rpn17m2g.cue.settings.AcrCloudCredentials
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.AppTheme
@@ -54,6 +55,10 @@ class DataStoreSettingsRepository(
             preferences[Keys.OCR_INTERVAL] = next.ocrIntervalMs
             preferences[Keys.HTTP_TIMEOUT] = next.httpTimeoutMs
             preferences[Keys.HTTP_RETRIES] = next.httpRetries
+            preferences[Keys.ACRCLOUD_HOST] = next.acrCloudHost
+            preferences[Keys.ACRCLOUD_ACCESS_KEY] = next.acrCloudAccessKey
+            preferences[Keys.ACRCLOUD_ACCESS_SECRET] = next.acrCloudAccessSecret
+            preferences[Keys.ENRICHMENT] = next.enrichmentEnabled
         }
     }
 }
@@ -97,6 +102,19 @@ internal fun mapPreferences(preferences: Preferences): AppSettings = AppSettings
     ocrIntervalMs = preferences[Keys.OCR_INTERVAL] ?: AppSettings.DEFAULT_OCR_INTERVAL_MS,
     httpTimeoutMs = preferences[Keys.HTTP_TIMEOUT] ?: AppSettings.DEFAULT_HTTP_TIMEOUT_MS,
     httpRetries = preferences[Keys.HTTP_RETRIES] ?: AppSettings.DEFAULT_HTTP_RETRIES,
+    acrCloudHost = AcrCloudCredentials.orBuildDefault(
+        stored = preferences[Keys.ACRCLOUD_HOST],
+        buildDefault = BuildConfig.ACRCLOUD_HOST,
+    ),
+    acrCloudAccessKey = AcrCloudCredentials.orBuildDefault(
+        stored = preferences[Keys.ACRCLOUD_ACCESS_KEY],
+        buildDefault = BuildConfig.ACRCLOUD_ACCESS_KEY,
+    ),
+    acrCloudAccessSecret = AcrCloudCredentials.orBuildDefault(
+        stored = preferences[Keys.ACRCLOUD_ACCESS_SECRET],
+        buildDefault = BuildConfig.ACRCLOUD_ACCESS_SECRET,
+    ),
+    enrichmentEnabled = preferences[Keys.ENRICHMENT] ?: true,
 )
 
 /** Persisted names, kept next to the mapping so both stay in step. */
@@ -115,4 +133,8 @@ private object Keys {
     val OCR_INTERVAL = longPreferencesKey("ocr_interval_ms")
     val HTTP_TIMEOUT = longPreferencesKey("http_timeout_ms")
     val HTTP_RETRIES = intPreferencesKey("http_retries")
+    val ACRCLOUD_HOST = stringPreferencesKey("acrcloud_host")
+    val ACRCLOUD_ACCESS_KEY = stringPreferencesKey("acrcloud_access_key")
+    val ACRCLOUD_ACCESS_SECRET = stringPreferencesKey("acrcloud_access_secret")
+    val ENRICHMENT = booleanPreferencesKey("enrichment_enabled")
 }
