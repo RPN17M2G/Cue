@@ -10,6 +10,8 @@ package io.github.rpn17m2g.cue.domain.identify
  */
 data class StageTimings(
     val framesMs: Long = 0,
+    /** How many frames were sampled, so [framesMs] can be read per frame. */
+    val frameCount: Int = 0,
     val latinOcrMs: Long = 0,
     val hebrewOcrMs: Long = 0,
     val ocrMs: Long = 0,
@@ -20,4 +22,7 @@ data class StageTimings(
     val localMs: Long get() = framesMs + ocrMs
 
     val totalMs: Long get() = framesMs + ocrMs + cascadeMs + enrichmentMs
+
+    /** Average cost of one sampled frame, or `0` when nothing was sampled. */
+    val perFrameMs: Long get() = if (frameCount <= 0) 0 else framesMs / frameCount
 }

@@ -286,6 +286,7 @@ class AppContainer(context: Context) {
         Log.d(
             TAG,
             "identify ${input.displayName}: frames=${timings.framesMs}ms " +
+                "(${timings.frameCount} frames, ${timings.perFrameMs}ms/frame) " +
                 "ocr=${timings.ocrMs}ms (latin=${timings.latinOcrMs}ms, " +
                 "hebrew=${timings.hebrewOcrMs}ms) cascade=${timings.cascadeMs}ms " +
                 "enrichment=${timings.enrichmentMs}ms total=${timings.totalMs}ms",

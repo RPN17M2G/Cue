@@ -57,6 +57,7 @@ class IdentifySongUseCase(
         var ocrFailed = false
         var hebrewUsed = false
         var framesMs = 0L
+        var frameCount = 0
         var latinOcrMs = 0L
         var hebrewOcrMs = 0L
         var ocrMs = 0L
@@ -75,6 +76,7 @@ class IdentifySongUseCase(
                 val framesStarted = System.nanoTime()
                 val frames = frameExtractor.extract(File(input.path), timestamps, framesDir)
                 framesMs = elapsedMs(framesStarted)
+                frameCount = frames.size
                 if (frames.isEmpty()) {
                     ocrFailed = true
                 } else {
@@ -113,6 +115,7 @@ class IdentifySongUseCase(
         )
         val timings = StageTimings(
             framesMs = framesMs,
+            frameCount = frameCount,
             latinOcrMs = latinOcrMs,
             hebrewOcrMs = hebrewOcrMs,
             ocrMs = ocrMs,
