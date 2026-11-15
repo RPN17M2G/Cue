@@ -271,6 +271,15 @@ class AppContainer(context: Context) {
             ),
             timings = identification.timings.copy(enrichmentMs = enrichmentMs),
         )
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "enriched ${input.displayName}: lyrics=${enriched.tag.lyrics != null} " +
+                    "bpm=${enriched.tag.bpm ?: "-"} isrc=${enriched.tag.isrc ?: "-"} " +
+                    "label=${enriched.tag.label ?: "-"} " +
+                    "mbids=${enriched.tag.recordingMbid != null}",
+            )
+        }
         logTimings(input, enrichedIdentification)
         return enrichedIdentification
     }

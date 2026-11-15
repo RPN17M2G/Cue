@@ -71,7 +71,53 @@ class ProcessingJobCodecTest {
         assertFalse(created.single().exists())
     }
 
-    private fun job(artwork: Artwork?): ProcessingJob = ProcessingJob(
+    @Test
+    fun `enrichment fields survive the trip through the intent`() {
+        val intent = Intent()
+        val enriched = TagDraft(
+            title = "Get Lucky",
+            artist = "Daft Punk",
+            lyrics = "Like the legend of the phoenix\nAll ends with beginnings",
+            bpm = 116,
+            isrc = "GBUM70900217",
+            label = "Columbia",
+            replayGainDb = -7.4,
+            recordingMbid = "rec-1",
+            releaseMbid = "release-1",
+            artistMbid = "artist-1",
+        )
+
+        ProcessingJobCodec.write(context, intent, job(artwork = null, draft = enriched))
+        val restored = ProcessingJobCodec.read(intent)
+
+        assertEquals(enriched, restored?.draft)
+    }
+
+    @Test
+    fun `a draft without enrichment stays without enrichment`() {
+        val intent = Intent()
+
+        ProcessingJobCodec.write(context, intent, job(artwork = null))
+        val restored = ProcessingJobCodec.read(intent)?.draft
+
+        assertNull(restored?.lyrics)
+        assertNull(restored?.bpm)
+        assertNull(restored?.isrc)
+        assertNull(restored?.label)
+        assertNull(restored?.replayGainDb)
+        assertNull(restored?.recordingMbid)
+        assertNull(restored?.releaseMbid)
+        assertNull(restored?.artistMbid)
+    }
+
+    private fun job(
+        artwork: Artwork?,
+        draft: TagDraft = TagDraft(
+            title = "Get Lucky",
+            artist = "Daft Punk",
+            artwork = artwork,
+        ),
+    ): ProcessingJob = ProcessingJob(
         input = ResolvedInput(
             id = "input",
             uri = "content://input",
@@ -81,11 +127,7 @@ class ProcessingJobCodecTest {
             kind = InputKind.VIDEO,
             durationMs = 10_000,
         ),
-        draft = TagDraft(
-            title = "Get Lucky",
-            artist = "Daft Punk",
-            artwork = artwork,
-        ),
+        draft = draft,
         trim = null,
         quality = QualityPreset.V0,
         outputFolder = "Music/Cue",

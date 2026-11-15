@@ -38,6 +38,14 @@ internal object ProcessingJobCodec {
         intent.putExtra(KEY_GENRE, job.draft.genre)
         intent.putExtra(KEY_TRACK, job.draft.trackNumber ?: ABSENT_INT)
         intent.putExtra(KEY_TRACK_TOTAL, job.draft.trackTotal ?: ABSENT_INT)
+        intent.putExtra(KEY_LYRICS, job.draft.lyrics)
+        intent.putExtra(KEY_BPM, job.draft.bpm ?: ABSENT_INT)
+        intent.putExtra(KEY_ISRC, job.draft.isrc)
+        intent.putExtra(KEY_LABEL, job.draft.label)
+        intent.putExtra(KEY_REPLAY_GAIN, job.draft.replayGainDb ?: ABSENT_DOUBLE)
+        intent.putExtra(KEY_RECORDING_MBID, job.draft.recordingMbid)
+        intent.putExtra(KEY_RELEASE_MBID, job.draft.releaseMbid)
+        intent.putExtra(KEY_ARTIST_MBID, job.draft.artistMbid)
         job.draft.artwork?.let { artwork ->
             stageArtwork(context, artwork)?.let { staged ->
                 intent.putExtra(KEY_ARTWORK_PATH, staged.absolutePath)
@@ -93,6 +101,15 @@ internal object ProcessingJobCodec {
                 trackNumber = intent.getIntExtra(KEY_TRACK, ABSENT_INT).takeIf { it != ABSENT_INT },
                 trackTotal = intent.getIntExtra(KEY_TRACK_TOTAL, ABSENT_INT).takeIf { it != ABSENT_INT },
                 artwork = readArtwork(intent),
+                lyrics = intent.getStringExtra(KEY_LYRICS),
+                bpm = intent.getIntExtra(KEY_BPM, ABSENT_INT).takeIf { it != ABSENT_INT },
+                isrc = intent.getStringExtra(KEY_ISRC),
+                label = intent.getStringExtra(KEY_LABEL),
+                replayGainDb = intent.getDoubleExtra(KEY_REPLAY_GAIN, ABSENT_DOUBLE)
+                    .takeIf { !it.isNaN() },
+                recordingMbid = intent.getStringExtra(KEY_RECORDING_MBID),
+                releaseMbid = intent.getStringExtra(KEY_RELEASE_MBID),
+                artistMbid = intent.getStringExtra(KEY_ARTIST_MBID),
             ),
             trim = if (trimStart != ABSENT_LONG && trimEnd != ABSENT_LONG && trimEnd > trimStart) {
                 TrimRange(trimStart, trimEnd)
@@ -142,6 +159,7 @@ internal object ProcessingJobCodec {
 
     private const val ABSENT_LONG = -1L
     private const val ABSENT_INT = -1
+    private const val ABSENT_DOUBLE = Double.NaN
 
     private const val KEY_INPUT_ID = "input_id"
     private const val KEY_URI = "input_uri"
@@ -159,6 +177,14 @@ internal object ProcessingJobCodec {
     private const val KEY_GENRE = "tag_genre"
     private const val KEY_TRACK = "tag_track"
     private const val KEY_TRACK_TOTAL = "tag_track_total"
+    private const val KEY_LYRICS = "tag_lyrics"
+    private const val KEY_BPM = "tag_bpm"
+    private const val KEY_ISRC = "tag_isrc"
+    private const val KEY_LABEL = "tag_label"
+    private const val KEY_REPLAY_GAIN = "tag_replay_gain"
+    private const val KEY_RECORDING_MBID = "tag_recording_mbid"
+    private const val KEY_RELEASE_MBID = "tag_release_mbid"
+    private const val KEY_ARTIST_MBID = "tag_artist_mbid"
     private const val KEY_ARTWORK_PATH = "tag_artwork_path"
     private const val KEY_ARTWORK_MIME = "tag_artwork_mime"
     private const val KEY_TRIM_START = "trim_start"

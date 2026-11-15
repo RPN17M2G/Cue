@@ -4,11 +4,14 @@ import io.github.rpn17m2g.cue.domain.metadata.Similarity
 import kotlinx.serialization.Serializable
 import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * The handful of Deezer fields Cue keeps. Deezer publishes BPM, a ReplayGain
- * value and the ISRC on its public search endpoint; no key or account is
+ * The handful of Deezer fields Cue keeps: BPM, a ReplayGain value, the ISRC.
+ *
+ * Search only returns the names and the ISRC; BPM and gain live on the track
+ * endpoint, so a chosen result is looked up once more. No key or account is
  * needed.
  */
 data class DeezerTrack(
@@ -25,6 +28,9 @@ internal interface DeezerApi {
         @Query("q") query: String,
         @Query("limit") limit: Int,
     ): Response<DeezerSearchResponse>
+
+    @GET("track/{id}")
+    suspend fun track(@Path("id") id: Long): Response<DeezerItem>
 }
 
 @Serializable
@@ -34,6 +40,7 @@ internal data class DeezerSearchResponse(
 
 @Serializable
 internal data class DeezerItem(
+    val id: Long? = null,
     val title: String? = null,
     val bpm: Double? = null,
     val gain: Double? = null,
@@ -66,7 +73,9 @@ class DeezerClient internal constructor(
             )
             if (!response.isSuccessful) return@safeLookup httpFailure(response.code())
             val body = response.body() ?: return@safeLookup LookupResult.Failure(LookupError.Parse())
-            LookupResult.Success(body.data.bestMatch(track, performer))
+            val best = body.data.bestMatch(track, performer)
+                ?: return@safeLookup LookupResult.Success(null)
+            LookupResult.Success(best.toTrack(best.details()))
         }
     }
 
@@ -77,7 +86,19 @@ class DeezerClient internal constructor(
             is LookupResult.Failure -> null
         }
 
-    private fun List<DeezerItem>.bestMatch(title: String, artist: String): DeezerTrack? {
+    /**
+     * BPM and gain are not part of a search result, so the chosen track is read
+     * once more. A failed detail call is not a failed lookup: the ISRC and the
+     * names from the search result are still worth keeping.
+     */
+    private suspend fun DeezerItem.details(): DeezerItem? {
+        val trackId = id ?: return null
+        val response = runCatching { api.track(trackId) }.getOrNull() ?: return null
+        if (!response.isSuccessful) return null
+        return response.body()?.takeIf { !it.title.isNullOrBlank() }
+    }
+
+    private fun List<DeezerItem>.bestMatch(title: String, artist: String): DeezerItem? {
         val candidates = mapNotNull { item ->
             val itemTitle = item.title?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             val itemArtist = item.artist?.name?.trim().orEmpty()
@@ -90,15 +111,18 @@ class DeezerClient internal constructor(
             }
             item to (titleScore + Similarity.textSimilarity(artist, itemArtist))
         }
-        val best = candidates.maxByOrNull { it.second }?.first ?: return null
-        return DeezerTrack(
-            title = best.title.orEmpty().trim(),
-            artist = best.artist?.name.orEmpty().trim(),
-            bpm = best.bpm?.takeIf { it > 0 }?.let { kotlin.math.round(it).toInt() },
-            replayGainDb = best.gain,
-            isrc = best.isrc?.trim()?.takeIf { it.isNotEmpty() },
-        )
+        return candidates.maxByOrNull { it.second }?.first
     }
+
+    private fun DeezerItem.toTrack(details: DeezerItem?): DeezerTrack = DeezerTrack(
+        title = title.orEmpty().trim(),
+        artist = artist?.name.orEmpty().trim(),
+        bpm = (details?.bpm ?: bpm)
+            ?.takeIf { it > 0 }
+            ?.let { kotlin.math.round(it).toInt() },
+        replayGainDb = details?.gain ?: gain,
+        isrc = (details?.isrc ?: isrc)?.trim()?.takeIf { it.isNotEmpty() },
+    )
 
     private companion object {
         const val SEARCH_LIMIT = 10
