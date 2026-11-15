@@ -56,16 +56,18 @@ recordings, default 2-second OCR interval:
 | `now-playing-en.mp4` | 15.4 s (8 frames) | 8.4 s (8.3 / 4.1) | 0.9 s | 0.5 s | 25.2 s |
 | `now-playing-he.mp4` | 14.6 s (8 frames) | 6.8 s (6.8 / 1.9) | 0.8 s | 0.2 s | 22.4 s |
 
+A warm emulator is much faster than that first cold run: the same two
+recordings then take 3–5 s of frame extraction (about 0.4–0.6 s per frame) and
+8 s in total. The spread is the emulator's software decoder, not the pipeline;
+on a phone the hardware decoder is used instead. A physical device is still
+required before quoting a real-world time, and the stage breakdown makes that
+comparison a single log line.
+
 Both recordings identify exactly as before the change: *Believer — Imagine
 Dragons* at 100% from iTunes, and the Hebrew recording at 75% with *Noa Kirel*
-as the artist.
-
-Frame extraction is more than half of the wait on the emulator, at roughly
-1.9 s per frame. That number is not representative of a phone: the emulator
-decodes H.264 in software, while a real device uses the hardware decoder and
-typically needs tens of milliseconds per frame. A physical device is still
-required before quoting a real-world time; the stage breakdown makes that
-comparison a single log line.
+as the artist. The saved *Believer* file now carries the enriched lyrics,
+`TBPM=125`, `TSRC=USUM71700626` and a ReplayGain comment, which the earlier
+build silently dropped (see the processing-job codec fix).
 
 ## Where the remaining time goes
 
