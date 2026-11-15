@@ -28,6 +28,10 @@ and manual entry is always available.
    MusicBrainz / Cover Art Archive.
 5. **Manual entry / search:** never blocked.
 
+ADR 0008 extends this cascade with an ACRCloud stage after the fingerprint
+(and makes audio-first the order for a manual audio search), and ADR 0009 adds
+best-effort enrichment after a confident match.
+
 Offline or no-match never blocks the flow: Review shows the best available data
 (with raw OCR text and a retry action).
 

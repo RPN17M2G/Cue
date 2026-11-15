@@ -21,7 +21,11 @@ Android 12+, English and Hebrew with full RTL.
   Fix any field inline; a low-confidence match never silently becomes a tag.
 - **Identification** — ML Kit and Tesseract OCR over sampled frames, script
   detection so Hebrew is not forced onto English text, Chromaprint fingerprints
-  through AcoustID, then iTunes and MusicBrainz lookups.
+  through AcoustID, ACRCloud for clips that start mid-song, then iTunes and
+  MusicBrainz lookups.
+- **Track details** — after a confident match, Cue fills in lyrics (LRCLIB),
+  BPM, ReplayGain and ISRC (Deezer) and the MusicBrainz IDs. Only empty fields
+  are filled; a failure never blocks the save.
 - **Cover art** — the confident match's artwork is applied automatically; you
   can search online, pick an image, or remove it.
 - **Clip and quality** — typed `m:ss` trim bounds, quality presets with a size
@@ -94,6 +98,43 @@ acoustid.apiKey=your-key-here
 That value becomes the build-time default (`BuildConfig.ACOUSTID_API_KEY`).
 The field in Settings wins once you save it there. If AcoustID rejects the key,
 the review screen says so and links straight to Settings.
+
+## ACRCloud credentials
+
+AcoustID fingerprints the whole file, so it cannot match a recording that
+starts in the middle of a song. ACRCloud matches a 12-second fragment from the
+middle of the recording instead, which covers that case. Create a free project
+at [acrcloud.com](https://www.acrcloud.com/) and copy the host, access key and
+access secret from its console.
+
+They are **never committed**. Put them in the untracked `local.properties`
+next to the AcoustID key:
+
+```properties
+acrcloud.host=identify-eu-west-1.acrcloud.com
+acrcloud.accessKey=your-access-key
+acrcloud.accessSecret=your-access-secret
+```
+
+The three fields in Settings win once you save them there, and "Check key"
+uploads a generated silent probe: any answer other than an auth or quota error
+means the credentials are accepted. Without credentials the stage is skipped
+and the app behaves as before.
+
+## Track details
+
+Once a match is confident, Cue fills the blanks in the review draft from two
+public services, in parallel:
+
+| Field | Source |
+|---|---|
+| Lyrics | [LRCLIB](https://lrclib.net/) |
+| BPM, ReplayGain, ISRC | [Deezer](https://developers.deezer.com/api) |
+| Recording, release and artist MBIDs | MusicBrainz (via the text lookup) |
+
+Nothing you typed is replaced, and an offline or failing service simply leaves
+the field empty. The review screen shows each filled value with its source and
+offers a manual lyrics fetch.
 
 ## Project layout
 
