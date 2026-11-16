@@ -103,6 +103,12 @@ object OcrCandidateExtractor {
         "Playlists",
         "Recently played",
         "Made for you",
+        "New songs",
+        "New releases",
+        "New music",
+        "Trending",
+        "Charts",
+        "Quick picks",
         "Recommended",
         "Watch next",
         "Autoplay",
@@ -288,11 +294,26 @@ object OcrCandidateExtractor {
             "official\\s+lyric\\s+video|lyric\\s+video)\\s*$",
     )
     private val HAS_LETTER_OR_DIGIT = Regex("[\\p{L}\\p{Nd}]")
+    /** A row chevron or a bullet read as part of the title. */
+    private val EDGE_DECORATION = charArrayOf('<', '>', '\u2039', '\u203A', '\u00AB', '\u00BB', '|', '\u2022', '\u00B7')
     private val HAS_LETTER = Regex("\\p{L}")
     /** A like/view counter with a compact suffix ("2.6k", "14M"). */
     private val COMPACT_COUNT = Regex("(?i)^\\d+(?:[.,]\\d+)?\\s*[km]$")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
+    /**
+     * Labels that mark an ad card. They sit where the artist normally goes, so
+     * a line whose artist is one of these is an advertisement, not a song.
+     */
+    private val AD_LABELS: Set<String> = setOf(
+        "sponsored",
+        "ad",
+        "advertisement",
+        "promoted",
+        "ממומן",
+        "ממומנת",
+        "פרסומת",
+    )
     private val DEFAULT_NOISE_KEYS: Set<String> =
         DEFAULT_NOISE_PHRASES.mapTo(HashSet(), ::normalize)
 
@@ -336,10 +357,16 @@ object OcrCandidateExtractor {
             val weight = weights[frameIndex]
             val largest = kept.maxOf { it.prominence }
             val seen = HashSet<CandidateKey>()
-            kept.forEachIndexed { index, line ->
+            kept.forEachIndexed lines@{ index, line ->
+                if (isAdTitle(line, frame.lines)) return@lines
                 val quality = qualityOf(line, largest)
                 val subtitle = looksLikeSubtitle(kept, index)
                 val artist = line.inlineArtist ?: bestArtist(kept, index)?.text
+                // An ad card puts "Sponsored" where the artist goes. The line
+                // above it is the product being advertised ("PyCharm"), not a
+                // song, and it is often the largest text in the frame, so it
+                // would outrank the real title without this.
+                if (artist != null && normalize(artist) in AD_LABELS) return@lines
                 if (artist != null) {
                     val pairKey = CandidateKey(normalize(line.text), normalize(artist))
                     if (seen.add(pairKey)) {
@@ -551,7 +578,7 @@ object OcrCandidateExtractor {
         text.replaceFirst(TRACK_PREFIX, "").trim()
 
     private fun stripDecorations(text: String): String {
-        var current = text.trim()
+        var current = text.trim().trim(*EDGE_DECORATION)
         repeat(2) {
             val next = current
                 .replace(BRACKET_DECORATION, "")
@@ -693,6 +720,31 @@ object OcrCandidateExtractor {
             (1.0 - (kotlin.math.abs(box.centerX - 0.5f) / 0.5f).coerceIn(0f, 1f).toDouble())
         } ?: 0.5
         return (0.7 * prominence.coerceIn(0f, 1f) + 0.3 * centered).coerceIn(0.0, 1.0)
+    }
+
+    /**
+     * A line whose nearest line below is an ad label is the advertised product,
+     * not the song. The label itself is small and is normally dropped as chrome,
+     * so the geometry is checked against the raw lines. Only the nearest line
+     * counts: a "Sponsored" card elsewhere in the feed must not delete the
+     * player's real title.
+     */
+    private fun isAdTitle(line: KeptLine, rawLines: List<OcrLine>): Boolean {
+        val box = line.box ?: return false
+        val nearest = rawLines
+            .mapNotNull { raw ->
+                val other = raw.box ?: return@mapNotNull null
+                val gap = other.top - box.bottom
+                if (gap < 0f || gap > box.height * MAX_ARTIST_GAP_IN_HEIGHTS) {
+                    return@mapNotNull null
+                }
+                if (box.horizontalOverlap(other) < MIN_HORIZONTAL_OVERLAP) {
+                    return@mapNotNull null
+                }
+                gap to normalize(clean(raw.text).orEmpty())
+            }
+            .minByOrNull { it.first }
+        return nearest?.second in AD_LABELS
     }
 
     /** The line directly under [index] that plausibly names the artist. */

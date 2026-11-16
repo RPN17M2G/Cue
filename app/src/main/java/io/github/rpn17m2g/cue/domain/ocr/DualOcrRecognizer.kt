@@ -134,8 +134,13 @@ class DualOcrRecognizer(
      * gibberish, so a Hebrew screen in an English app used to lose to
      * "Order now" and "Lyrics" from the player chrome. When the Hebrew pass
      * actually read Hebrew, its reading only has to be close to the Latin one,
-     * not better. The app language still breaks a tie when the screen shows no
-     * Hebrew at all, and a clearly better reading from either engine wins.
+     * not better.
+     *
+     * A screen with no real Hebrew word is Latin text: Tesseract reading an
+     * English title produces Hebrew-looking strings with digits or Latin
+     * letters glued into every word, and those score as high as the correct
+     * Latin reading because they are consistently wrong in every frame. The
+     * app language is only a tie-break when neither pass found anything.
      */
     private fun chooseHebrew(
         preferHebrew: Boolean,
@@ -147,16 +152,28 @@ class DualOcrRecognizer(
         hebrewScore < 0.0 -> false
         latinScore < 0.0 -> true
         hebrewOnScreen -> hebrewScore >= latinScore * SCRIPT_MARGIN
-        preferHebrew -> hebrewScore >= latinScore * HEBREW_MARGIN
         else -> hebrewScore > latinScore * LATIN_MARGIN
     }
 
-    /** True when the Hebrew pass's best plausible reading is written in Hebrew. */
+    /**
+     * True when the Hebrew pass's best plausible reading contains a real Hebrew
+     * word. A word is a whole whitespace-separated token of Hebrew letters with
+     * no digit, Latin letter or other symbol glued in: "תן" and "רונידלומי" are
+     * words, while the "סוחוז06)וזסעה+" that Tesseract invents for English text
+     * is not, even though punctuation splits it into letter runs.
+     */
     private fun hebrewTextFound(candidates: List<OcrCandidate>): Boolean =
         candidates.firstOrNull(::isPlausible)?.let { candidate ->
-            HEBREW.containsMatchIn(candidate.title) ||
-                candidate.artist?.let(HEBREW::containsMatchIn) == true
+            hasHebrewWord(candidate.title) || candidate.artist?.let(::hasHebrewWord) == true
         } == true
+
+    private fun hasHebrewWord(text: String): Boolean =
+        text.split(WHITESPACE).any(::isHebrewWord)
+
+    private fun isHebrewWord(token: String): Boolean =
+        token.length >= 2 &&
+            HEBREW_TOKEN.matches(token) &&
+            token.count { it in HEBREW_LETTERS } >= 2
 
     /**
      * One line per scan in debug builds. When a real recording is identified
@@ -273,13 +290,12 @@ class DualOcrRecognizer(
         /** The Hebrew pass must be at least this close when it read Hebrew. */
         const val SCRIPT_MARGIN = 0.80
 
-        /** The Hebrew pass must be at least this close to win for a Hebrew app. */
-        const val HEBREW_MARGIN = 0.92
-
-        /** And clearly better to win for a Latin app. */
+        /** And clearly better to win when the screen shows no Hebrew. */
         const val LATIN_MARGIN = 1.08
 
-        val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
+        /** A whole token of Hebrew letters, marks and geresh only. */
+        val HEBREW_TOKEN = Regex("^[\\u0590-\\u05FF\\uFB1D-\\uFB4F]+$")
+        val HEBREW_LETTERS = 'א'..'ת'
         val WHITESPACE = Regex("[\\s\\u00A0]+")
     }
 }

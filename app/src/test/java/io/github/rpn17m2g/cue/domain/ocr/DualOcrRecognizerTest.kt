@@ -43,6 +43,31 @@ class DualOcrRecognizerTest {
     }
 
     @Test
+    fun `Hebrew gibberish over an English screen never beats the Latin reading`() = runTest {
+        // What Tesseract actually returned for the two English fixtures. Every
+        // token has a digit or a symbol glued in, and it scored as high as the
+        // correct Latin reading.
+        val gibberish = listOf(
+            "זכ6חוסהּוח! - 6צוסטם",
+            "סוחוז06)וזסעה+",
+        )
+        for (hebrewGibberish in gibberish) {
+            for (preferHebrew in listOf(false, true)) {
+                val recognition = DualOcrRecognizer(
+                    latin = FakeEngine(
+                        IdentificationSource.OCR_LATIN,
+                        repeated("Imagine Dragons - Believer"),
+                    ),
+                    hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated(hebrewGibberish)),
+                ).recognize(frames, preferHebrew = preferHebrew)
+
+                assertEquals("Believer", recognition.candidates.first().title)
+                assertFalse(recognition.hebrewUsed)
+            }
+        }
+    }
+
+    @Test
     fun `a Hebrew UI runs the Hebrew pass and prefers its reading`() = runTest {
         val recognition = DualOcrRecognizer(
             latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),

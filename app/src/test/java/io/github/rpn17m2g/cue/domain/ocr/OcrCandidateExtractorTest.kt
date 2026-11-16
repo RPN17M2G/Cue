@@ -233,6 +233,50 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `a row chevron glued to the title is trimmed`() {
+        val candidates = OcrCandidateExtractor.extract(listOf(frame(0, "favorite crime >")))
+
+        assertEquals("favorite crime", candidates.first().title)
+    }
+
+    @Test
+    fun `an ad card does not beat the song title`() {
+        // YouTube Music draws the product title at full size with "Sponsored"
+        // underneath it, and the real player title smaller.
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("PyCharm. Pytho..", 0.10f, 0.30f, 0.90f, 0.36f),
+                line("Sponsored", 0.10f, 0.37f, 0.30f, 0.395f),
+                line("favorite crime", 0.35f, 0.70f, 0.65f, 0.735f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("favorite crime", candidates.first().title)
+        assertTrue(candidates.none { it.title.contains("PyCharm") })
+    }
+
+    @Test
+    fun `a title above an unrelated sponsored card survives`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("favorite crime", 0.05f, 0.88f, 0.45f, 0.91f),
+                line("Olivia Rodrigo", 0.05f, 0.915f, 0.35f, 0.935f),
+                line("PyCharm. Pytho..", 0.10f, 0.30f, 0.90f, 0.36f),
+                line("Sponsored", 0.10f, 0.37f, 0.30f, 0.395f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertTrue(candidates.any { it.title == "favorite crime" })
+        assertTrue(candidates.none { it.title.contains("PyCharm") })
+    }
+
+    @Test
     fun `a Hebrew title with a prefix letter is not treated as glued chrome`() {
         val candidates = OcrCandidateExtractor.extract(listOf(frame(0, "הבית")))
 

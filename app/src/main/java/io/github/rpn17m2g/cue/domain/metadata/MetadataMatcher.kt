@@ -35,9 +35,12 @@ object MetadataMatcher {
         return sort(matches.map { it.copy(score = score(query, it)) })
     }
 
-    private fun sort(matches: List<MetadataMatch>): List<MetadataMatch> = matches.sortedWith(
-        compareByDescending<MetadataMatch> { it.score }
-            .thenBy { Similarity.normalize(it.title) }
-            .thenBy { Similarity.normalize(it.artist) },
-    )
+    /**
+     * Equal scores keep the provider's own relevance order. Sorting ties
+     * alphabetically used to put a karaoke cover ("Drillr") above the original
+     * artist for an exact-title search, because "Drillr" sorts before "Olivia
+     * Rodrigo".
+     */
+    private fun sort(matches: List<MetadataMatch>): List<MetadataMatch> =
+        matches.sortedByDescending { it.score }
 }
