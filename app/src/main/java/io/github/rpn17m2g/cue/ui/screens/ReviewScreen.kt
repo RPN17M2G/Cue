@@ -166,6 +166,7 @@ import io.github.rpn17m2g.cue.domain.model.QualityPreset
 import io.github.rpn17m2g.cue.domain.model.TrimClock
 import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.estimateMp3Bytes
+import io.github.rpn17m2g.cue.domain.ocr.OcrScript
 import io.github.rpn17m2g.cue.ui.cueViewModel
 import io.github.rpn17m2g.cue.ui.navigation.appContainer
 import io.github.rpn17m2g.cue.ui.theme.CueMark
@@ -317,6 +318,7 @@ fun ReviewScreen(
                 onSaveField = { commitField() },
                 onCancelField = ::cancelField,
                 onRetry = viewModel::retryIdentification,
+                onRerunOcr = viewModel::rerunOcr,
                 onFingerprint = viewModel::fingerprintLookup,
                 onOpenSettings = onOpenSettings,
                 onSearch = viewModel::search,
@@ -349,6 +351,7 @@ private fun ReviewContent(
     onSaveField: () -> Unit,
     onCancelField: () -> Unit,
     onRetry: () -> Unit,
+    onRerunOcr: (OcrScript) -> Unit,
     onFingerprint: () -> Unit,
     onOpenSettings: () -> Unit,
     onSearch: (String) -> Unit,
@@ -403,6 +406,7 @@ private fun ReviewContent(
         IdentificationCard(
             state = state,
             onRetry = onRetry,
+            onRerunOcr = onRerunOcr,
             onFingerprint = onFingerprint,
             onOpenSettings = onOpenSettings,
             onOpenMatches = { matchesSheet = true },
@@ -1257,6 +1261,7 @@ private fun FieldDivider() {
 private fun IdentificationCard(
     state: ReviewUiState,
     onRetry: () -> Unit,
+    onRerunOcr: (OcrScript) -> Unit,
     onFingerprint: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenMatches: () -> Unit,
@@ -1445,22 +1450,50 @@ private fun IdentificationCard(
         }
 
         // After a correction, the retry action searches with the text on
-        // screen instead of re-reading the frames.
+        // screen instead of re-reading the frames. The menu also lets the user
+        // force one OCR engine when the automatic script choice was wrong.
         val searchAgain = state.editedTitleOrArtist && state.draft.title.isNotBlank()
+        var ocrMenuOpen by remember { mutableStateOf(false) }
         FlowRow(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (isVideo) {
-                ActionChip(
-                    label = stringResource(
-                        if (searchAgain) R.string.review_search_again else R.string.review_rerun_ocr,
-                    ),
-                    icon = if (searchAgain) Icons.Default.Search else Icons.Default.Refresh,
-                    enabled = !state.identifying,
-                    onClick = onRetry,
-                )
+                Box {
+                    ActionChip(
+                        label = stringResource(
+                            if (searchAgain) R.string.review_search_again else R.string.review_rerun_ocr,
+                        ),
+                        icon = if (searchAgain) Icons.Default.Search else Icons.Default.Refresh,
+                        enabled = !state.identifying,
+                        hasMenu = true,
+                        onClick = { ocrMenuOpen = true },
+                    )
+                    DropdownMenu(
+                        expanded = ocrMenuOpen,
+                        onDismissRequest = { ocrMenuOpen = false },
+                    ) {
+                        if (searchAgain) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.review_search_again)) },
+                                onClick = {
+                                    ocrMenuOpen = false
+                                    onRetry()
+                                },
+                            )
+                        }
+                        OcrScript.entries.forEach { script ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(script.labelRes())) },
+                                onClick = {
+                                    ocrMenuOpen = false
+                                    onRerunOcr(script)
+                                },
+                            )
+                        }
+                    }
+                }
                 if (state.fingerprintAvailable) {
                     ActionChip(
                         label = stringResource(
@@ -1563,6 +1596,7 @@ private fun ActionChip(
     onClick: () -> Unit,
     enabled: Boolean = true,
     prominent: Boolean = false,
+    hasMenu: Boolean = false,
 ) {
     val tokens = LocalCueTokens.current
     val container = when {
@@ -1604,6 +1638,13 @@ private fun ActionChip(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
             )
+            if (hasMenu) {
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
         }
     }
 }
@@ -3086,6 +3127,13 @@ private fun TagField.labelRes(): Int = when (this) {
     TagField.LABEL -> R.string.review_field_label
     TagField.MUSICBRAINZ -> R.string.review_field_musicbrainz
     TagField.REPLAY_GAIN -> R.string.review_field_replay_gain
+}
+
+@Composable
+private fun OcrScript.labelRes(): Int = when (this) {
+    OcrScript.AUTO -> R.string.review_ocr_auto
+    OcrScript.LATIN -> R.string.review_ocr_latin
+    OcrScript.HEBREW -> R.string.review_ocr_hebrew
 }
 
 @Composable

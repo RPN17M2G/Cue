@@ -2,7 +2,9 @@ package io.github.rpn17m2g.cue.data.ocr
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.util.Log
 import com.googlecode.tesseract.android.TessBaseAPI
+import io.github.rpn17m2g.cue.BuildConfig
 import io.github.rpn17m2g.cue.domain.model.IdentificationSource
 import io.github.rpn17m2g.cue.domain.ocr.OcrBox
 import io.github.rpn17m2g.cue.domain.ocr.OcrEngine
@@ -115,6 +117,9 @@ class TesseractHebrewOcrEngine(
                         ?.trim()
                         .orEmpty()
                     val confidence = iterator.confidence(level)
+                    if (BuildConfig.DEBUG && text.isNotEmpty()) {
+                        Log.d(TAG, "conf=${confidence.toInt()} '$text'")
+                    }
                     if (text.isNotEmpty() && confidence >= MIN_TRUSTED_CONFIDENCE) {
                         lines += OcrLine(
                             text = text,
@@ -176,6 +181,7 @@ class TesseractHebrewOcrEngine(
     }
 
     private companion object {
+        const val TAG = "CueOcrHeb"
         const val LANGUAGE = "heb"
         const val DATA_DIRECTORY = "tesseract"
         const val TESSDATA_DIRECTORY = "tessdata"
@@ -183,7 +189,14 @@ class TesseractHebrewOcrEngine(
         const val PRESERVE_INTERWORD_SPACES = "preserve_interword_spaces"
         const val NBSP = "\u00A0"
 
-        /** Tesseract reports 0-100; only trusted lines are worth ranking. */
-        const val MIN_TRUSTED_CONFIDENCE = 60f
+        /**
+         * Tesseract reports 0-100. A short Hebrew title ("תן") is read
+         * correctly but with a low confidence, while the same text in another
+         * frame scores 90+; dropping the low readings splits the title's vote
+         * and lets an ad line win. Latin text forced into Hebrew letters still
+         * comes back near 0, so a low floor keeps that out without losing real
+         * words.
+         */
+        const val MIN_TRUSTED_CONFIDENCE = 20f
     }
 }

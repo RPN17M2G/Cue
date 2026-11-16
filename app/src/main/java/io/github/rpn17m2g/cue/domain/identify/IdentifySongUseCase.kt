@@ -7,6 +7,7 @@ import io.github.rpn17m2g.cue.domain.ocr.DualOcrRecognizer
 import io.github.rpn17m2g.cue.domain.ocr.FrameExtractor
 import io.github.rpn17m2g.cue.domain.ocr.FrameSampler
 import io.github.rpn17m2g.cue.domain.ocr.OcrCandidate
+import io.github.rpn17m2g.cue.domain.ocr.OcrScript
 import io.github.rpn17m2g.cue.settings.AppSettings
 import io.github.rpn17m2g.cue.settings.AcoustIdKey
 import io.github.rpn17m2g.cue.tags.TagStore
@@ -49,6 +50,7 @@ class IdentifySongUseCase(
         cascade: IdentificationCascade,
         forceFingerprint: Boolean = false,
         manualQuery: LookupSeed? = null,
+        ocrScript: OcrScript = OcrScript.AUTO,
     ): SongIdentification = withContext(ioDispatcher) {
         val embedded = embeddedTags ?: readEmbeddedTags(input)
         var candidates: List<OcrCandidate> = emptyList()
@@ -80,7 +82,7 @@ class IdentifySongUseCase(
                 if (frames.isEmpty()) {
                     ocrFailed = true
                 } else {
-                    val recognition = recognizer.recognize(frames, preferHebrew)
+                    val recognition = recognizer.recognize(frames, preferHebrew, ocrScript)
                     candidates = recognition.candidates
                     rawLines = recognition.rawLines
                     trackDurationMs = recognition.trackDurationMs

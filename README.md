@@ -22,7 +22,8 @@ Android 12+, English and Hebrew with full RTL.
 - **Identification** — ML Kit and Tesseract OCR over sampled frames, script
   detection so Hebrew is not forced onto English text, Chromaprint fingerprints
   through AcoustID, ACRCloud for clips that start mid-song, then iTunes and
-  MusicBrainz lookups.
+  MusicBrainz lookups. If a scan picks the wrong script, "Re-run text scan"
+  re-reads the frames automatically or as English or Hebrew text.
 - **Track details** — after a confident match, Cue fills in lyrics (LRCLIB),
   BPM, ReplayGain and ISRC (Deezer) and the MusicBrainz IDs. Only empty fields
   are filled; a failure never blocks the save.

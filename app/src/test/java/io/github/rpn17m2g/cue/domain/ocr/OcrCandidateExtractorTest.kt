@@ -196,6 +196,64 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `Hebrew player chrome is filtered out`() {
+        val frames = listOf(
+            frame(
+                0,
+                "מתנגן כעת",
+                "הבא בתור",
+                "הוסף לפלייליסט",
+                "שמור בספרייה",
+                "הצג עוד",
+                "התחברות",
+                "ממומן",
+                "שירים",
+                "אלבומים",
+                "וידאו רשמי",
+            ),
+        )
+
+        assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
+    }
+
+    @Test
+    fun `counters phone numbers and icon glued labels are chrome`() {
+        val frames = listOf(
+            frame(
+                0,
+                "2.6k",
+                "14M",
+                "| 50050760 > *",
+                "USponsored",
+                "> 4 080 *",
+            ),
+        )
+
+        assertTrue(OcrCandidateExtractor.extract(frames).isEmpty())
+    }
+
+    @Test
+    fun `a Hebrew title with a prefix letter is not treated as glued chrome`() {
+        val candidates = OcrCandidateExtractor.extract(listOf(frame(0, "הבית")))
+
+        assertEquals("הבית", candidates.first().title)
+    }
+
+    @Test
+    fun `leading punctuation is trimmed from a title`() {
+        val candidates = OcrCandidateExtractor.extract(listOf(frame(0, "<תן")))
+
+        assertEquals("תן", candidates.first().title)
+    }
+
+    @Test
+    fun `a short numeric title survives`() {
+        val candidates = OcrCandidateExtractor.extract(listOf(frame(0, "1999")))
+
+        assertEquals("1999", candidates.first().title)
+    }
+
+    @Test
     fun `single word chrome is dropped when it is small but kept when it is the title`() {
         val chromeFrame = frame(
             0,

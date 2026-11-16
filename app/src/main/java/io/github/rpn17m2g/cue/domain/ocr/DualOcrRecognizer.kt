@@ -1,5 +1,7 @@
 package io.github.rpn17m2g.cue.domain.ocr
 
+import android.util.Log
+import io.github.rpn17m2g.cue.BuildConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -45,6 +47,7 @@ class DualOcrRecognizer(
     suspend fun recognize(
         frames: List<OcrFrame>,
         preferHebrew: Boolean,
+        script: OcrScript = OcrScript.AUTO,
     ): OcrRecognition {
         if (frames.isEmpty()) {
             return OcrRecognition(emptyList(), emptyList(), hebrewUsed = false, failed = true)
@@ -67,14 +70,30 @@ class DualOcrRecognizer(
 
                 val hebrewCandidates = candidates(frames, hebrewText)
                 val hebrewScore = strongScore(hebrewCandidates)
-                val useHebrew = chooseHebrew(preferHebrew, latinScore, hebrewScore)
+                val hebrewOnScreen = hebrewTextFound(hebrewCandidates)
+                val useHebrew = when (script) {
+                    OcrScript.LATIN -> false
+                    OcrScript.HEBREW -> true
+                    OcrScript.AUTO -> chooseHebrew(
+                        preferHebrew = preferHebrew,
+                        latinScore = latinScore,
+                        hebrewScore = hebrewScore,
+                        hebrewOnScreen = hebrewOnScreen,
+                    )
+                }
+                logChoice(script, useHebrew, latinScore, hebrewScore, latinCandidates, hebrewCandidates)
+                val failed = when (script) {
+                    OcrScript.AUTO -> latinText == null && hebrewText == null
+                    OcrScript.LATIN -> latinText == null
+                    OcrScript.HEBREW -> hebrewText == null
+                }
 
                 if (useHebrew) {
                     OcrRecognition(
                         candidates = hebrewCandidates,
                         rawLines = rawLines(hebrewText, latinText),
                         hebrewUsed = true,
-                        failed = latinText == null && hebrewText == null,
+                        failed = failed,
                         trackDurationMs = TrackDuration.fromFrameTexts(
                             winningTexts(hebrewText, latinText),
                         ),
@@ -87,7 +106,7 @@ class DualOcrRecognizer(
                         candidates = latinCandidates,
                         rawLines = rawLines(latinText, hebrewText),
                         hebrewUsed = false,
-                        failed = latinText == null && hebrewText == null,
+                        failed = failed,
                         trackDurationMs = TrackDuration.fromFrameTexts(
                             winningTexts(latinText, hebrewText),
                         ),
@@ -110,26 +129,81 @@ class DualOcrRecognizer(
         (System.nanoTime() - startedNanos) / 1_000_000L
 
     /**
-     * The preferred script wins a near tie, but a clearly better reading from
-     * the other engine always wins. Tesseract reads Latin text as gibberish
-     * Hebrew, so a Hebrew pass that scores much lower than the Latin one is not
-     * allowed to replace it just because the app is in Hebrew.
+     * The screen's own script decides before the app's language does. ML Kit's
+     * Latin recognizer reads a Hebrew title as confident Latin-looking
+     * gibberish, so a Hebrew screen in an English app used to lose to
+     * "Order now" and "Lyrics" from the player chrome. When the Hebrew pass
+     * actually read Hebrew, its reading only has to be close to the Latin one,
+     * not better. The app language still breaks a tie when the screen shows no
+     * Hebrew at all, and a clearly better reading from either engine wins.
      */
     private fun chooseHebrew(
         preferHebrew: Boolean,
         latinScore: Double,
         hebrewScore: Double,
+        hebrewOnScreen: Boolean,
     ): Boolean = when {
         hebrewScore < 0.0 && latinScore < 0.0 -> preferHebrew
         hebrewScore < 0.0 -> false
         latinScore < 0.0 -> true
+        hebrewOnScreen -> hebrewScore >= latinScore * SCRIPT_MARGIN
         preferHebrew -> hebrewScore >= latinScore * HEBREW_MARGIN
         else -> hebrewScore > latinScore * LATIN_MARGIN
     }
 
-    /** The best plausible score, or a negative value when nothing is plausible. */
+    /** True when the Hebrew pass's best plausible reading is written in Hebrew. */
+    private fun hebrewTextFound(candidates: List<OcrCandidate>): Boolean =
+        candidates.firstOrNull(::isPlausible)?.let { candidate ->
+            HEBREW.containsMatchIn(candidate.title) ||
+                candidate.artist?.let(HEBREW::containsMatchIn) == true
+        } == true
+
+    /**
+     * One line per scan in debug builds. When a real recording is identified
+     * wrongly, this says which pass won and what each engine actually read,
+     * which is the difference between a script problem and a lookup problem.
+     */
+    private fun logChoice(
+        script: OcrScript,
+        useHebrew: Boolean,
+        latinScore: Double,
+        hebrewScore: Double,
+        latinCandidates: List<OcrCandidate>,
+        hebrewCandidates: List<OcrCandidate>,
+    ) {
+        if (!BuildConfig.DEBUG) return
+        Log.d(
+            TAG,
+            "ocr script=$script picked=${if (useHebrew) "hebrew" else "latin"} " +
+                "latin=${latinScore.format()}(${reading(latinCandidates)}) " +
+                "hebrew=${hebrewScore.format()}(${reading(hebrewCandidates)})",
+        )
+        Log.d(TAG, "latin top: ${top(latinCandidates)}")
+        Log.d(TAG, "hebrew top: ${top(hebrewCandidates)}")
+    }
+
+    private fun top(candidates: List<OcrCandidate>): String =
+        candidates.take(MAX_LOGGED_CANDIDATES).joinToString(" | ") { candidate ->
+            val artist = candidate.artist?.let { " - $it" }.orEmpty()
+            "${candidate.score.format()}${candidate.title}$artist"
+        }
+
+    private fun reading(candidates: List<OcrCandidate>): String =
+        candidates.firstOrNull()?.let { candidate ->
+            candidate.artist?.let { "${it} - ${candidate.title}" } ?: candidate.title
+        }.orEmpty()
+
+    private fun Double.format(): String =
+        if (this < 0.0) "-" else String.format(java.util.Locale.ROOT, "%.2f", this)
+
+    /**
+     * The best plausible score, or a negative value when nothing is plausible.
+     * A high-scoring line with no letters (a phone number, a counter) can sit
+     * above the real title, so the first plausible candidate decides, not the
+     * first candidate.
+     */
     private fun strongScore(candidates: List<OcrCandidate>): Double =
-        candidates.firstOrNull()?.takeIf(::isPlausible)?.score ?: -1.0
+        candidates.firstOrNull(::isPlausible)?.score ?: -1.0
 
     private suspend fun readSafely(
         engine: OcrEngine,
@@ -191,8 +265,13 @@ class DualOcrRecognizer(
     }
 
     private companion object {
+        const val TAG = "CueOcr"
         const val MIN_TITLE_LETTERS = 2
         const val MAX_RAW_LINES = 60
+        const val MAX_LOGGED_CANDIDATES = 6
+
+        /** The Hebrew pass must be at least this close when it read Hebrew. */
+        const val SCRIPT_MARGIN = 0.80
 
         /** The Hebrew pass must be at least this close to win for a Hebrew app. */
         const val HEBREW_MARGIN = 0.92
@@ -200,6 +279,7 @@ class DualOcrRecognizer(
         /** And clearly better to win for a Latin app. */
         const val LATIN_MARGIN = 1.08
 
+        val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
         val WHITESPACE = Regex("[\\s\\u00A0]+")
     }
 }

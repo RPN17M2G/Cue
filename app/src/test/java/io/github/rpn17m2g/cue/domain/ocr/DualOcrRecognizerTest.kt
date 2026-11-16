@@ -18,17 +18,28 @@ class DualOcrRecognizerTest {
     )
 
     @Test
-    fun `a plausible Latin reading still wins when the Hebrew pass agrees`() = runTest {
+    fun `a Hebrew reading wins on a Hebrew screen even in an English app`() = runTest {
         val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(listOf(OcrLine("דפט פאנק - גט לאקי"))))
         val recognition = DualOcrRecognizer(
-            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Order now")),
             hebrew = hebrew,
         ).recognize(frames, preferHebrew = false)
 
         assertEquals(1, hebrew.calls)
+        assertEquals("גט לאקי", recognition.candidates.first().title)
+        assertTrue(recognition.hebrewUsed)
+        assertFalse(recognition.failed)
+    }
+
+    @Test
+    fun `Latin wins when the Hebrew pass read no Hebrew at all`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(emptyList(), emptyList())),
+        ).recognize(frames, preferHebrew = false)
+
         assertEquals("Get Lucky", recognition.candidates.first().title)
         assertFalse(recognition.hebrewUsed)
-        assertFalse(recognition.failed)
     }
 
     @Test
@@ -142,7 +153,10 @@ class DualOcrRecognizerTest {
     fun `raw lines come from the winning pass only`() = runTest {
         val recognition = DualOcrRecognizer(
             latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Believer")),
-            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("6אוצה וסצוסא")),
+            hebrew = FakeEngine(
+                IdentificationSource.OCR_HEBREW,
+                listOf(listOf(OcrLine("6אוצה וסצוסא")), emptyList()),
+            ),
         ).recognize(frames, preferHebrew = false)
 
         assertEquals(listOf("Believer"), recognition.rawLines)
@@ -184,6 +198,39 @@ class DualOcrRecognizerTest {
 
         assertEquals(1, latin.calls)
         assertEquals(1, hebrew.calls)
+    }
+
+    @Test
+    fun `a forced Latin scan ignores a Hebrew reading`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("דפט פאנק - גט לאקי")),
+        ).recognize(frames, preferHebrew = false, script = OcrScript.LATIN)
+
+        assertEquals("Get Lucky", recognition.candidates.first().title)
+        assertFalse(recognition.hebrewUsed)
+    }
+
+    @Test
+    fun `a forced Hebrew scan ignores a Latin reading`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("דפט פאנק - גט לאקי")),
+        ).recognize(frames, preferHebrew = false, script = OcrScript.HEBREW)
+
+        assertEquals("גט לאקי", recognition.candidates.first().title)
+        assertTrue(recognition.hebrewUsed)
+    }
+
+    @Test
+    fun `a forced Hebrew scan reports an empty read when the Hebrew engine read nothing`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(emptyList(), emptyList())),
+        ).recognize(frames, preferHebrew = false, script = OcrScript.HEBREW)
+
+        assertTrue(recognition.candidates.isEmpty())
+        assertFalse(recognition.failed)
     }
 
     private fun repeated(line: String): List<List<OcrLine>> =

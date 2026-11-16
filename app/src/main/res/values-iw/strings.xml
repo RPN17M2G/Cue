@@ -106,6 +106,9 @@
     <string name="review_section_ocr">טקסט שזוהה</string>
     <string name="review_add_cover">הוספת עטיפה</string>
     <string name="review_rerun_ocr">סריקת טקסט מחדש</string>
+    <string name="review_ocr_auto">סריקה אוטומטית</string>
+    <string name="review_ocr_latin">סריקה כטקסט אנגלי</string>
+    <string name="review_ocr_hebrew">סריקה כטקסט עברי</string>
     <string name="review_search_again">חיפוש שוב</string>
     <string name="review_use_fingerprint">זיהוי לפי טביעת אצבע</string>
     <string name="review_fingerprint_running">מאזין לקטע ושואל את AcoustID.</string>

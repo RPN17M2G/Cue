@@ -107,6 +107,9 @@
     <string name="review_add_cover">Add cover</string>
     <string name="review_rerun_ocr">Re-run text scan</string>
 <string name="review_search_again">Search again</string>
+    <string name="review_ocr_auto">Scan automatically</string>
+    <string name="review_ocr_latin">Scan as English text</string>
+    <string name="review_ocr_hebrew">Scan as Hebrew text</string>
     <string name="review_use_fingerprint">Use fingerprint</string>
     <string name="review_fingerprint_running">Listening to the clip and asking AcoustID.</string>
     <string name="review_fingerprint_running_action">Fingerprinting…</string>

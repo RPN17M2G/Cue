@@ -53,6 +53,9 @@ object OcrCandidateExtractor {
     /** Used when an engine cannot report geometry. */
     private const val UNKNOWN_PROMINENCE = 0.45f
 
+    /** A digits-only line longer than this is a number, not a song name. */
+    private const val MAX_NUMERIC_TITLE_LENGTH = 4
+
     val DEFAULT_NOISE_PHRASES: Set<String> = setOf(
         // Player chrome.
         "Now playing",
@@ -145,6 +148,96 @@ object OcrCandidateExtractor {
         "Official Music Video",
         "Official Audio",
         "Lyric Video",
+        // The same chrome in Hebrew. OCR returns these without niqqud, and
+        // without them a Hebrew player's own labels compete with the title.
+        // Single words are only dropped when they are not title-sized, exactly
+        // like their English counterparts above.
+        "מתנגן כעת",
+        "מנגן כעת",
+        "מתנגן עכשיו",
+        "מנגן עכשיו",
+        "הבא בתור",
+        "הבא בהמשך",
+        "ערבוב",
+        "ערבוב אקראי",
+        "חזרה",
+        "חזור",
+        "חזרה על הכל",
+        "חזרה על שיר",
+        "שלח",
+        "שלח למכשיר",
+        "טיימר שינה",
+        "מילים",
+        "תור",
+        "מפורש",
+        "הוסף לפלייליסט",
+        "הוספה לפלייליסט",
+        "נוסף לפלייליסט",
+        "הוסף לתור",
+        "נגן הבא",
+        "שמור בספרייה",
+        "שמירה לספרייה",
+        "שמור",
+        "אהבתי",
+        "אהב",
+        "שיתוף",
+        "הורדה",
+        "הורד",
+        "עוד אפשרויות",
+        "בית",
+        "חיפוש",
+        "גלה",
+        "ספרייה",
+        "הספרייה שלך",
+        "עיון",
+        "רדיו",
+        "פודקאסטים",
+        "סרטונים",
+        "אלבומים",
+        "אמנים",
+        "שירים",
+        "פלייליסטים",
+        "נוגן לאחרונה",
+        "נוצר עבורך",
+        "מומלץ",
+        "המשך לצפייה",
+        "הפעלה אוטומטית",
+        "פרקים",
+        "תמלול",
+        "הצג עוד",
+        "הצג פחות",
+        "הצג הכל",
+        "התחברות",
+        "הרשמה",
+        "שדרוג",
+        "פרימיום",
+        "הירשם",
+        "ממומן",
+        "פרסומת",
+        "התקן",
+        "פתח",
+        "סגור",
+        "ביטול",
+        "בוצע",
+        "דלג",
+        "הבא",
+        "הקודם",
+        "צפיות",
+        "מנויים",
+        "בכורה",
+        "טרנדים",
+        "שורטס",
+        "הפעל הכל",
+        "מיקס",
+        "דווח",
+        "לא מעניין",
+        "אל תמליץ על הערוץ",
+        "תגובות",
+        "תיאור",
+        "וידאו רשמי",
+        "קליפ רשמי",
+        "אודיו רשמי",
+        "וידאו עם מילים",
     )
 
     private val WHITESPACE = Regex("[\\s\\u00A0]+")
@@ -195,6 +288,9 @@ object OcrCandidateExtractor {
             "official\\s+lyric\\s+video|lyric\\s+video)\\s*$",
     )
     private val HAS_LETTER_OR_DIGIT = Regex("[\\p{L}\\p{Nd}]")
+    private val HAS_LETTER = Regex("\\p{L}")
+    /** A like/view counter with a compact suffix ("2.6k", "14M"). */
+    private val COMPACT_COUNT = Regex("(?i)^\\d+(?:[.,]\\d+)?\\s*[km]$")
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
     private val DEFAULT_NOISE_KEYS: Set<String> =
@@ -412,9 +508,17 @@ object OcrCandidateExtractor {
         bareClockIsChrome: Boolean,
         frameLargest: Float,
     ): KeptLine? {
-        val raw = clean(line.text) ?: return null
+        // Only the leading punctuation is decoration ("<תן" from a Hebrew
+        // player's play glyph). A trailing "%" or ")" is meaningful: the chrome
+        // patterns and the bracket stripper need the line intact.
+        val raw = clean(line.text)?.trimStart { !it.isLetterOrDigit() } ?: return null
         if (raw.length > MAX_LINE_LENGTH) return null
         if (!HAS_LETTER_OR_DIGIT.containsMatchIn(raw)) return null
+        // A phone number or a progress readout is not a title. Short numeric
+        // names ("1999") are still allowed; long digit strings are chrome.
+        if (!HAS_LETTER.containsMatchIn(raw) && (raw.length > MAX_NUMERIC_TITLE_LENGTH || raw.contains(' '))) {
+            return null
+        }
         if (!hebrewAware && HEBREW.containsMatchIn(raw)) return null
 
         val box = line.box
@@ -482,6 +586,18 @@ object OcrCandidateExtractor {
         if (normalized in noiseKeys && !isTitleSized(normalized, prominence, frameLargest)) {
             return true
         }
+        // An icon or badge glued to a label: ML Kit reads the speaker glyph
+        // before "Sponsored" as a letter ("USponsored"). One leading character
+        // over a known phrase is that artefact, not a title. Hebrew words take
+        // one-letter prefixes as grammar, so a Hebrew title is never treated
+        // this way: "הבית" is not "בית" (Home) with a stray glyph.
+        if (normalized.length > 3 &&
+            !HEBREW.containsMatchIn(normalized) &&
+            normalized.drop(1) in noiseKeys
+        ) {
+            return true
+        }
+        if (COMPACT_COUNT.matches(text)) return true
         if (MERIDIEM.containsMatchIn(text)) return true
         if (DURATION.matches(text)) return true
         if (PROGRESS.matches(text)) return true

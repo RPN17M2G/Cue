@@ -42,6 +42,7 @@ import io.github.rpn17m2g.cue.domain.identify.SongIdentification
 import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.ocr.DualOcrRecognizer
 import io.github.rpn17m2g.cue.domain.ocr.FrameExtractor
+import io.github.rpn17m2g.cue.domain.ocr.OcrScript
 import io.github.rpn17m2g.cue.processing.ProcessingSession
 import io.github.rpn17m2g.cue.processing.ProcessSongUseCase
 import io.github.rpn17m2g.cue.settings.AppSettings
@@ -224,6 +225,7 @@ class AppContainer(context: Context) {
         preferHebrew: Boolean,
         forceFingerprint: Boolean = false,
         manualQuery: LookupSeed? = null,
+        ocrScript: OcrScript = OcrScript.AUTO,
     ): SongIdentification {
         val identification = identifySongUseCase.identify(
             input = input,
@@ -233,6 +235,7 @@ class AppContainer(context: Context) {
             cascade = identificationCascade(input.path),
             forceFingerprint = forceFingerprint,
             manualQuery = manualQuery,
+            ocrScript = ocrScript,
         )
         if (!settings.networkLookups || !settings.enrichmentEnabled) {
             logTimings(input, identification)

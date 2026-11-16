@@ -23,6 +23,7 @@ import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.TrimRange
 import io.github.rpn17m2g.cue.domain.model.changedFieldsFrom
+import io.github.rpn17m2g.cue.domain.ocr.OcrScript
 import io.github.rpn17m2g.cue.processing.DeleteSourcePolicy
 import io.github.rpn17m2g.cue.processing.ProcessingJob
 import io.github.rpn17m2g.cue.processing.ProcessingMode
@@ -290,6 +291,21 @@ class ReviewViewModel(
     }
 
     /**
+     * Re-reads the frames with one engine. The automatic choice is usually
+     * right, but a Hebrew screen in an English app can lose to the player's
+     * English chrome, and only the user knows which script is on screen. A
+     * forced scan ignores an edited title: the point is to see what the frames
+     * say, not to search the text again.
+     */
+    fun rerunOcr(script: OcrScript) {
+        startIdentification(
+            forceFingerprint = false,
+            manualQuery = null,
+            ocrScript = script,
+        )
+    }
+
+    /**
      * The manual audio-fingerprint action. It runs before the text lookup
      * instead of after it, so it can replace a wrong OCR guess; the text
      * lookup still runs when the fingerprint has no answer.
@@ -355,11 +371,19 @@ class ReviewViewModel(
         }
     }
 
-    private fun startIdentification(forceFingerprint: Boolean, manualQuery: LookupSeed?) {
+    private fun startIdentification(
+        forceFingerprint: Boolean,
+        manualQuery: LookupSeed?,
+        ocrScript: OcrScript = OcrScript.AUTO,
+    ) {
         if (_state.value.identifying) return
         identifyJob?.cancel()
         identifyJob = viewModelScope.launch {
-            identifyNow(forceFingerprint = forceFingerprint, manualQuery = manualQuery)
+            identifyNow(
+                forceFingerprint = forceFingerprint,
+                manualQuery = manualQuery,
+                ocrScript = ocrScript,
+            )
         }
     }
 
@@ -723,6 +747,7 @@ class ReviewViewModel(
     private suspend fun identifyNow(
         forceFingerprint: Boolean = false,
         manualQuery: LookupSeed? = null,
+        ocrScript: OcrScript = OcrScript.AUTO,
     ) {
         val input = _state.value.input ?: return
         val generation = ++identifyGeneration
@@ -747,6 +772,7 @@ class ReviewViewModel(
                 preferHebrew = settings.language.prefersHebrew(systemLanguage()),
                 forceFingerprint = forceFingerprint,
                 manualQuery = manualQuery,
+                ocrScript = ocrScript,
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
