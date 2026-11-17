@@ -28,7 +28,9 @@ import java.util.Locale
  * it represents, so a candidate held on screen for a long stretch outranks one
  * that flashed past, even when the sampler skipped frames. A scrolling marquee
  * title is cut differently in every frame, so fragments of the same line are
- * stitched into the longest reading before the vote is counted. Scores are
+ * stitched into one candidate for the vote, and the title itself is rebuilt
+ * from the adjacency of the words inside each window — never from frame order,
+ * which cannot be trusted when a recording starts mid-scroll. Scores are
  * compared at three decimals and near-ties prefer the top of a stacked
  * title/artist/album block, then the normalized title, then artist.
  */
@@ -77,6 +79,9 @@ object OcrCandidateExtractor {
         "Add to playlist",
         "Added to playlist",
         "Add to queue",
+        // The ad card's call to action, which sits right above the title and
+        // is not part of the song.
+        "Buy now",
         "Play next",
         "Save to library",
         "Save to your library",
@@ -302,18 +307,20 @@ object OcrCandidateExtractor {
     private val HEBREW = Regex("[\\u0590-\\u05FF\\uFB1D-\\uFB4F]")
     private val SEPARATOR = Regex("\\s+[-\\u2013\\u2014\\u2022|]\\s+")
     /**
-     * Labels that mark an ad card. They sit where the artist normally goes, so
-     * a line whose artist is one of these is an advertisement, not a song.
+     * Word stems that mark an ad card. They sit where the artist normally goes,
+     * so a line whose artist matches one is an advertisement, not a song.
+     *
+     * Matching is per word, not by exact phrase, because feeds reword the
+     * label: "Sponsored", "Sponsored by X", "Paid promotion", "Promoted",
+     * "Ad ·". Matching "ad" as a raw substring would drop a real artist like
+     * "Bad Guy", so it is only accepted as a whole word. The longer English
+     * stems take suffixes ("advert" → "advertisement"), and Hebrew stems match
+     * anywhere in the word because Hebrew attaches prefixes ("הממומן").
      */
-    private val AD_LABELS: Set<String> = setOf(
-        "sponsored",
-        "ad",
-        "advertisement",
-        "promoted",
-        "ממומן",
-        "ממומנת",
-        "פרסומת",
-    )
+    private val AD_LABEL_WORDS: Set<String> = setOf("ad")
+    private val AD_LABEL_STEMS: Set<String> = setOf("sponsor", "promot", "advert")
+    private val HEBREW_AD_STEMS: Set<String> = setOf("ממומן", "ממומנת", "פרסומת", "קידום")
+    private val WORD_SPLIT = Regex("[^\\p{L}\\p{Nd}]+")
     private val DEFAULT_NOISE_KEYS: Set<String> =
         DEFAULT_NOISE_PHRASES.mapTo(HashSet(), ::normalize)
 
@@ -366,11 +373,21 @@ object OcrCandidateExtractor {
                 // above it is the product being advertised ("PyCharm"), not a
                 // song, and it is often the largest text in the frame, so it
                 // would outrank the real title without this.
-                if (artist != null && normalize(artist) in AD_LABELS) return@lines
+                if (artist != null && isAdLabel(artist)) return@lines
                 if (artist != null) {
                     val pairKey = CandidateKey(normalize(line.text), normalize(artist))
                     if (seen.add(pairKey)) {
-                        record(stats, pairKey, line.text, artist, quality, subtitle, frameIndex, weight)
+                        record(
+                            stats,
+                            pairKey,
+                            line.text,
+                            artist,
+                            quality,
+                            subtitle,
+                            frameIndex,
+                            weight,
+                            line.box,
+                        )
                     }
                 }
                 val soloKey = CandidateKey(normalize(line.text), null)
@@ -384,18 +401,28 @@ object OcrCandidateExtractor {
                         subtitle,
                         frameIndex,
                         weight,
+                        line.box,
                     )
                 }
             }
         }
 
-        return mergeFragments(stats.values)
+        val merged = mergeFragments(stats.values)
+        return merged
             .map { stat ->
                 val stability = (stat.weight / totalWeight).coerceIn(0.0, 1.0)
                 val base = STABILITY_WEIGHT * stability + QUALITY_WEIGHT * stat.bestQuality
                 val artistBonus = if (stat.artist != null) ARTIST_WEIGHT else 0.0
                 stat to OcrCandidate(
-                    title = stat.title,
+                    // A looping marquee is rebuilt from word adjacency rather
+                    // than frame order, so a recording that starts mid-scroll
+                    // still yields the whole title in the right order.
+                    // A marquee cut off mid-feature leaves an opening bracket
+                    // with no closer; drop it from the final reading only, so
+                    // it still helped the windows overlap while stitching.
+                    title = stripUnbalancedTail(
+                        reconstructMarquee(stat.title, marqueePool(stat, merged)) ?: stat.title,
+                    ),
                     artist = stat.artist,
                     score = (base + artistBonus).coerceAtMost(1.0),
                 )
@@ -449,9 +476,10 @@ object OcrCandidateExtractor {
      * is a comparable slice of it, and a fragment recorded in the same frame as
      * the host adds no time: the two are one sighting.
      *
-     * Containment needs at least one frame that saw the whole line. A marquee
-     * that is never fully visible cannot be reconstructed here; the longest
-     * slice stands for the title.
+     * Containment needs at least one frame that saw the whole line. When a
+     * marquee is never fully visible the reading stays a slice here, but the
+     * title itself is later rebuilt from word adjacency; this merge only makes
+     * sure the fragments' time is counted as one sighting for the vote.
      */
     private fun mergeFragments(stats: Collection<CandidateStat>): List<CandidateStat> {
         val ordered = stats.sortedWith(
@@ -466,9 +494,12 @@ object OcrCandidateExtractor {
             if (hostIndex >= 0) {
                 val host = merged[hostIndex]
                 merged[hostIndex] = host.copy(
+                    title = mergeTitle(host.title, stat.title),
                     artist = host.artist ?: stat.artist,
                     frameWeights = unionWeights(host.frameWeights, stat.frameWeights),
                     bestQuality = maxOf(host.bestQuality, stat.bestQuality),
+                    box = host.box ?: stat.box,
+                    readings = unionReadings(host.readings, stat.readings),
                 )
             } else {
                 merged += stat
@@ -486,17 +517,443 @@ object OcrCandidateExtractor {
         return union
     }
 
+    /** Every window read for the merged line, so the marquee can be rebuilt. */
+    private fun unionReadings(first: List<String>, second: List<String>): List<String> {
+        val union = LinkedHashSet<String>(first)
+        union.addAll(second)
+        return if (union.size <= MAX_MARQUEE_READINGS) {
+            union.toList()
+        } else {
+            union.toList().takeLast(MAX_MARQUEE_READINGS)
+        }
+    }
+
+    /**
+     * Every word read on [anchor]'s text line, gathered transitively from the
+     * candidates that share it.
+     *
+     * A marquee step can overlap its neighbour by a single word, which is not
+     * enough to treat two candidates as the same sighting for ranking, but is
+     * enough to know they are fragments of one scrolling line. Reconstruction
+     * therefore pools the line while the vote stays per candidate. Candidates
+     * on the same line that share no word at all — a different song after a
+     * hard cut — stay out of the pool.
+     */
+    private fun marqueePool(anchor: CandidateStat, merged: List<CandidateStat>): List<String> {
+        val group = ArrayList<CandidateStat>()
+        group += anchor
+        val remaining = merged.filter { it !== anchor }.toMutableList()
+        var changed = true
+        while (changed) {
+            changed = false
+            val iterator = remaining.iterator()
+            while (iterator.hasNext()) {
+                val candidate = iterator.next()
+                val related = group.any { member ->
+                    sameLine(member.box, candidate.box) && shareAnyWord(member, candidate)
+                }
+                if (related) {
+                    group += candidate
+                    iterator.remove()
+                    changed = true
+                }
+            }
+        }
+        val readings = LinkedHashSet<String>()
+        group.forEach { readings.addAll(it.readings) }
+        return readings.toList()
+    }
+
+    private fun shareAnyWord(first: CandidateStat, second: CandidateStat): Boolean {
+        val firstWords = first.readings.flatMapTo(HashSet(), ::words)
+        return second.readings.any { reading -> words(reading).any { it in firstWords } }
+    }
+
+    /**
+     * Rebuilds a scrolling title from the windows OCR actually read.
+     *
+     * A marquee never shows the whole title in one frame, and the recording can
+     * start with the title already half-way through its scroll, so frame order
+     * cannot be trusted to say where the title begins. Word adjacency can: the
+     * text inside a window is read left to right, so two words that sit next to
+     * each other in a window really do follow one another. Only the first and
+     * last word of a window are unreliable, because that is where the marquee
+     * clips a word in half — so only bigrams *inside* a window are recorded.
+     *
+     * That gives a graph whose edges are trustworthy even when the start is
+     * unknown: a title is the longest chain through it. Words must have been
+     * read in at least [MIN_MARQUEE_SUPPORT] windows to be part of the
+     * backbone, which drops one-off OCR garbage. When the marquee wrapped
+     * around, several rotations have the same length; [hint] — the reading the
+     * frame-order merge produced — breaks that tie, because it usually got the
+     * order right even when it stitched in noise.
+     *
+     * Returns `null` when there is not enough evidence, so the caller keeps the
+     * merged reading it already had.
+     */
+    private fun reconstructMarquee(hint: String, readings: List<String>): String? {
+        val windows = readings
+            .map(::marqueeTokens)
+            .filter { it.size >= MIN_MARQUEE_WORDS }
+            .distinctBy { window -> window.joinToString(" ") { it.key } }
+        if (windows.size < MIN_MARQUEE_READINGS) return null
+
+        val support = HashMap<String, Int>()
+        val forms = HashMap<String, MutableMap<String, Int>>()
+        val openers = HashSet<String>()
+        val dotters = HashSet<String>()
+        windows.forEach { window ->
+            window.map { it.key }.toSet().forEach { key ->
+                support[key] = (support[key] ?: 0) + 1
+            }
+            window.forEach { token ->
+                val counts = forms.getOrPut(token.key) { LinkedHashMap() }
+                counts[token.display] = (counts[token.display] ?: 0) + 1
+                if (token.opensBracket) openers += token.key
+                if (token.dotted) dotters += token.key
+            }
+        }
+
+        val core = support.filterValues { it >= MIN_MARQUEE_SUPPORT }.keys.toSet()
+        if (core.size < MIN_MARQUEE_WORDS || core.size > MAX_MARQUEE_NODES) return null
+
+        // Only bigrams whose two words were both interior to a window. The
+        // window's first and last word are exactly where the clip falls, so a
+        // neighbour claimed from there may belong to a different part of the
+        // title ("...Rex) | What I Like..." is not "Rex What").
+        val edges = LinkedHashMap<String, MutableSet<String>>()
+        windows.forEach { window ->
+            for (i in 1..window.size - 3) {
+                val from = window[i].key
+                val to = window[i + 1].key
+                if (from in core && to in core) {
+                    edges.getOrPut(from) { LinkedHashSet() } += to
+                }
+            }
+        }
+
+        // A window that shows the whole title starts on its first word, so the
+        // pair (first, second) is the only evidence for what precedes the
+        // chain — and likewise (second-to-last, last) for how it ends. Footage
+        // that starts mid-scroll routinely has a title word pinned to the left
+        // edge in every window, so these pairs may extend the chain; they may
+        // never choose its order. Both words must already be in the backbone,
+        // and a head needs more than one sighting, because the first word of a
+        // window is the one the marquee can clip ("at" from "What").
+        val predecessors = HashMap<String, MutableMap<String, Int>>()
+        val successors = HashMap<String, MutableMap<String, Int>>()
+        windows.forEach { window ->
+            val first = window.first().key
+            val second = window[1].key
+            if (first in core && second in core) bump(predecessors, second, first)
+            val last = window.last().key
+            val beforeLast = window[window.size - 2].key
+            if (beforeLast in core && last in core) bump(successors, beforeLast, last)
+        }
+
+        val visited = HashSet<String>()
+        val path = ArrayList<String>()
+        var best: List<String> = emptyList()
+        var bestRun = -1
+        var steps = 0
+
+        fun consider() {
+            if (path.size < best.size) return
+            val candidate = path.toList()
+            val text = candidate.joinToString(" ")
+            val run = sharedWordRun(text, hint)
+            val supportSum = candidate.sumOf { support[it] ?: 0 }
+            val better = when {
+                candidate.size > best.size -> true
+                candidate.size < best.size -> false
+                run != bestRun -> run > bestRun
+                else -> supportSum > best.sumOf { support[it] ?: 0 }
+            }
+            if (better) {
+                best = candidate
+                bestRun = run
+            }
+        }
+
+        fun walk(node: String) {
+            if (steps++ > MAX_MARQUEE_STEPS) return
+            visited += node
+            path += node
+            consider()
+            edges[node]?.sorted()?.forEach { next -> if (next !in visited) walk(next) }
+            path.removeAt(path.lastIndex)
+            visited -= node
+        }
+
+        core.sorted().forEach { node -> walk(node) }
+
+        // Append the title's last word when a window read it together with the
+        // word before it and it was seen often enough to be a word, not a clip.
+        val chain = ArrayList(best)
+        while (true) {
+            val last = chain.lastOrNull() ?: break
+            val next = extend(
+                candidates = successors[last],
+                chain = chain,
+                minSeen = 1,
+                clipped = { word -> isClippedTail(word, core) },
+            ) ?: break
+            chain += next
+        }
+        // Prepend the title's first word the same way. A word that is merely
+        // the tail of a longer one ("at" from "What") is a clip, not a word.
+        while (true) {
+            val first = chain.firstOrNull() ?: break
+            val previous = extend(
+                candidates = predecessors[first],
+                chain = chain,
+                minSeen = MIN_MARQUEE_SUPPORT,
+                clipped = { word -> isClippedHead(word, core) },
+            ) ?: break
+            chain.add(0, previous)
+        }
+
+        // A word glued to the closing paren of the previous one ("Rex)A") is a
+        // fragment boundary, not part of the title.
+        val trimmed = chain.dropLastWhile { it.length == 1 && !it[0].isDigit() }
+        if (trimmed.size < MIN_MARQUEE_WORDS) return null
+
+        val text = trimmed.joinToString(" ") { key ->
+            // Most-read spelling wins; on a tie the quieter one does, because
+            // OCR shouting ("REx") is usually noise on a correctly read word.
+            val spelling = forms[key]?.maxWithOrNull(
+                compareBy<Map.Entry<String, Int>> { it.value }
+                    .thenBy { entry -> -entry.key.count { it.isUpperCase() } }
+                    .thenBy { entry -> -entry.key.length }
+                    .thenBy { it.key },
+            )?.key ?: key
+            buildString {
+                // The window opened a bracket on this word ("(feat."); the
+                // closer is restored after the chain, not guessed in the middle.
+                if (key in openers) append('(')
+                append(spelling)
+                if (key in dotters) append('.')
+            }
+        }
+        return balanceTail(text).ifBlank { null }
+    }
+
+    /**
+     * One word of a marquee window. [key] is what the graph compares, so case
+     * and edge punctuation cannot split one word into two nodes; [display] is
+     * the word itself, with its inner apostrophes and hyphens kept so "Don't"
+     * and "Spider-Man" survive the rebuild.
+     */
+    private data class MarqueeToken(
+        val key: String,
+        val display: String,
+        val opensBracket: Boolean,
+        val dotted: Boolean,
+    )
+
+    /** Leading word characters, allowing an inner apostrophe or hyphen. */
+    private val WORD_CORE = Regex(
+        "^[^\\p{L}\\p{Nd}]*([\\p{L}\\p{Nd}]+(?:['\u2019-][\\p{L}\\p{Nd}]+)*)",
+    )
+
+    private fun marqueeTokens(reading: String): List<MarqueeToken> =
+        reading.split(WHITESPACE)
+            .filter { it.isNotEmpty() }
+            .mapNotNull { raw ->
+                val match = WORD_CORE.find(raw) ?: return@mapNotNull null
+                val core = match.groupValues[1]
+                MarqueeToken(
+                    key = core.lowercase(Locale.ROOT),
+                    display = core,
+                    // "(feat." carries its opening bracket; it belongs to the
+                    // title, while "Rex)" often loses its closer to the clip.
+                    opensBracket = raw.takeWhile { !it.isLetterOrDigit() }.contains('('),
+                    dotted = raw.getOrNull(match.range.last + 1) == '.',
+                )
+            }
+
+    private fun bump(
+        edges: MutableMap<String, MutableMap<String, Int>>,
+        from: String,
+        to: String,
+    ) {
+        val targets = edges.getOrPut(from) { HashMap() }
+        targets[to] = (targets[to] ?: 0) + 1
+    }
+
+    /**
+     * The word to add at one end of the chain, or `null` when nothing was seen
+     * often enough to be more than clipping noise.
+     */
+    private fun extend(
+        candidates: Map<String, Int>?,
+        chain: List<String>,
+        minSeen: Int,
+        clipped: (String) -> Boolean,
+    ): String? = candidates
+        ?.filter { (word, seen) ->
+            seen >= minSeen && word !in chain && !clipped(word)
+        }
+        ?.maxWithOrNull(
+            compareBy<Map.Entry<String, Int>> { it.value }.thenByDescending { it.key },
+        )
+        ?.key
+
+    /** A clipped head is the tail of a longer word in the title ("at" → "What"). */
+    private fun isClippedHead(word: String, core: Set<String>): Boolean =
+        core.any { other -> other.length > word.length && other.endsWith(word) }
+
+    /** A clipped tail is the start of a longer word in the title ("Abo" → "About"). */
+    private fun isClippedTail(word: String, core: Set<String>): Boolean =
+        core.any { other -> other.length > word.length && other.startsWith(word) }
+
+    /**
+     * Closes a bracket the marquee was cut inside of, and drops a stray closer
+     * whose opener never made it into the rebuilt title.
+     */
+    private fun balanceTail(text: String): String {        var depth = 0
+        text.forEach { char ->
+            if (char == '(') depth++
+            if (char == ')') depth--
+        }
+        if (depth <= 0) {
+            if (!text.contains('(')) {
+                return text.trimEnd(')', ' ')
+            }
+            return text
+        }
+        return text + ")".repeat(depth)
+    }
+
     private fun canMerge(host: CandidateStat, fragment: CandidateStat): Boolean {
         val hostTitle = titleKey(host.title)
         val fragmentTitle = titleKey(fragment.title)
         if (fragmentTitle.length < MIN_FRAGMENT_LENGTH) return false
-        val shorter = minOf(hostTitle.length, fragmentTitle.length)
-        val longer = maxOf(hostTitle.length, fragmentTitle.length)
-        if (shorter.toDouble() / longer < MIN_FRAGMENT_RATIO) return false
-        if (!hostTitle.contains(fragmentTitle) && !fragmentTitle.contains(hostTitle)) return false
         val hostArtist = host.artist?.let(::normalize)
         val fragmentArtist = fragment.artist?.let(::normalize)
-        return hostArtist == null || fragmentArtist == null || hostArtist == fragmentArtist
+        if (hostArtist != null && fragmentArtist != null && hostArtist != fragmentArtist) return false
+
+        val shorter = minOf(hostTitle.length, fragmentTitle.length)
+        val longer = maxOf(hostTitle.length, fragmentTitle.length)
+        if (longer > 0 &&
+            shorter.toDouble() / longer >= MIN_FRAGMENT_RATIO &&
+            (hostTitle.contains(fragmentTitle) || fragmentTitle.contains(hostTitle))
+        ) {
+            return true
+        }
+
+        // Two windows of the same scrolling line. A marquee never shows the
+        // whole title, so no window contains another; instead they share the
+        // run of words that scrolled past ("I Like Abo" / "I Like About You").
+        // Merging them restores the frame support the title actually earned.
+        // Only fragments on the same line qualify, so a lyric drawn just above
+        // the title is not swallowed into it.
+        if (!sameLine(host.box, fragment.box)) return false
+        return sharedWordRun(host.title, fragment.title) >= MIN_MERGE_WORDS
+    }
+
+    /**
+     * True when two fragments occupy the same text line. Marquee windows keep
+     * the line's vertical band and only move horizontally; a stacked artist or
+     * lyric line sits in a different band.
+     */
+    private fun sameLine(first: OcrBox?, second: OcrBox?): Boolean {
+        if (first == null || second == null) return false
+        val overlap = minOf(first.bottom, second.bottom) - maxOf(first.top, second.top)
+        val shorter = minOf(first.height, second.height)
+        return shorter > 0f && overlap / shorter >= MIN_SAME_LINE_OVERLAP
+    }
+
+    /** Longest run of whole words the two readings have in common. */
+    private fun sharedWordRun(first: String, second: String): Int {
+        val a = words(first)
+        val b = words(second)
+        var best = 0
+        for (i in a.indices) {
+            for (j in b.indices) {
+                var run = 0
+                while (i + run < a.size && j + run < b.size && a[i + run] == b[j + run]) run++
+                if (run > best) best = run
+            }
+        }
+        return best
+    }
+
+    private fun words(value: String): List<String> =
+        value.split(WHITESPACE)
+            .map { word -> word.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() } }
+            .filter { it.isNotEmpty() }
+
+    /**
+     * Joins two readings of the same scrolling line. When one window already
+     * contains the other, the longer reading wins. Otherwise the longest run of
+     * shared words anchors the union, and the longer of the two prefixes and
+     * suffixes is kept so a truncated word ("Abo") loses to the full one
+     * ("About"). Only the shared run is ever written once, so the merge cannot
+     * duplicate the scrolled text.
+     */
+    private fun mergeTitle(first: String, second: String): String {
+        val a = first.split(WHITESPACE).filter { it.isNotEmpty() }
+        val b = second.split(WHITESPACE).filter { it.isNotEmpty() }
+        if (a.isEmpty()) return second
+        if (b.isEmpty()) return first
+        val na = a.map(::wordKey)
+        val nb = b.map(::wordKey)
+
+        // A window that merely contains the host is a queue row or a longer
+        // variant ("Get Lucky Official"), not a better reading of the title.
+        // Keep the host, exactly as containment-only stitching did.
+        if (containsRun(na, nb) || containsRun(nb, na)) return first
+
+        var bestI = 0
+        var bestJ = 0
+        var best = 0
+        for (i in na.indices) {
+            for (j in nb.indices) {
+                var run = 0
+                while (i + run < na.size &&
+                    j + run < nb.size &&
+                    na[i + run].isNotEmpty() &&
+                    na[i + run] == nb[j + run]
+                ) {
+                    run++
+                }
+                if (run > best) {
+                    best = run
+                    bestI = i
+                    bestJ = j
+                }
+            }
+        }
+        if (best == 0) return if (first.length >= second.length) first else second
+
+        val prefix = if (runLength(a, 0, bestI) >= runLength(b, 0, bestJ)) {
+            a.subList(0, bestI)
+        } else {
+            b.subList(0, bestJ)
+        }
+        val middle = a.subList(bestI, bestI + best)
+        val suffix = if (runLength(a, bestI + best, a.size) >= runLength(b, bestJ + best, b.size)) {
+            a.subList(bestI + best, a.size)
+        } else {
+            b.subList(bestJ + best, b.size)
+        }
+        return (prefix + middle + suffix).joinToString(" ").trim()
+    }
+
+    private fun wordKey(word: String): String =
+        word.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+
+    private fun runLength(words: List<String>, from: Int, to: Int): Int =
+        words.subList(from, to).sumOf { it.length }
+
+    private fun containsRun(haystack: List<String>, needle: List<String>): Boolean {
+        if (needle.isEmpty() || needle.size > haystack.size) return false
+        for (start in 0..haystack.size - needle.size) {
+            val window = haystack.subList(start, start + needle.size)
+            if (window.indices.all { window[it].isNotEmpty() && window[it] == needle[it] }) return true
+        }
+        return false
     }
 
     /** Letters and digits only, so punctuation and spacing cannot split a title. */
@@ -512,19 +969,31 @@ object OcrCandidateExtractor {
         subtitle: Boolean,
         frameIndex: Int,
         weight: Double,
+        box: OcrBox?,
     ) {
         val existing = stats[key]
         stats[key] = existing?.copy(
             frameWeights = existing.frameWeights + (frameIndex to weight),
             bestQuality = maxOf(existing.bestQuality, quality),
             alwaysSubtitle = existing.alwaysSubtitle && subtitle,
+            box = existing.box ?: box,
+            readings = withReading(existing.readings, title),
         ) ?: CandidateStat(
             title = title,
             artist = artist,
             frameWeights = mapOf(frameIndex to weight),
             bestQuality = quality,
             alwaysSubtitle = subtitle,
+            box = box,
+            readings = listOf(title),
         )
+    }
+
+    /** Keeps every distinct way this line was read, newest last, bounded. */
+    private fun withReading(existing: List<String>, reading: String): List<String> {
+        if (reading in existing) return existing
+        val next = existing + reading
+        return if (next.size <= MAX_MARQUEE_READINGS) next else next.takeLast(MAX_MARQUEE_READINGS)
     }
 
     /** Drops chrome and keeps the geometry the ranking needs. */
@@ -563,6 +1032,9 @@ object OcrCandidateExtractor {
         val text = stripDecorations(stripTrackPrefix(raw))
         if (text.length < 2) return null
         if (isChrome(text, noiseKeys, bareClockIsChrome, prominence, frameLargest)) return null
+        // The ad label is not a song either: without this, "Promoted by Acme"
+        // becomes a candidate in its own right and can outrank the real title.
+        if (isAdLabel(text)) return null
         if (isLikelyLyric(text)) return null
 
         val inline = splitInline(text)
@@ -589,6 +1061,18 @@ object OcrCandidateExtractor {
             current = next
         }
         return current
+    }
+
+    /**
+     * A marquee cut off mid-feature leaves an opening bracket with no closer
+     * ("What I Like About You (feat. 1"). Searching for the leftover would fail,
+     * so the title before it is kept.
+     */
+    private fun stripUnbalancedTail(text: String): String {
+        val open = text.indexOf('(')
+        if (open <= 0) return text
+        if (text.lastIndexOf(')') > open) return text
+        return text.substring(0, open).trim().ifEmpty { text }
     }
 
     /**
@@ -625,6 +1109,17 @@ object OcrCandidateExtractor {
             return true
         }
         if (COMPACT_COUNT.matches(text)) return true
+        // A counter or badge glued to a one-word label is a button, not a title:
+        // YouTube Music's lyrics button is read as "99 Lyrics" when its icon is
+        // taken for digits. The label alone is already chrome; a number in front
+        // must not turn it into a song.
+        val labelWords = normalized.split(' ')
+        if (labelWords.size > 1 &&
+            labelWords.last() in noiseKeys &&
+            labelWords.dropLast(1).none { word -> word.any { it.isLetter() } }
+        ) {
+            return true
+        }
         if (MERIDIEM.containsMatchIn(text)) return true
         if (DURATION.matches(text)) return true
         if (PROGRESS.matches(text)) return true
@@ -651,6 +1146,11 @@ object OcrCandidateExtractor {
         frameLargest: Float,
     ): Boolean {
         if (box == null || box.bottom > STATUS_BAR_BAND) return false
+        // A real title drawn at the very top still fills the row, so it is wide.
+        // The artist printed on the cover art is a short label ("Elonas" for
+        // "Jonas Blue"), and cover art scrolled under the status bar is exactly
+        // where that lands. Width tells the two apart without losing the title.
+        if (box.width < STATUS_BAR_MAX_WIDTH) return true
         if (frameLargest <= 0f) return true
         return prominence < frameLargest * STATUS_BAR_MAX_PROMINENCE
     }
@@ -744,7 +1244,23 @@ object OcrCandidateExtractor {
                 gap to normalize(clean(raw.text).orEmpty())
             }
             .minByOrNull { it.first }
-        return nearest?.second in AD_LABELS
+        return nearest?.second?.let(::isAdLabel) == true
+    }
+
+    /**
+     * True when [value] names an ad. Works on whole words so a real artist
+     * that merely contains the letters of a stem ("Bad Guy") is not treated as
+     * an advertisement.
+     */
+    private fun isAdLabel(value: String): Boolean {
+        val words = normalize(value).split(WORD_SPLIT).filter { it.isNotEmpty() }
+        return words.any { word ->
+            // A bare "Ad" is a label; "Ad Astra" is a title, so the one-letter
+            // stem only counts when it is the whole line.
+            (words.size == 1 && word in AD_LABEL_WORDS) ||
+                AD_LABEL_STEMS.any(word::startsWith) ||
+                HEBREW_AD_STEMS.any(word::contains)
+        }
     }
 
     /** The line directly under [index] that plausibly names the artist. */
@@ -795,6 +1311,10 @@ object OcrCandidateExtractor {
         val frameWeights: Map<Int, Double>,
         val bestQuality: Double,
         val alwaysSubtitle: Boolean,
+        /** Where the line sat, so marquee windows can be told from stacked lines. */
+        val box: OcrBox?,
+        /** Every distinct window read for this line, kept for marquee rebuilding. */
+        val readings: List<String>,
     ) {
         val weight: Double get() = frameWeights.values.sum()
     }
@@ -810,6 +1330,36 @@ object OcrCandidateExtractor {
      */
     private const val MIN_FRAGMENT_RATIO = 0.5
 
+    /**
+     * Two marquee windows must share at least this many whole words before they
+     * are treated as the same line. One shared word ("You") is not enough.
+     */
+    private const val MIN_MERGE_WORDS = 2
+
+    /** Two fragments are on the same line when their boxes overlap this much vertically. */
+    private const val MIN_SAME_LINE_OVERLAP = 0.5f
+
+    /**
+     * A scrolling title can only be rebuilt from several different windows; one
+     * or two readings are not enough to know which words are neighbours.
+     */
+    private const val MIN_MARQUEE_READINGS = 3
+
+    /** A word must be read in this many windows to join the marquee backbone. */
+    private const val MIN_MARQUEE_SUPPORT = 2
+
+    /** A rebuilt title needs at least this many words to be trusted. */
+    private const val MIN_MARQUEE_WORDS = 3
+
+    /** A title is a line of text, so a graph bigger than this is not one. */
+    private const val MAX_MARQUEE_NODES = 24
+
+    /** Bound the chain search so a dense graph cannot stall identification. */
+    private const val MAX_MARQUEE_STEPS = 20_000
+
+    /** Distinct windows remembered per line, newest kept. */
+    private const val MAX_MARQUEE_READINGS = 12
+
     /** Single-word chrome is dropped unless it is at least this big. */
     private const val SINGLE_WORD_TITLE_RATIO = 0.6f
 
@@ -818,6 +1368,9 @@ object OcrCandidateExtractor {
 
     /** A status-bar line is never the big text of its frame. */
     private const val STATUS_BAR_MAX_PROMINENCE = 0.45f
+
+    /** A top-band line narrower than this is a label, not a title. */
+    private const val STATUS_BAR_MAX_WIDTH = 0.45f
 
     /** Scores are compared at this precision, so near-ties fall to the layout. */
     private const val SCORE_TIE_PRECISION = 1000.0

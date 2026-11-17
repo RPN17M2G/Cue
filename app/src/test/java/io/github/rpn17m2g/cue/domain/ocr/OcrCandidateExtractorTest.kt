@@ -1,6 +1,7 @@
 package io.github.rpn17m2g.cue.domain.ocr
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -277,6 +278,72 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `a reworded ad label still drops the ad card`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("PyCharm. Pytho..", 0.10f, 0.30f, 0.90f, 0.36f),
+                line("Paid promotion", 0.10f, 0.37f, 0.30f, 0.395f),
+                line("favorite crime", 0.35f, 0.70f, 0.65f, 0.735f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("favorite crime", candidates.first().title)
+        assertTrue(candidates.none { it.title.contains("PyCharm") })
+    }
+
+    @Test
+    fun `a promoted by label still drops the ad card`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("Acme Cloud", 0.10f, 0.30f, 0.90f, 0.36f),
+                line("Promoted by Acme", 0.10f, 0.37f, 0.30f, 0.395f),
+                line("favorite crime", 0.35f, 0.70f, 0.65f, 0.735f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("favorite crime", candidates.first().title)
+        assertTrue(candidates.none { it.title.contains("Acme") })
+    }
+
+    @Test
+    fun `a reworded Hebrew ad label still drops the ad card`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("מוצר ממומן", 0.10f, 0.30f, 0.90f, 0.36f),
+                line("ממומן על ידי", 0.10f, 0.37f, 0.30f, 0.395f),
+                line("תן", 0.35f, 0.70f, 0.65f, 0.735f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertEquals("תן", candidates.first().title)
+        assertTrue(candidates.none { it.title.contains("מוצר") })
+    }
+
+    @Test
+    fun `an artist that merely contains ad is not an ad label`() {
+        val frames = List(3) { index ->
+            frame(
+                index,
+                line("Some Song", 0.30f, 0.50f, 0.70f, 0.545f),
+                line("Bad Guy", 0.34f, 0.56f, 0.66f, 0.587f),
+            )
+        }
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertTrue(candidates.any { it.title == "Some Song" })
+    }
+
+    @Test
     fun `a Hebrew title with a prefix letter is not treated as glued chrome`() {
         val candidates = OcrCandidateExtractor.extract(listOf(frame(0, "הבית")))
 
@@ -501,6 +568,150 @@ class OcrCandidateExtractorTest {
     }
 
     @Test
+    fun `overlapping marquee windows are stitched into one title`() {
+        // A looping marquee never shows the whole title in one frame. Adjacent
+        // windows share the words that just scrolled past, and the artist name
+        // is printed on the cover art at the very top of the screen.
+        val windows = listOf(
+            "at I Like About You (feat. 1>",
+            "out You (feat. Theresa Re >",
+            "What I Like AboL >",
+        )
+        val frames = windows.mapIndexed { index, window ->
+            frame(
+                index,
+                line("Elonas", 0.39f, 0.02f, 0.61f, 0.06f),
+                line(window, 0.07f, 0.53f, 0.92f, 0.56f),
+                line("Jonas Blue", 0.06f, 0.57f, 0.29f, 0.59f),
+            )
+        }
+
+        val top = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("Jonas Blue", top.artist)
+        assertTrue(top.title, top.title.contains("Like About You", ignoreCase = true))
+        assertFalse(top.title, top.title.contains("Elonas", ignoreCase = true))
+    }
+
+    @Test
+    fun `a marquee is rebuilt from word adjacency rather than frame order`() {
+        // The eight windows a real YouTube Music recording produced. Every one
+        // is cut differently, and the first is a fragment of the title's
+        // middle, so only how the words sit next to each other inside a window
+        // can put the title back in order.
+        val windows = listOf(
+            "at I Like About You (feat. 1>",
+            "ke About You (feat. There >",
+            "out You (feat. Theresa Re >",
+            "ou (feat. Theresa Rex)",
+            "at. Theresa Rex)A REx",
+            "eresa Rex) ERE SA What >",
+            "a Rex)T THER What I Like >",
+            "What I Like AboL >",
+        )
+
+        val top = OcrCandidateExtractor.extract(marqueeFrames(windows)).first()
+
+        assertEquals("What I Like About You (feat. Theresa Rex)", top.title)
+        assertEquals("Jonas Blue", top.artist)
+    }
+
+    @Test
+    fun `a marquee that starts mid scroll is rebuilt in the same order`() {
+        // A recording can begin with the title already half scrolled, so its
+        // first frame is not the start of the title. Feeding the same windows
+        // from a different point in the loop must not change the answer.
+        val windows = listOf(
+            "eresa Rex) ERE SA What >",
+            "a Rex)T THER What I Like >",
+            "What I Like AboL >",
+            "at I Like About You (feat. 1>",
+            "ke About You (feat. There >",
+            "out You (feat. Theresa Re >",
+            "ou (feat. Theresa Rex)",
+            "at. Theresa Rex)A REx",
+        )
+
+        val top = OcrCandidateExtractor.extract(marqueeFrames(windows)).first()
+
+        assertEquals("What I Like About You (feat. Theresa Rex)", top.title)
+    }
+
+    @Test
+    fun `a marquee whose first word is pinned to the row edge is still completed`() {
+        // From a clip cut to start mid-title. The title fits the row in three
+        // windows, so "What" is the first word there and its link to "I" is
+        // never interior; the pair repeats, which is what makes it trustworthy.
+        val windows = listOf(
+            "ou (feat. Theresa Rex)",
+            "at. Theresa Rex)A REX",
+            "1eresa Rex) RESA What",
+            "THER VWhat I Like",
+            "What I Like Abou )",
+            "What I Like About You",
+            "What I Like About You (fea",
+            "at I Like About You (feat. 1",
+        )
+
+        val top = OcrCandidateExtractor.extract(marqueeFrames(windows)).first()
+
+        assertEquals("What I Like About You (feat. Theresa Rex)", top.title)
+        assertEquals("Jonas Blue", top.artist)
+    }
+
+    @Test
+    fun `a clipped first word is not prepended to the title`() {
+        // "at" is the tail of "What" that the marquee cut in half. It is the
+        // first word of the same window in which "What" itself appears, so it
+        // must not be added as the title's first word.
+        val windows = listOf(
+            "at I Like About You (feat. 1",
+            "What I Like About You",
+            "What I Like About You (feat.",
+            "What I Like About You",
+        )
+
+        val top = OcrCandidateExtractor.extract(marqueeFrames(windows)).first()
+
+        assertTrue(top.title, top.title.contains("What I Like About You", ignoreCase = true))
+        assertFalse(top.title, top.title.startsWith("at ", ignoreCase = true))
+    }
+
+    @Test
+    fun `a marquee cut mid feature drops the open bracket`() {
+        val frames = listOf(
+            frame(0, line("What I Like About You (feat. 1>", 0.07f, 0.53f, 0.92f, 0.56f)),
+        )
+
+        val candidate = OcrCandidateExtractor.extract(frames).first()
+
+        assertEquals("What I Like About You", candidate.title)
+    }
+
+    @Test
+    fun `a counter glued to a chrome label is dropped`() {
+        val frames = listOf(
+            frame(
+                0,
+                line("Get Lucky", 0.30f, 0.50f, 0.70f, 0.545f),
+                line("99 Lyrics", 0.51f, 0.64f, 0.70f, 0.66f),
+            ),
+        )
+
+        val candidates = OcrCandidateExtractor.extract(frames)
+
+        assertTrue(candidates.none { it.title.contains("Lyrics", ignoreCase = true) })
+        assertEquals("Get Lucky", candidates.first().title)
+    }
+
+    @Test
+    fun `a real title that ends in a chrome word survives`() {
+        val frames = listOf(frame(0, "Love Me Like"))
+
+        assertTrue(OcrCandidateExtractor.extract(frames).any { it.title == "Love Me Like" })
+    }
+
+    @Test
     fun `a title held on screen longer beats a title seen in more frames`() {
         val frames = listOf(
             frame(0, "Long Song"),
@@ -648,6 +859,21 @@ class OcrCandidateExtractorTest {
 
     private fun frame(timestamp: Int, vararg lines: OcrLine): OcrFrameText =
         OcrFrameText(timestamp.toLong(), lines.toList())
+
+    /**
+     * Frames laid out like the YouTube Music player: the title scrolls in a
+     * band above the artist, and the artist's name is also printed on the
+     * cover art at the very top of the screen.
+     */
+    private fun marqueeFrames(windows: List<String>): List<OcrFrameText> =
+        windows.mapIndexed { index, window ->
+            frame(
+                index * 2_000,
+                line("Elonas", 0.39f, 0.02f, 0.61f, 0.06f),
+                line(window, 0.07f, 0.53f, 0.92f, 0.56f),
+                line("Jonas Blue", 0.06f, 0.57f, 0.29f, 0.59f),
+            )
+        }
 
     private fun line(
         text: String,

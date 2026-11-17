@@ -82,6 +82,7 @@ class DualOcrRecognizer(
                     )
                 }
                 logChoice(script, useHebrew, latinScore, hebrewScore, latinCandidates, hebrewCandidates)
+                logFrames(frames, if (useHebrew) hebrewText else latinText)
                 val failed = when (script) {
                     OcrScript.AUTO -> latinText == null && hebrewText == null
                     OcrScript.LATIN -> latinText == null
@@ -197,6 +198,33 @@ class DualOcrRecognizer(
         )
         Log.d(TAG, "latin top: ${top(latinCandidates)}")
         Log.d(TAG, "hebrew top: ${top(hebrewCandidates)}")
+    }
+
+    /**
+     * Every line of every frame with its box, one log line per frame. When a
+     * marquee or a stacked player layout is read wrongly this is the only way
+     * to see whether the text was missed or merely ranked badly.
+     */
+    private fun logFrames(frames: List<OcrFrame>, texts: List<OcrFrameText>?) {
+        if (!BuildConfig.DEBUG) return
+        val byTimestamp = texts?.associateBy { it.timestampMs }.orEmpty()
+        frames.forEach { frame ->
+            val lines = byTimestamp[frame.timestampMs]?.lines.orEmpty()
+            val rendered = lines.joinToString(" | ") { line ->
+                val box = line.box?.let {
+                    String.format(
+                        java.util.Locale.ROOT,
+                        "%.2f,%.2f,%.2f,%.2f",
+                        it.left,
+                        it.top,
+                        it.right,
+                        it.bottom,
+                    )
+                } ?: "?"
+                "[$box]${line.text}"
+            }
+            Log.d(TAG, "frame ${frame.timestampMs}ms: $rendered")
+        }
     }
 
     private fun top(candidates: List<OcrCandidate>): String =
