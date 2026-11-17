@@ -88,22 +88,6 @@ class MetadataClients(
         networkGate = gate,
     )
 
-    /**
-     * Null when the three project values are not all present. A partially
-     * configured project would sign every request with a blank secret and be
-     * rejected, which looks like a broken app rather than a missing setting.
-     */
-    val acrCloud: AcrCloudClient? = policy.acrCloudBaseUrl
-        ?.takeIf { policy.acrCloudAccessKey.isNotBlank() && policy.acrCloudAccessSecret.isNotBlank() }
-        ?.let { baseUrl ->
-            AcrCloudClient(
-                api = http.api(baseUrl, AcrCloudApi::class.java),
-                accessKey = policy.acrCloudAccessKey,
-                accessSecret = policy.acrCloudAccessSecret,
-                networkGate = gate,
-            )
-        }
-
     val resolver: CompositeMetadataResolver = CompositeMetadataResolver(iTunes, musicBrainz, gate)
 
     val lyrics: LrcLibClient = LrcLibClient(

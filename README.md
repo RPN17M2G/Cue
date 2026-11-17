@@ -21,9 +21,10 @@ Android 12+, English and Hebrew with full RTL.
   Fix any field inline; a low-confidence match never silently becomes a tag.
 - **Identification** — ML Kit and Tesseract OCR over sampled frames, script
   detection so Hebrew is not forced onto English text, Chromaprint fingerprints
-  through AcoustID, ACRCloud for clips that start mid-song, then iTunes and
-  MusicBrainz lookups. If a scan picks the wrong script, "Re-run text scan"
-  re-reads the frames automatically or as English or Hebrew text.
+  through AcoustID, then iTunes and MusicBrainz lookups. Audio identification is
+  fully free: AcoustID needs no account beyond the free application key. If a
+  scan picks the wrong script, "Re-run text scan" re-reads the frames
+  automatically or as English or Hebrew text.
 - **Track details** — after a confident match, Cue fills in lyrics (LRCLIB),
   BPM, ReplayGain and ISRC (Deezer) and the MusicBrainz IDs. Only empty fields
   are filled; a failure never blocks the save.
@@ -100,27 +101,13 @@ That value becomes the build-time default (`BuildConfig.ACOUSTID_API_KEY`).
 The field in Settings wins once you save it there. If AcoustID rejects the key,
 the review screen says so and links straight to Settings.
 
-## ACRCloud credentials
+## Fingerprint limits
 
-AcoustID fingerprints the whole file, so it cannot match a recording that
-starts in the middle of a song. ACRCloud matches a 12-second fragment from the
-middle of the recording instead, which covers that case. Create a free project
-at [acrcloud.com](https://www.acrcloud.com/) and copy the host, access key and
-access secret from its console.
-
-They are **never committed**. Put them in the untracked `local.properties`
-next to the AcoustID key:
-
-```properties
-acrcloud.host=identify-eu-west-1.acrcloud.com
-acrcloud.accessKey=your-access-key
-acrcloud.accessSecret=your-access-secret
-```
-
-The three fields in Settings win once you save them there, and "Check key"
-uploads a generated silent probe: any answer other than an auth or quota error
-means the credentials are accepted. Without credentials the stage is skipped
-and the app behaves as before.
+AcoustID fingerprints the whole file, so it matches a recording that starts at
+the beginning of the song. A clip that starts mid-song cannot be identified by
+audio alone; Cue falls back to the text on screen, the editable fields and
+"Re-run text scan". ACRCloud and other fragment recognisers were removed because
+they are not free (ADR 0010).
 
 ## Track details
 

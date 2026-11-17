@@ -39,7 +39,8 @@ recorded here; the notable architectural choices are expanded in `docs/ADR/`.
 - Processing queue / batch processing (one job at a time).
 - In-app screen recorder.
 - Persistent library/history of processed files.
-- Cloud recognition services (ACRCloud, AudD).
+- Paid cloud recognition services. Audio identification stays on the free
+  AcoustID path (ADR 0010).
 - Self-hosted backend.
 - Localization beyond English and Hebrew.
 - CI pipeline.

@@ -108,7 +108,6 @@ class IdentifySongUseCase(
             networkEnabled = settings.networkLookups,
             fingerprintEnabled = settings.fingerprintEnabled,
             acoustIdConfigured = AcoustIdKey.isPlausible(settings.acoustIdKey),
-            acrCloudConfigured = settings.acrCloudConfigured,
             rawOcrLines = rawLines,
             durationMs = input.durationMs,
             trackDurationMs = trackDurationMs,

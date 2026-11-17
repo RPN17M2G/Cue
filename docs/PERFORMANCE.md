@@ -41,7 +41,7 @@ identify now-playing-en.mp4: frames=15418ms (8 frames, 1927ms/frame)
   `frames/frameCount` is the cost of one sampled frame.
 - `ocr` is the wall time of the parallel section; `latin` and `hebrew` are the
   individual passes and can add up to more than `ocr`.
-- `cascade` is the network identification (text → AcoustID → ACRCloud).
+- `cascade` is the network identification (text → AcoustID).
 - `enrichment` is lyrics and Deezer, which only run after a confident match.
 - `total` is the sum, so the four numbers add up to the wait the user sees
   (plus the conversion that follows).
@@ -77,6 +77,5 @@ build silently dropped (see the processing-job codec fix).
 - **OCR** is bounded by the slower engine. ML Kit dominates; Tesseract Hebrew
   is cheap by comparison.
 - **Cascade** is network latency. A text hit is one or two requests; the
-  fingerprint and ACRCloud stages only run when text fails or the user asks
-  for them.
+  AcoustID fingerprint stage only runs when text fails or the user asks for it.
 - **Enrichment** runs lyrics and Deezer in parallel and never blocks the save.

@@ -81,7 +81,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     val viewModel = cueViewModel { SettingsViewModel(context.appContainer()) }
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val keyCheck by viewModel.keyCheck.collectAsStateWithLifecycle()
-    val acrCloudCheck by viewModel.acrCloudCheck.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -127,20 +126,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                 },
                 keyCheck = keyCheck,
                 onCheckKey = viewModel::checkAcoustIdKey,
-                onAcrCloudHost = { host ->
-                    viewModel.clearAcrCloudCheck()
-                    viewModel.update { it.copy(acrCloudHost = host) }
-                },
-                onAcrCloudAccessKey = { key ->
-                    viewModel.clearAcrCloudCheck()
-                    viewModel.update { it.copy(acrCloudAccessKey = key) }
-                },
-                onAcrCloudAccessSecret = { secret ->
-                    viewModel.clearAcrCloudCheck()
-                    viewModel.update { it.copy(acrCloudAccessSecret = secret) }
-                },
-                acrCloudCheck = acrCloudCheck,
-                onCheckAcrCloud = viewModel::checkAcrCloud,
                 onEnrichment = { enabled -> viewModel.update { it.copy(enrichmentEnabled = enabled) } },
                 onTemplate = { template -> viewModel.update { it.copy(filenameTemplate = template) } },
                 onDeleteSource = { enabled -> viewModel.update { it.copy(deleteSourceAfterSave = enabled) } },
@@ -166,11 +151,6 @@ private fun SettingsBody(
     onAcoustIdKey: (String) -> Unit,
     keyCheck: KeyCheck,
     onCheckKey: () -> Unit,
-    onAcrCloudHost: (String) -> Unit,
-    onAcrCloudAccessKey: (String) -> Unit,
-    onAcrCloudAccessSecret: (String) -> Unit,
-    acrCloudCheck: KeyCheck,
-    onCheckAcrCloud: () -> Unit,
     onEnrichment: (Boolean) -> Unit,
     onTemplate: (String) -> Unit,
     onDeleteSource: (Boolean) -> Unit,
@@ -327,83 +307,6 @@ private fun SettingsBody(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-
-    SettingsSection(R.string.settings_acrcloud) {
-        Text(
-            text = stringResource(R.string.settings_acrcloud_note),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        StoredTextField(
-            value = settings.acrCloudHost,
-            onValueChange = onAcrCloudHost,
-            label = { Text(stringResource(R.string.settings_acrcloud_host)) },
-            supportingText = {
-                Text(
-                    stringResource(
-                        if (settings.acrCloudHost.isBlank()) {
-                            R.string.settings_acrcloud_missing
-                        } else {
-                            R.string.settings_acrcloud_host_hint
-                        },
-                    ),
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        StoredTextField(
-            value = settings.acrCloudAccessKey,
-            onValueChange = onAcrCloudAccessKey,
-            label = { Text(stringResource(R.string.settings_acrcloud_access_key)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        StoredTextField(
-            value = settings.acrCloudAccessSecret,
-            onValueChange = onAcrCloudAccessSecret,
-            label = { Text(stringResource(R.string.settings_acrcloud_access_secret)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            TextButton(
-                onClick = onCheckAcrCloud,
-                enabled = settings.acrCloudConfigured && acrCloudCheck != KeyCheck.CHECKING,
-            ) {
-                if (acrCloudCheck == KeyCheck.CHECKING) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                }
-                Text(
-                    stringResource(
-                        if (acrCloudCheck == KeyCheck.CHECKING) {
-                            R.string.settings_acoustid_checking
-                        } else {
-                            R.string.settings_acoustid_check
-                        },
-                    ),
-                )
-            }
-        }
-        val acrCloudMessage = when (acrCloudCheck) {
-            KeyCheck.VALID -> R.string.settings_acrcloud_valid
-            KeyCheck.REJECTED -> R.string.settings_acrcloud_rejected
-            KeyCheck.UNAVAILABLE -> R.string.settings_acoustid_unavailable
-            KeyCheck.ERROR -> R.string.settings_acoustid_error
-            KeyCheck.IDLE, KeyCheck.CHECKING -> null
-        }
-        if (acrCloudMessage != null) {
-            Text(
-                text = stringResource(acrCloudMessage),
-                style = MaterialTheme.typography.bodySmall,
-                color = when (acrCloudCheck) {
-                    KeyCheck.VALID -> MaterialTheme.colorScheme.primary
-                    KeyCheck.REJECTED, KeyCheck.ERROR -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-        }
     }
 
     SettingsSection(R.string.settings_advanced) {

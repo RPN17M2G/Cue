@@ -174,7 +174,6 @@
     <string name="source_itunes">iTunes</string>
     <string name="source_musicbrainz">MusicBrainz</string>
     <string name="source_fingerprint">Fingerprint</string>
-    <string name="source_acrcloud">Audio match</string>
     <string name="source_lrclib">LRCLIB</string>
     <string name="source_deezer">Deezer</string>
     <string name="source_manual">Edited</string>
@@ -242,15 +241,6 @@
     <string name="settings_acoustid_error">Could not reach AcoustID. Check the connection and try again.</string>
     <string name="settings_enrichment">Fetch lyrics and track details</string>
     <string name="settings_enrichment_note">Uses LRCLIB for lyrics and Deezer for BPM, ReplayGain and ISRC. Only empty fields are filled, and a failure never blocks the save.</string>
-    <string name="settings_acrcloud">ACRCloud</string>
-    <string name="settings_acrcloud_note">Identifies a song from a fragment anywhere in the recording, so a clip that starts mid-song still matches. Add the host, access key and access secret from your ACRCloud project.</string>
-    <string name="settings_acrcloud_host">Host</string>
-    <string name="settings_acrcloud_host_hint">For example identify-eu-west-1.acrcloud.com</string>
-    <string name="settings_acrcloud_access_key">Access key</string>
-    <string name="settings_acrcloud_access_secret">Access secret</string>
-    <string name="settings_acrcloud_missing">Not configured. Audio matching stays off until all three values are set.</string>
-    <string name="settings_acrcloud_valid">ACRCloud accepted these credentials.</string>
-    <string name="settings_acrcloud_rejected">ACRCloud rejected these credentials. Check the host, access key and access secret.</string>
     <string name="settings_advanced">Advanced</string>
     <string name="settings_filename_template">Filename template</string>
     <string name="settings_ocr_interval">OCR frame interval (ms)</string>

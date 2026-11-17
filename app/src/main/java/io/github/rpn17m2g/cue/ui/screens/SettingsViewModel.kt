@@ -31,9 +31,6 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     private val _keyCheck = MutableStateFlow(KeyCheck.IDLE)
     val keyCheck: StateFlow<KeyCheck> = _keyCheck.asStateFlow()
 
-    private val _acrCloudCheck = MutableStateFlow(KeyCheck.IDLE)
-    val acrCloudCheck: StateFlow<KeyCheck> = _acrCloudCheck.asStateFlow()
-
     fun update(transform: (AppSettings) -> AppSettings) {
         viewModelScope.launch {
             container.settingsRepository.update(transform)
@@ -43,59 +40,6 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     /** A different key invalidates the previous check result. */
     fun clearKeyCheck() {
         _keyCheck.value = KeyCheck.IDLE
-    }
-
-    /** Editing any ACRCloud field invalidates the previous check result. */
-    fun clearAcrCloudCheck() {
-        _acrCloudCheck.value = KeyCheck.IDLE
-    }
-
-    /**
-     * Sends a short silent probe. ACRCloud validates the access key and the
-     * HMAC signature before it examines the audio, so a "no result" answer
-     * proves the three project values work; a wrong key or secret comes back
-     * as an auth error instead of looking like an unknown song.
-     */
-    fun checkAcrCloud() {
-        if (_acrCloudCheck.value == KeyCheck.CHECKING) return
-        viewModelScope.launch {
-            val current = container.settingsRepository.settings.first()
-            if (!current.networkLookups) {
-                _acrCloudCheck.value = KeyCheck.UNAVAILABLE
-                return@launch
-            }
-            if (!current.acrCloudConfigured) {
-                _acrCloudCheck.value = KeyCheck.REJECTED
-                return@launch
-            }
-            _acrCloudCheck.value = KeyCheck.CHECKING
-            val client = try {
-                container.metadataClients().acrCloud
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                null
-            }
-            if (client == null) {
-                _acrCloudCheck.value = KeyCheck.REJECTED
-                return@launch
-            }
-            val result = try {
-                client.checkCredentials()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                null
-            }
-            _acrCloudCheck.value = when (result) {
-                is LookupResult.Success -> KeyCheck.VALID
-                is LookupResult.Failure -> when (result.error) {
-                    LookupError.RejectedKey, LookupError.MissingKey -> KeyCheck.REJECTED
-                    else -> KeyCheck.ERROR
-                }
-                null -> KeyCheck.ERROR
-            }
-        }
     }
 
     /**

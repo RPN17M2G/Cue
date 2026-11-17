@@ -6,7 +6,6 @@ import io.github.rpn17m2g.cue.BuildConfig
 import io.github.rpn17m2g.cue.audio.FfmpegProcessRunner
 import io.github.rpn17m2g.cue.audio.FfmpegRuntime
 import io.github.rpn17m2g.cue.data.artwork.ArtworkRepository
-import io.github.rpn17m2g.cue.data.audio.FfmpegAudioSampleExtractor
 import io.github.rpn17m2g.cue.data.fingerprint.FfmpegFingerprintExtractor
 import io.github.rpn17m2g.cue.data.input.ContentResolverDocumentEditor
 import io.github.rpn17m2g.cue.data.input.DocumentEditor
@@ -32,7 +31,6 @@ import io.github.rpn17m2g.cue.data.session.SessionRepository
 import io.github.rpn17m2g.cue.data.settings.DataStoreSettingsRepository
 import io.github.rpn17m2g.cue.domain.identify.FingerprintAttempt
 import io.github.rpn17m2g.cue.domain.identify.FingerprintExtractor
-import io.github.rpn17m2g.cue.domain.identify.AudioRecognitionAttempt
 import io.github.rpn17m2g.cue.domain.identify.Confidence
 import io.github.rpn17m2g.cue.domain.identify.ConfidenceTier
 import io.github.rpn17m2g.cue.domain.identify.IdentificationCascade
@@ -144,13 +142,6 @@ class AppContainer(context: Context) {
         )
     }
 
-    private val audioSampleExtractor by lazy {
-        FfmpegAudioSampleExtractor(
-            runner = ffmpegRunner,
-            outputDirectory = File(appContext.cacheDir, "samples"),
-        )
-    }
-
     private val metadataLock = Mutex()
     private var metadataCache: MetadataCache? = null
 
@@ -196,23 +187,6 @@ class AppContainer(context: Context) {
                     is LookupResult.Failure -> FingerprintAttempt(
                         keyRejected = result.error == LookupError.RejectedKey,
                     )
-                }
-            },
-            audioLookup = audioLookup@{ durationMs ->
-                val input = File(inputPath)
-                if (!input.isFile) return@audioLookup AudioRecognitionAttempt()
-                val client = clients.acrCloud ?: return@audioLookup AudioRecognitionAttempt()
-                val sample = audioSampleExtractor.extract(input, durationMs)
-                    ?: return@audioLookup AudioRecognitionAttempt()
-                try {
-                    when (val result = client.identify(sample)) {
-                        is LookupResult.Success -> AudioRecognitionAttempt(result.value)
-                        is LookupResult.Failure -> AudioRecognitionAttempt(
-                            keyRejected = result.error == LookupError.RejectedKey,
-                        )
-                    }
-                } finally {
-                    sample.delete()
                 }
             },
         )

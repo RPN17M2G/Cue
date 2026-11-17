@@ -1,7 +1,10 @@
 # ADR 0008 — ACRCloud for fragment matching
 
-Status: accepted
+Status: superseded by [ADR 0010](0010-acoustid-only-free-identification.md)
 Date: 2026-11-15
+
+> ACRCloud was removed in favour of an AcoustID-only, fully free stack. See
+> ADR 0010 for the measurements and the replacement decision.
 
 ## Context
 

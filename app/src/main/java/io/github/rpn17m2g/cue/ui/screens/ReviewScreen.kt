@@ -3152,7 +3152,6 @@ private fun IdentificationSource.labelRes(): Int = when (this) {
     IdentificationSource.ITUNES -> R.string.source_itunes
     IdentificationSource.MUSICBRAINZ -> R.string.source_musicbrainz
     IdentificationSource.FINGERPRINT -> R.string.source_fingerprint
-    IdentificationSource.ACRCLOUD -> R.string.source_acrcloud
     IdentificationSource.LRCLIB -> R.string.source_lrclib
     IdentificationSource.DEEZER -> R.string.source_deezer
     IdentificationSource.MANUAL -> R.string.source_manual

@@ -174,7 +174,6 @@
     <string name="source_itunes">iTunes</string>
     <string name="source_musicbrainz">MusicBrainz</string>
     <string name="source_fingerprint">טביעת אצבע</string>
-    <string name="source_acrcloud">זיהוי אודיו</string>
     <string name="source_lrclib">LRCLIB</string>
     <string name="source_deezer">Deezer</string>
     <string name="source_manual">נערך</string>
@@ -242,15 +241,6 @@
     <string name="settings_acoustid_error">לא ניתן היה להגיע ל־AcoustID. בדקו את החיבור ונסו שוב.</string>
     <string name="settings_enrichment">שליפת מילים ופרטי שיר</string>
     <string name="settings_enrichment_note">משתמש ב־LRCLIB למילים וב־Deezer ל־BPM, ReplayGain ו־ISRC. ממלא רק שדות ריקים, וכשל לא עוצר את השמירה.</string>
-    <string name="settings_acrcloud">ACRCloud</string>
-    <string name="settings_acrcloud_note">מזהה שיר מקטע מכל מקום בהקלטה, כך שגם קליפ שמתחיל באמצע השיר יזוהה. הוסיפו את ה־host, מפתח הגישה והסוד מפרויקט ACRCloud שלכם.</string>
-    <string name="settings_acrcloud_host">Host</string>
-    <string name="settings_acrcloud_host_hint">לדוגמה identify-eu-west-1.acrcloud.com</string>
-    <string name="settings_acrcloud_access_key">מפתח גישה</string>
-    <string name="settings_acrcloud_access_secret">סוד גישה</string>
-    <string name="settings_acrcloud_missing">לא מוגדר. זיהוי אודיו כבוי עד ששלושת הערכים יוזנו.</string>
-    <string name="settings_acrcloud_valid">ACRCloud קיבל את פרטי הגישה.</string>
-    <string name="settings_acrcloud_rejected">ACRCloud דחה את פרטי הגישה. בדקו את ה־host, מפתח הגישה והסוד.</string>
     <string name="settings_advanced">מתקדם</string>
     <string name="settings_filename_template">תבנית שם קובץ</string>
     <string name="settings_ocr_interval">מרווח פריימים ל־OCR (מילישניות)</string>

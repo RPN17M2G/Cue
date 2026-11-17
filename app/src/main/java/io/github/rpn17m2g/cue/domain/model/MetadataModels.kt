@@ -8,7 +8,6 @@ enum class IdentificationSource {
     ITUNES,
     MUSICBRAINZ,
     FINGERPRINT,
-    ACRCLOUD,
     LRCLIB,
     DEEZER,
     MANUAL,

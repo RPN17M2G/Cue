@@ -1,6 +1,5 @@
 package io.github.rpn17m2g.cue.data.metadata
 
-import io.github.rpn17m2g.cue.settings.AcrCloudCredentials
 import io.github.rpn17m2g.cue.settings.AppSettings
 
 /** User-controlled switch; when closed no provider touches the network. */
@@ -21,14 +20,8 @@ data class LookupPolicy(
     val timeoutMs: Long = AppSettings.DEFAULT_HTTP_TIMEOUT_MS,
     val retries: Int = AppSettings.DEFAULT_HTTP_RETRIES,
     val acoustIdKey: String = "",
-    val acrCloudHost: String = "",
-    val acrCloudAccessKey: String = "",
-    val acrCloudAccessSecret: String = "",
 ) {
     val networkGate: NetworkGate get() = NetworkGate { networkEnabled }
-
-    /** The Retrofit base URL for ACRCloud, or null when the host is unusable. */
-    val acrCloudBaseUrl: String? get() = AcrCloudCredentials.baseUrl(acrCloudHost)
 
     companion object {
         fun from(settings: AppSettings): LookupPolicy = LookupPolicy(
@@ -36,9 +29,6 @@ data class LookupPolicy(
             timeoutMs = settings.httpTimeoutMs,
             retries = settings.httpRetries,
             acoustIdKey = settings.acoustIdKey,
-            acrCloudHost = settings.acrCloudHost,
-            acrCloudAccessKey = settings.acrCloudAccessKey,
-            acrCloudAccessSecret = settings.acrCloudAccessSecret,
         )
     }
 }
