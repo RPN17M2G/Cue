@@ -133,9 +133,10 @@ class DualOcrRecognizer(
      * The screen's own script decides before the app's language does. ML Kit's
      * Latin recognizer reads a Hebrew title as confident Latin-looking
      * gibberish, so a Hebrew screen in an English app used to lose to
-     * "Order now" and "Lyrics" from the player chrome. When the Hebrew pass
-     * actually read Hebrew, its reading only has to be close to the Latin one,
-     * not better.
+     * "Order now" and "Lyrics" from the player chrome. A real Hebrew reading
+     * still has to be clearly stronger there, because a wrong Hebrew guess
+     * costs more than a missed one: the user prefers an English reading when
+     * the two are close and can force Hebrew from the scan menu.
      *
      * A screen with no real Hebrew word is Latin text: Tesseract reading an
      * English title produces Hebrew-looking strings with digits or Latin
@@ -152,7 +153,13 @@ class DualOcrRecognizer(
         hebrewScore < 0.0 && latinScore < 0.0 -> preferHebrew
         hebrewScore < 0.0 -> false
         latinScore < 0.0 -> true
-        hebrewOnScreen -> hebrewScore >= latinScore * SCRIPT_MARGIN
+        // A Hebrew UI keeps its Hebrew reading even when it is slightly
+        // weaker; an English UI needs it to win on its own.
+        hebrewOnScreen -> hebrewScore > latinScore * if (preferHebrew) {
+            SCRIPT_MARGIN
+        } else {
+            LATIN_TIE_MARGIN
+        }
         else -> hebrewScore > latinScore * LATIN_MARGIN
     }
 
@@ -315,8 +322,11 @@ class DualOcrRecognizer(
         const val MAX_RAW_LINES = 60
         const val MAX_LOGGED_CANDIDATES = 6
 
-        /** The Hebrew pass must be at least this close when it read Hebrew. */
+        /** The Hebrew pass must be at least this close in a Hebrew UI. */
         const val SCRIPT_MARGIN = 0.80
+
+        /** In an English UI the Hebrew pass has to win outright. */
+        const val LATIN_TIE_MARGIN = 1.0
 
         /** And clearly better to win when the screen shows no Hebrew. */
         const val LATIN_MARGIN = 1.08

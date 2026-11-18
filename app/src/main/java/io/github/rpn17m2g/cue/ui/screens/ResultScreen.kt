@@ -280,10 +280,10 @@ private fun SavedHero(song: SavedSong) {
                 )
                 Text(
                     text = stringResource(
-                        if (song.inPlaceEdit) {
-                            R.string.result_title_updated
-                        } else {
-                            R.string.result_title
+                        when {
+                            song.trimmedInPlace -> R.string.result_title_trimmed
+                            song.inPlaceEdit -> R.string.result_title_updated
+                            else -> R.string.result_title
                         },
                     ),
                     style = MaterialTheme.typography.labelSmall,

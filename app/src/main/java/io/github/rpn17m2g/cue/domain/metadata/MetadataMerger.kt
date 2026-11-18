@@ -77,6 +77,7 @@ object MetadataMerger {
         val trackNumber = choose(TagField.TRACK_NUMBER, base.trackNumber, { false }, best?.trackNumber)
         val artwork = choose(TagField.ARTWORK, base.artwork, { false }, best?.artwork)
         val lyrics = choose(TagField.LYRICS, base.lyrics, String::isBlank, null)
+        val syncedLyrics = if (lyrics.isNullOrBlank()) null else base.syncedLyrics
         val bpm = choose(TagField.BPM, base.bpm, { it <= 0 }, best?.bpm)
         val isrc = choose(TagField.ISRC, base.isrc, String::isBlank, best?.isrc)
         val label = choose(TagField.LABEL, base.label, String::isBlank, best?.label)
@@ -117,6 +118,7 @@ object MetadataMerger {
                 artwork = artwork,
                 trackTotal = base.trackTotal,
                 lyrics = lyrics,
+                syncedLyrics = syncedLyrics,
                 bpm = bpm,
                 isrc = isrc,
                 label = label,
@@ -131,7 +133,12 @@ object MetadataMerger {
 
     private fun isHighConfidence(base: TagDraft, match: MetadataMatch): Boolean {
         val titleSimilarity = Similarity.textSimilarity(base.title, match.title)
-        if (titleSimilarity < HIGH_CONFIDENCE_SIMILARITY) return false
+        // A partial OCR reading can fall under the gate even when the provider
+        // title plainly completes it. That still has to clear the artist check
+        // below, so a wrong artist keeps the reading as a suggestion.
+        val titleAccepted = titleSimilarity >= HIGH_CONFIDENCE_SIMILARITY ||
+            Similarity.readsAsPartOf(base.title, match.title)
+        if (!titleAccepted) return false
         if (base.artist.isBlank() || match.artist.isBlank()) return true
         if (titleSimilarity >= NEAR_EXACT_TITLE_SIMILARITY) return true
         return Similarity.textSimilarity(base.artist, match.artist) >= MIN_ARTIST_SIMILARITY

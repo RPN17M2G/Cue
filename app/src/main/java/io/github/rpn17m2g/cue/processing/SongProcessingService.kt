@@ -67,7 +67,7 @@ class SongProcessingService : Service() {
         lastStage = null
         lastPercent = -1
         runningInputId = job.input.id
-        runningInPlace = job.mode == ProcessingMode.EDIT_IN_PLACE
+        runningInPlace = job.mode != ProcessingMode.CONVERT_AND_SAVE
         container.processingSession.running(ProcessingStage.Preparing, 0f)
         ServiceCompat.startForeground(
             this,
@@ -88,7 +88,7 @@ class SongProcessingService : Service() {
                 // the original, so a delete leaves nothing behind.
                 container.inputResolver.cleanup(job.input)
                 container.processingSession.done(saved)
-                showCompleted(saved)
+                showCompleted(saved, job.mode)
             } catch (cancelled: CancellationException) {
                 container.processingSession.reset()
                 finishForeground()
@@ -119,7 +119,7 @@ class SongProcessingService : Service() {
         postNotification(FOREGROUND_NOTIFICATION_ID, progressNotification(stage, progress))
     }
 
-    private fun showCompleted(song: SavedSong) {
+    private fun showCompleted(song: SavedSong, mode: ProcessingMode) {
         finishForeground()
         postNotification(
             COMPLETION_NOTIFICATION_ID,
@@ -127,10 +127,10 @@ class SongProcessingService : Service() {
                 .setSmallIcon(R.drawable.ic_stat_cue)
                 .setContentTitle(
                     getString(
-                        if (song.inPlaceEdit) {
-                            R.string.notification_tags_updated_title
-                        } else {
-                            R.string.notification_done_title
+                        when {
+                            mode == ProcessingMode.TRIM_IN_PLACE -> R.string.result_title_trimmed
+                            song.inPlaceEdit -> R.string.notification_tags_updated_title
+                            else -> R.string.notification_done_title
                         },
                     ),
                 )

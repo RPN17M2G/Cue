@@ -17,6 +17,13 @@ object Similarity {
     private val NON_WORD = Regex("[^\\p{L}\\p{N}\\s]+")
     private val WHITESPACE = Regex("[\\s\\u00A0]+")
 
+    /**
+     * Apostrophes join their neighbours instead of splitting a word: OCR rarely
+     * sees them, so "dont" must match "Don't" word for word rather than losing
+     * to the "don t" two-token form a plain strip would produce.
+     */
+    private val APOSTROPHE = Regex("['\\u2019\\u02BC]")
+
     /** "… feat RAYE", "… ft RAYE", "… featuring RAYE" at the end. */
     private val FEATURE_TAIL = Regex("\\s+(?:feat|ft|featuring)\\s+.*$")
 
@@ -30,6 +37,7 @@ object Similarity {
         val decomposed = Normalizer.normalize(value, Normalizer.Form.NFD)
         return decomposed.replace(MARKS, "")
             .lowercase(Locale.ROOT)
+            .replace(APOSTROPHE, "")
             .replace(NON_WORD, " ")
             .replace(WHITESPACE, " ")
             .trim()
@@ -43,6 +51,26 @@ object Similarity {
         if (left.isEmpty() && right.isEmpty()) return 1.0
         if (left.isEmpty() || right.isEmpty()) return 0.0
         return 1.0 - distance(left, right).toDouble() / maxOf(left.length, right.length)
+    }
+
+    /**
+     * True when every word of [reading] appears in [candidate], in order.
+     *
+     * OCR often catches only part of a long title ("I Do if you dont" for
+     * "What Do I Do If You Don't"). Such a reading scores below the title
+     * similarity gate even though the provider match is obviously the same
+     * song. Requiring at least two words and a longer candidate keeps a
+     * one-word reading from claiming any title that happens to contain it.
+     */
+    fun readsAsPartOf(reading: String, candidate: String): Boolean {
+        val readingTokens = normalize(reading).split(' ').filter { it.isNotEmpty() }
+        val candidateTokens = normalize(candidate).split(' ').filter { it.isNotEmpty() }
+        if (readingTokens.size < 2 || candidateTokens.size <= readingTokens.size) return false
+        var index = 0
+        for (token in candidateTokens) {
+            if (index < readingTokens.size && token == readingTokens[index]) index++
+        }
+        return index == readingTokens.size
     }
 
     fun tokenOverlap(a: String, b: String): Double = tokenOverlapNormalized(normalize(a), normalize(b))

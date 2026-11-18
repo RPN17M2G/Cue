@@ -115,7 +115,7 @@ with manual tag entry only.
 - Complete title+artist+album → straight to Review; otherwise look up / fingerprint
   / manual.
 - In-place tag edits via SAF write access; audio changes (trim) produce a new file
-  in `Music/Cue`.
+  in `Music/Cue`, unless the user opts to replace a writable MP3 (ADR 0011).
 - Audio-only preview with trim handles.
 - Artwork pickers: iTunes-based cover grid (search any term) + gallery picker.
 - Result-screen "Edit tags" reopens the editor for the just-saved file.
@@ -123,7 +123,9 @@ with manual tag entry only.
 **Exit criteria**
 - Editing the tags of an arbitrary MP3 updates the original file in place and the
   changes are visible in another player.
-- Trimming an MP3 produces a new, correct file and leaves the original intact.
+- Trimming an MP3 produces a new, correct file and leaves the original intact;
+  with "Replace the original file" on, the same trim rewrites the writable source
+  in place after a confirmation (ADR 0011).
 - Hebrew tags round-trip correctly.
 
 ---

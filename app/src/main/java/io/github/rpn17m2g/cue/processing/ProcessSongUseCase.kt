@@ -42,6 +42,7 @@ class ProcessSongUseCase(
     ): SavedSong = when (job.mode) {
         ProcessingMode.CONVERT_AND_SAVE -> convertAndSave(job, onProgress)
         ProcessingMode.EDIT_IN_PLACE -> editInPlace(job, onProgress)
+        ProcessingMode.TRIM_IN_PLACE -> trimInPlace(job, onProgress)
     }
 
     private suspend fun convertAndSave(
@@ -102,11 +103,7 @@ class ProcessSongUseCase(
             val written = withContext(ioDispatcher) {
                 runCatching { tagStore.read(copy) }.getOrNull()
             } ?: throw ProcessingException("The saved file has no readable tag")
-            val fields = if (job.draft.artwork != null) {
-                TagField.TEXT_FIELDS + TagField.ARTWORK
-            } else {
-                TagField.TEXT_FIELDS
-            }
+            val fields = writtenFields(job)
             if (!written.matchesWritten(job.draft, fields)) {
                 throw ProcessingException("The saved tags read back differently from what was written")
             }
@@ -125,6 +122,62 @@ class ProcessSongUseCase(
             throw e
         } finally {
             copy.delete()
+        }
+    }
+
+    /**
+     * Trims a writable MP3 and writes the result over the source document. The
+     * trimmed audio is re-encoded into a temp file, tagged as a whole new file,
+     * then published through the same backup-and-restore path as a tag-only
+     * edit. The untouched cache copy restores the original if the provider
+     * fails mid-write.
+     */
+    private suspend fun trimInPlace(
+        job: ProcessingJob,
+        onProgress: (ProcessingStage, Float) -> Unit,
+    ): SavedSong {
+        onProgress(ProcessingStage.Preparing, 0f)
+        val original = File(job.input.path)
+        if (!original.isFile) {
+            throw ProcessingException("The input file is no longer available")
+        }
+        if (job.input.kind != InputKind.MP3) {
+            throw ProcessingException("Only MP3 files can be trimmed in place")
+        }
+        val trim = job.trim
+            ?: throw ProcessingException("A trim is required to replace the original")
+        val uri = job.input.uri
+        if (uri.isBlank()) {
+            throw ProcessingException("The source file cannot be updated")
+        }
+
+        val temp = createTemp()
+        try {
+            convert(job, temp, onProgress)
+            coroutineContext.ensureActive()
+            val fields = tag(job, temp, onProgress)
+            coroutineContext.ensureActive()
+            onProgress(ProcessingStage.Saving, SAVING_PROGRESS)
+            publishInPlace(uri, temp, original, job, fields)
+            val durationMs = TrimMath.effectiveDurationMs(trim, job.input.durationMs)
+            // The row's length column is not refreshed by the provider on a
+            // generic document write; a stale duration would show in the
+            // gallery. Cosmetic, so a failure here must not fail the job.
+            runCatching { outputStore.refresh(uri, durationMs) }
+            onProgress(ProcessingStage.Saving, 1f)
+            return SavedSong(
+                uri = uri,
+                displayName = job.input.displayName,
+                relativePath = "",
+                inPlaceEdit = true,
+                trimmedInPlace = true,
+                title = job.draft.title,
+                artist = job.draft.artist,
+                durationMs = durationMs,
+                artwork = job.draft.artwork,
+            )
+        } finally {
+            temp.delete()
         }
     }
 
@@ -180,10 +233,11 @@ class ProcessSongUseCase(
         edited: File,
         original: File,
         job: ProcessingJob,
+        fields: Set<TagField> = job.changedFields,
     ) {
         try {
             documentEditor.replace(uri, edited)
-            verify(uri, job)
+            verify(uri, job, fields)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (e: Exception) {
@@ -200,14 +254,14 @@ class ProcessSongUseCase(
         }
     }
 
-    private suspend fun verify(uri: String, job: ProcessingJob) {
+    private suspend fun verify(uri: String, job: ProcessingJob, fields: Set<TagField>) {
         val verification = createTemp()
         try {
             documentEditor.copyTo(uri, verification)
             val written = withContext(ioDispatcher) {
                 runCatching { tagStore.read(verification) }.getOrNull()
             } ?: throw ProcessingException("The updated file has no readable tag")
-            if (!written.matchesWritten(job.draft, job.changedFields)) {
+            if (!written.matchesWritten(job.draft, fields)) {
                 throw ProcessingException("The tags read back differently from what was written")
             }
         } finally {
@@ -258,14 +312,19 @@ class ProcessSongUseCase(
         job: ProcessingJob,
         temp: File,
         onProgress: (ProcessingStage, Float) -> Unit,
-    ) {
-        val fields = if (job.draft.artwork != null) {
+    ): Set<TagField> {
+        val fields = writtenFields(job)
+        writeTags(job, temp, onProgress, fields)
+        return fields
+    }
+
+    /** A converted file is fresh, so every field it can carry is written. */
+    private fun writtenFields(job: ProcessingJob): Set<TagField> =
+        if (job.draft.artwork != null) {
             TagField.TEXT_FIELDS + TagField.ARTWORK
         } else {
             TagField.TEXT_FIELDS
         }
-        writeTags(job, temp, onProgress, fields)
-    }
 
     private suspend fun writeTags(
         job: ProcessingJob,

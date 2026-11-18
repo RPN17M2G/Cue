@@ -23,6 +23,9 @@ import io.github.rpn17m2g.cue.domain.model.TagDraft
 import io.github.rpn17m2g.cue.domain.model.TrimMath
 import io.github.rpn17m2g.cue.domain.model.TrimRange
 import io.github.rpn17m2g.cue.domain.model.changedFieldsFrom
+import io.github.rpn17m2g.cue.domain.model.parseLrc
+import io.github.rpn17m2g.cue.domain.model.shiftedTo
+import io.github.rpn17m2g.cue.domain.model.toLrc
 import io.github.rpn17m2g.cue.domain.ocr.OcrScript
 import io.github.rpn17m2g.cue.processing.DeleteSourcePolicy
 import io.github.rpn17m2g.cue.processing.ProcessingJob
@@ -61,6 +64,8 @@ data class ReviewUiState(
     val matched: MetadataMatch? = null,
     val flaggedFields: Set<TagField> = emptySet(),
     val deleteSource: Boolean = false,
+    /** Only meaningful for a writable MP3 with a trim. */
+    val replaceOriginal: Boolean = true,
     val searchResults: List<MetadataMatch> = emptyList(),
     val searchCompleted: Boolean = false,
     val searching: Boolean = false,
@@ -98,6 +103,16 @@ data class ReviewUiState(
     /** Editing tags of a writable MP3 without a trim needs no re-encode. */
     val tagOnlyEdit: Boolean
         get() = input?.kind == InputKind.MP3 && input.canEditInPlace && trimRange == null
+
+    /**
+     * A trim of a writable MP3 can be written over the source document instead
+     * of producing a copy. Off for anything else, and the user can opt out.
+     */
+    val trimInPlace: Boolean
+        get() = input?.kind == InputKind.MP3 &&
+            input.canEditInPlace &&
+            trimRange != null &&
+            replaceOriginal
 
     val effectiveDurationMs: Long?
         get() = TrimMath.effectiveDurationMs(
@@ -226,6 +241,10 @@ class ReviewViewModel(
 
     fun setQuality(quality: QualityPreset) {
         _state.update { it.copy(quality = quality) }
+    }
+
+    fun setReplaceOriginal(enabled: Boolean) {
+        _state.update { it.copy(replaceOriginal = enabled) }
     }
 
     fun setDeleteSource(enabled: Boolean) {
@@ -363,7 +382,10 @@ class ReviewViewModel(
                     state.copy(
                         lyricsFetching = false,
                         lyricsFailed = false,
-                        draft = state.draft.copy(lyrics = lyrics.text),
+                        draft = state.draft.copy(
+                            lyrics = lyrics.text,
+                            syncedLyrics = lyrics.lrc,
+                        ),
                         sources = state.sources + (TagField.LYRICS to IdentificationSource.LRCLIB),
                     )
                 }
@@ -611,15 +633,26 @@ class ReviewViewModel(
                 val latest = container.settingsRepository.settings.first()
                 settings = latest
                 val snapshot = _state.value
-                val jobDraft = snapshot.draft.copy(
-                    year = snapshot.draft.year?.trim()?.takeIf { it.isNotEmpty() },
-                )
                 val trim = TrimMath.trimRange(
                     snapshot.trimStartMs,
                     snapshot.trimEndMs,
                     snapshot.durationMs,
                 )
-                val mode = ProcessingModeSelector.mode(input, trim)
+                val jobDraft = snapshot.draft.copy(
+                    year = snapshot.draft.year?.trim()?.takeIf { it.isNotEmpty() },
+                    // A trim moves every lyric line; re-time them for the clip
+                    // so the SYLT written to the new file stays in step.
+                    syncedLyrics = snapshot.draft.syncedLyrics
+                        ?.let(::parseLrc)
+                        ?.shiftedTo(trim?.startMs ?: 0L, trim?.endMs)
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.toLrc(),
+                )
+                val mode = ProcessingModeSelector.mode(
+                    input,
+                    trim,
+                    replaceOriginal = snapshot.replaceOriginal,
+                )
                 val job = ProcessingJob(
                     input = input,
                     draft = jobDraft,
@@ -925,6 +958,10 @@ class ReviewViewModel(
             return identifiedValue
         }
 
+        val lyricsApplied = TagField.LYRICS !in editedFields &&
+            !identified.lyrics.isNullOrBlank()
+        val syncedLyrics = if (lyricsApplied) identified.syncedLyrics else current.syncedLyrics
+
         return current.copy(
             title = text(TagField.TITLE, current.title, identified.title),
             artist = text(TagField.ARTIST, current.artist, identified.artist),
@@ -943,6 +980,7 @@ class ReviewViewModel(
             ),
             artwork = optionalValue(TagField.ARTWORK, current.artwork, identified.artwork),
             lyrics = optional(TagField.LYRICS, current.lyrics, identified.lyrics),
+            syncedLyrics = syncedLyrics,
             bpm = optionalValue(TagField.BPM, current.bpm, identified.bpm),
             isrc = optional(TagField.ISRC, current.isrc, identified.isrc),
             label = optional(TagField.LABEL, current.label, identified.label),
@@ -1040,7 +1078,11 @@ internal fun TagDraft.withField(field: TagField, value: String): TagDraft = when
     TagField.GENRE -> copy(genre = value)
     TagField.TRACK_NUMBER -> copy(trackNumber = value.takeIf { it.isNotBlank() }?.toIntOrNull())
     TagField.ARTWORK -> this
-    TagField.LYRICS -> copy(lyrics = value.takeIf { it.isNotBlank() })
+    TagField.LYRICS -> copy(
+        lyrics = value.takeIf { it.isNotBlank() },
+        // Typing over the words invalidates the provider's timings.
+        syncedLyrics = null,
+    )
     TagField.BPM -> copy(bpm = value.trim().toIntOrNull()?.takeIf { it > 0 })
     TagField.ISRC -> copy(isrc = value.takeIf { it.isNotBlank() })
     TagField.LABEL -> copy(label = value.takeIf { it.isNotBlank() })

@@ -135,10 +135,13 @@ The cascade, in order. Each stage may be skipped when it cannot help.
    traineddata on the same frames, then keep the better reading: the Hebrew
    engine only reports lines it trusts, so a Latin screen leaves it with
    nothing, and a Hebrew screen scores higher than ML Kit's guesses at the
-   same pixels. Aggregate candidates across frames by on-screen geometry —
-   size inside the frame, stability across frames, centering and the line that
-   sits directly under the title — after dropping chrome by pattern (dates,
-   clocks, battery, domains, status bar) and by a noise phrase list.
+   same pixels. When the two readings are close, Latin wins: the user would
+   rather miss a Hebrew title than overwrite the correct English one. A Hebrew
+   UI only needs the Hebrew pass to be close; an English UI needs it to be
+   strictly stronger. Aggregate candidates across frames by on-screen
+   geometry — size inside the frame, stability across frames, centering and the
+   line that sits directly under the title — after dropping chrome by pattern
+   (dates, clocks, battery, domains, status bar) and by a noise phrase list.
 3. **Online lookup.** Search **iTunes Search API** first (no key, 600×600 artwork,
    strong mainstream coverage), then **MusicBrainz** (User-Agent required, no
    artwork; artwork via Cover Art Archive). Auto-select the top match, list the
@@ -181,6 +184,10 @@ song they want.
   picker for local images.
 - **Trim:** start/end handles. Over a **video preview** (Media3) for recordings,
   over an **audio preview** for MP3 inputs. Trim only; no waveform, no fades.
+- **Watch the recording:** a header action opens the source video in a modal
+  Media3 player, so the clip can be confirmed before saving. The dialog owns the
+  player and releases it on dismiss; it plays the same cached input the
+  identification used, with no copy or re-encode.
 - **Quality:** preset chips — **V0 (~245 kbps)**, **V2 (~190 kbps)**,
   **CBR 256**, **CBR 192** — each annotated with a live estimated output size
   computed from the selected trim duration. Hidden for tag-only edits (no
@@ -209,12 +216,25 @@ song they want.
   ID3v2.3; existing ID3v2.4 tags stay v2.4 and ID3v2.2 is rejected. See
   `docs/ADR/0002-id3-writing-with-mp3agic.md`.
 - Text fields (including Hebrew) are written as **UTF-16**.
+- **Lyrics:** `USLT` carries the plain words; when LRCLIB supplies timed lyrics,
+  an `SYLT` frame is written next to it from the raw LRC, so supporting players
+  can highlight the current line. `SYLT` is assembled as a raw ID3v2 frame
+  (mp3agic has no support for it), UTF-16 with BOM, language `und`, timestamp
+  format 2 (ms), content type 1. Plain `USLT` stays as the fallback most players
+  read. A trimmed clip re-times the LRC through `LyricTimeline.shiftedTo` before
+  writing.
 - Cover art is fetched at 600×600, downscaled to ≤1000 px JPEG, embedded as a
   front-cover APIC frame. Replacing it preserves non-front APIC pictures.
 - **Tag-only edits** are written **in place** to the selected MP3. The SAF adapter
   copies the document to the cache, edits and verifies that local copy, then
-  writes it back through `ContentResolver`. Any change to the audio (trim,
-  conversion) produces a **new file** in `Music/Cue`.
+  writes it back through `ContentResolver`. A trim of a writable MP3 can also
+  **replace the original**: the trimmed audio is re-encoded and tagged in the
+  cache, then published through the same backup-and-restore path, with a switch
+  in Review (on by default) and a confirmation that names the file
+  (`docs/ADR/0011-trim-in-place.md`). A conversion from video, or a trim of a
+  read-only MP3, produces a **new file** in `Music/Cue`. After an in-place trim
+  the app updates the MediaStore row's duration so the gallery does not show the
+  old length.
 
 ---
 

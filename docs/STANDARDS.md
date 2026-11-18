@@ -77,8 +77,12 @@ in an ADR.
 - All ID3 read/write goes through **mp3agic** (see
   `docs/ADR/0002-id3-writing-with-mp3agic.md`).
 - Text frames are written as **UTF-16** so Hebrew/Unicode round-trips.
-- Tag-only edits are in place; any audio change produces a new file. Never
-  overwrite a source.
+- Tag-only edits are in place. A trim of a writable MP3 may replace the source
+  document only through the opt-in path in ADR 0011: the write is prepared and
+  verified on a cache copy, the untouched copy is kept as a restore point, and
+  the user confirms in a dialog that names the file. Every other audio change
+  produces a new file, and no flow overwrites a source without that
+  confirmation.
 - Output goes to `Music/Cue` through `MediaStore` with `IS_PENDING` set and
   cleared. Filenames are sanitized (illegal chars, control chars, length).
 - Temp artifacts live in the app cache and are removed on success, failure, and

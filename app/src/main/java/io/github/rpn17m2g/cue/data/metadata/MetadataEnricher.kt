@@ -75,7 +75,8 @@ class MetadataEnricher(
 
         lyricsJob?.await()?.let { found ->
             if (tag.lyrics.isNullOrBlank()) {
-                tag = tag.copy(lyrics = found.text)
+                // Keep both halves: the plain text for USLT and the LRC for SYLT.
+                tag = tag.copy(lyrics = found.text, syncedLyrics = found.lrc)
                 sources[TagField.LYRICS] = IdentificationSource.LRCLIB
             }
         }

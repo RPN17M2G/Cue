@@ -1,16 +1,24 @@
 package io.github.rpn17m2g.cue.data.metadata
 
+import io.github.rpn17m2g.cue.domain.model.parseLrc
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Query
 
-/** Lyrics returned by LRCLIB, either plain text or timestamped LRC. */
+/**
+ * Lyrics returned by LRCLIB. [text] is the plain multi-line version players
+ * without synchronized-lyrics support show; [lrc] is the raw timestamped form
+ * when the database has one.
+ */
 data class Lyrics(
     val text: String,
-    val synced: Boolean = false,
-)
+    val lrc: String? = null,
+) {
+    /** True when [lrc] carries at least one usable timestamp. */
+    val synced: Boolean get() = !lrc.isNullOrBlank()
+}
 
 internal interface LrcLibApi {
     @GET("api/get")
@@ -90,10 +98,14 @@ class LrcLibClient internal constructor(
     }
 
     private fun LrcLibResponse.toLyrics(): Lyrics? {
-        plainLyrics?.trim()?.takeIf { it.isNotEmpty() }?.let { return Lyrics(it) }
-        val synced = syncedLyrics?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val plain = stripTimestamps(synced)
-        return plain.takeIf { it.isNotEmpty() }?.let { Lyrics(it) }
+        val rawSynced = syncedLyrics?.trim()?.takeIf { it.isNotEmpty() }
+        val timed = rawSynced?.takeIf { parseLrc(it).isNotEmpty() }
+        // A "synced" payload with no timestamps is just plain text: keep its
+        // words rather than dropping the lyrics entirely.
+        val plain = plainLyrics?.trim()?.takeIf { it.isNotEmpty() }
+            ?: (timed ?: rawSynced)?.let(::stripTimestamps)?.takeIf { it.isNotEmpty() }
+            ?: return null
+        return Lyrics(plain, timed)
     }
 
     private companion object {

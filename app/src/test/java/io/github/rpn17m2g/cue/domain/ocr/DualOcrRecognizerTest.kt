@@ -18,10 +18,13 @@ class DualOcrRecognizerTest {
     )
 
     @Test
-    fun `a Hebrew reading wins on a Hebrew screen even in an English app`() = runTest {
-        val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, listOf(listOf(OcrLine("דפט פאנק - גט לאקי"))))
+    fun `a clearly better Hebrew reading wins on a Hebrew screen in an English app`() = runTest {
+        val hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("דפט פאנק - גט לאקי"))
         val recognition = DualOcrRecognizer(
-            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Order now")),
+            latin = FakeEngine(
+                IdentificationSource.OCR_LATIN,
+                listOf(listOf(OcrLine("Order now")), emptyList()),
+            ),
             hebrew = hebrew,
         ).recognize(frames, preferHebrew = false)
 
@@ -29,6 +32,17 @@ class DualOcrRecognizerTest {
         assertEquals("גט לאקי", recognition.candidates.first().title)
         assertTrue(recognition.hebrewUsed)
         assertFalse(recognition.failed)
+    }
+
+    @Test
+    fun `an equally strong Hebrew reading keeps the English title in an English app`() = runTest {
+        val recognition = DualOcrRecognizer(
+            latin = FakeEngine(IdentificationSource.OCR_LATIN, repeated("Daft Punk - Get Lucky")),
+            hebrew = FakeEngine(IdentificationSource.OCR_HEBREW, repeated("דפט פאנק - גט לאקי")),
+        ).recognize(frames, preferHebrew = false)
+
+        assertEquals("Get Lucky", recognition.candidates.first().title)
+        assertFalse(recognition.hebrewUsed)
     }
 
     @Test

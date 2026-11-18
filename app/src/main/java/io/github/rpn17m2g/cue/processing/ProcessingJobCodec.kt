@@ -39,6 +39,7 @@ internal object ProcessingJobCodec {
         intent.putExtra(KEY_TRACK, job.draft.trackNumber ?: ABSENT_INT)
         intent.putExtra(KEY_TRACK_TOTAL, job.draft.trackTotal ?: ABSENT_INT)
         intent.putExtra(KEY_LYRICS, job.draft.lyrics)
+        intent.putExtra(KEY_SYNCED_LYRICS, job.draft.syncedLyrics)
         intent.putExtra(KEY_BPM, job.draft.bpm ?: ABSENT_INT)
         intent.putExtra(KEY_ISRC, job.draft.isrc)
         intent.putExtra(KEY_LABEL, job.draft.label)
@@ -102,6 +103,7 @@ internal object ProcessingJobCodec {
                 trackTotal = intent.getIntExtra(KEY_TRACK_TOTAL, ABSENT_INT).takeIf { it != ABSENT_INT },
                 artwork = readArtwork(intent),
                 lyrics = intent.getStringExtra(KEY_LYRICS),
+                syncedLyrics = intent.getStringExtra(KEY_SYNCED_LYRICS),
                 bpm = intent.getIntExtra(KEY_BPM, ABSENT_INT).takeIf { it != ABSENT_INT },
                 isrc = intent.getStringExtra(KEY_ISRC),
                 label = intent.getStringExtra(KEY_LABEL),
@@ -178,6 +180,7 @@ internal object ProcessingJobCodec {
     private const val KEY_TRACK = "tag_track"
     private const val KEY_TRACK_TOTAL = "tag_track_total"
     private const val KEY_LYRICS = "tag_lyrics"
+    private const val KEY_SYNCED_LYRICS = "tag_synced_lyrics"
     private const val KEY_BPM = "tag_bpm"
     private const val KEY_ISRC = "tag_isrc"
     private const val KEY_LABEL = "tag_label"

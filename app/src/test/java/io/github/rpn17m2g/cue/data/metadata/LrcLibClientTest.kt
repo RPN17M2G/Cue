@@ -39,7 +39,8 @@ class LrcLibClientTest {
         val lyrics = client.fetch("By Your Side", "Jonas Blue").success()
 
         assertEquals("I want to be by your side\nEvery day and every night", lyrics?.text)
-        assertEquals(false, lyrics?.synced)
+        assertEquals("[00:01.00]I want to be by your side", lyrics?.lrc)
+        assertEquals(true, lyrics?.synced)
     }
 
     @Test
@@ -49,16 +50,33 @@ class LrcLibClientTest {
         val lyrics = client.fetch("By Your Side", "Jonas Blue").success()
 
         assertEquals("First line\nSecond line", lyrics?.text)
-        assertEquals(false, lyrics?.synced)
+        assertEquals("[00:12.34]First line\n[00:15.00]Second line", lyrics?.lrc)
+        assertEquals(true, lyrics?.synced)
     }
 
     @Test
-    fun `prefers plain lyrics over the synced version`() = runTest {
+    fun `prefers plain lyrics over the synced version but keeps the timing`() = runTest {
         server.enqueue(jsonResponse(BOTH_RESPONSE))
 
         val lyrics = client.fetch("Song", "Artist").success()
 
         assertEquals("Plain words", lyrics?.text)
+        assertEquals("[00:01.00]Synced words", lyrics?.lrc)
+    }
+
+    @Test
+    fun `a synced version without timestamps is treated as plain text`() = runTest {
+        server.enqueue(
+            jsonResponse(
+                """{"id":4,"plainLyrics":null,"syncedLyrics":"no timestamps here"}""",
+            ),
+        )
+
+        val lyrics = client.fetch("Song", "Artist").success()
+
+        assertEquals("no timestamps here", lyrics?.text)
+        assertNull(lyrics?.lrc)
+        assertEquals(false, lyrics?.synced)
     }
 
     @Test

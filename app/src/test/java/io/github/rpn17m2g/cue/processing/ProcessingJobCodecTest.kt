@@ -78,6 +78,7 @@ class ProcessingJobCodecTest {
             title = "Get Lucky",
             artist = "Daft Punk",
             lyrics = "Like the legend of the phoenix\nAll ends with beginnings",
+            syncedLyrics = "[00:00.30]Like the legend of the phoenix\n[00:03.20]All ends with beginnings",
             bpm = 116,
             isrc = "GBUM70900217",
             label = "Columbia",
@@ -101,6 +102,7 @@ class ProcessingJobCodecTest {
         val restored = ProcessingJobCodec.read(intent)?.draft
 
         assertNull(restored?.lyrics)
+        assertNull(restored?.syncedLyrics)
         assertNull(restored?.bpm)
         assertNull(restored?.isrc)
         assertNull(restored?.label)

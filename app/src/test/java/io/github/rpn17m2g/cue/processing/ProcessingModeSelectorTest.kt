@@ -36,6 +36,30 @@ class ProcessingModeSelectorTest {
     }
 
     @Test
+    fun `a trim on a writable mp3 replaces the original when asked`() {
+        assertEquals(
+            ProcessingMode.TRIM_IN_PLACE,
+            ProcessingModeSelector.mode(
+                mp3(canEditInPlace = true),
+                trim = TrimRange(1_000, 5_000),
+                replaceOriginal = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a trim cannot replace an mp3 without write access`() {
+        assertEquals(
+            ProcessingMode.CONVERT_AND_SAVE,
+            ProcessingModeSelector.mode(
+                mp3(canEditInPlace = false),
+                trim = TrimRange(1_000, 5_000),
+                replaceOriginal = true,
+            ),
+        )
+    }
+
+    @Test
     fun `video is always converted`() {
         assertEquals(
             ProcessingMode.CONVERT_AND_SAVE,

@@ -18,6 +18,7 @@ class MetadataEnricherTest {
         val result = enricher().enrich(draft, durationSeconds = 204)
 
         assertEquals("I want to be by your side", result.tag.lyrics)
+        assertEquals("[00:01.00]I want to be by your side", result.tag.syncedLyrics)
         assertEquals(124, result.tag.bpm)
         assertEquals(-6.3, result.tag.replayGainDb!!, 0.0001)
         assertEquals("GBUM71700001", result.tag.isrc)
@@ -182,7 +183,7 @@ class MetadataEnricherTest {
 
     private fun enricher(
         lyrics: LyricsSource = LyricsSource { _, _, _, _ ->
-            Lyrics("I want to be by your side")
+            Lyrics("I want to be by your side", "[00:01.00]I want to be by your side")
         },
         bpm: BpmSource = BpmSource { _, _ ->
             DeezerTrack(

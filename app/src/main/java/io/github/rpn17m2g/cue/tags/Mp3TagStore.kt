@@ -11,7 +11,11 @@ import com.mpatric.mp3agic.ID3v2FrameSet
 import com.mpatric.mp3agic.ID3v2PictureFrameData
 import com.mpatric.mp3agic.Mp3File
 import io.github.rpn17m2g.cue.domain.model.Artwork
+import io.github.rpn17m2g.cue.domain.model.LyricLine
 import io.github.rpn17m2g.cue.domain.model.TagDraft
+import io.github.rpn17m2g.cue.domain.model.parseLrc
+import io.github.rpn17m2g.cue.domain.model.toLrc
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -107,7 +111,7 @@ class Mp3TagStore internal constructor(
                 writeArtwork(id3, tag.artwork, artworkMime)
             }
             if (TagField.LYRICS in fields) {
-                writeLyrics(id3, tag.lyrics)
+                writeLyrics(id3, tag.lyrics, tag.syncedLyrics)
             }
             if (TagField.BPM in fields) {
                 writeBpm(id3, tag.bpm)
@@ -150,6 +154,11 @@ class Mp3TagStore internal constructor(
 
     private fun readV2(tag: ID3v2): TagDraft {
         val track = parseTrack(safeText { tag.track }.orEmpty())
+        val syncedLyrics = readSyncedLyrics(tag)
+        val lyrics = safeText { tag.lyrics }?.takeIf { it.isNotBlank() }
+            ?: syncedLyrics?.let { lrc ->
+                parseLrc(lrc).joinToString("\n") { it.text }.takeIf { it.isNotBlank() }
+            }
         return TagDraft(
             title = safeText { tag.title }.orEmpty(),
             artist = safeText { tag.artist }.orEmpty(),
@@ -164,7 +173,8 @@ class Mp3TagStore internal constructor(
             trackNumber = track.first,
             trackTotal = track.second,
             artwork = readArtwork(tag),
-            lyrics = safeText { tag.lyrics }?.takeIf { it.isNotBlank() },
+            lyrics = lyrics,
+            syncedLyrics = syncedLyrics,
             bpm = runCatching { tag.bpm }.getOrNull()?.takeIf { it > 0 },
             isrc = rawText(tag, ID_ISRC)?.takeIf { it.isNotBlank() },
             label = safeText { tag.publisher }?.takeIf { it.isNotBlank() }
@@ -300,12 +310,142 @@ class Mp3TagStore internal constructor(
         }
     }
 
-    private fun writeLyrics(tag: ID3v2, lyrics: String?) {
+    /**
+     * Lyrics are written twice: `USLT` carries the plain multi-line text that
+     * every player reads, and `SYLT` carries the same lines with millisecond
+     * timestamps for players that highlight the current one. mp3agic has no
+     * SYLT support, so the frame is assembled and parsed here.
+     */
+    private fun writeLyrics(tag: ID3v2, lyrics: String?, syncedLyrics: String?) {
         if (lyrics.isNullOrBlank()) {
             tag.clearFrameSet(AbstractID3v2Tag.ID_TEXT_LYRICS)
         } else {
             tag.lyrics = lyrics
         }
+        val lines = syncedLyrics?.let(::parseLrc).orEmpty()
+        if (lines.isEmpty()) {
+            tag.clearFrameSet(ID_SYLT)
+        } else {
+            tag.frameSets[ID_SYLT] = ID3v2FrameSet(ID_SYLT).also {
+                it.addFrame(frameFor(tag, ID_SYLT, syltPayload(lines)))
+            }
+        }
+    }
+
+    private fun syltPayload(lines: List<LyricLine>): ByteArray {
+        val payload = ByteArrayOutputStream()
+        payload.write(EncodedText.TEXT_ENCODING_UTF_16.toInt())
+        payload.write(LANGUAGE_UNDETERMINED.toByteArray(Charsets.ISO_8859_1))
+        payload.write(TIMESTAMP_FORMAT_MILLISECONDS)
+        payload.write(CONTENT_TYPE_LYRICS)
+        payload.write(utf16Terminated(""))
+        lines.forEach { line ->
+            payload.write(utf16Terminated(line.text))
+            val time = line.startMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+            payload.write(time ushr 24)
+            payload.write(time ushr 16)
+            payload.write(time ushr 8)
+            payload.write(time)
+        }
+        return payload.toByteArray()
+    }
+
+    /**
+     * One UTF-16 string in a SYLT frame: BOM, the text and a two-byte
+     * terminator. The BOM is repeated per string, as other taggers do.
+     */
+    private fun utf16Terminated(value: String): ByteArray =
+        UTF16_BOM + value.toByteArray(Charsets.UTF_16LE) + TERMINATOR_UTF16
+
+    private fun readSyncedLyrics(tag: ID3v2): String? {
+        val data = tag.frameSets[ID_SYLT]?.frames?.firstOrNull()?.data ?: return null
+        val lines = runCatching { parseSylt(data) }.getOrNull().orEmpty()
+        return lines.takeIf { it.isNotEmpty() }?.toLrc()
+    }
+
+    private fun parseSylt(data: ByteArray): List<LyricLine> {
+        if (data.size < SYLT_HEADER_SIZE) return emptyList()
+        val encoding = data[0]
+        if ((data[4].toInt() and 0xFF) != TIMESTAMP_FORMAT_MILLISECONDS) return emptyList()
+        var index = readSyltText(data, SYLT_HEADER_SIZE, encoding)?.second
+            ?: return emptyList()
+        val lines = mutableListOf<LyricLine>()
+        while (index + 4 <= data.size) {
+            val (text, next) = readSyltText(data, index, encoding) ?: break
+            index = next
+            if (index + 4 > data.size) break
+            val start = (
+                (data[index].toLong() and 0xFF) shl 24 or
+                    ((data[index + 1].toLong() and 0xFF) shl 16) or
+                    ((data[index + 2].toLong() and 0xFF) shl 8) or
+                    (data[index + 3].toLong() and 0xFF)
+                )
+            index += 4
+            if (text.isNotBlank()) lines += LyricLine(start, text)
+        }
+        return lines.sortedBy { it.startMs }
+    }
+
+    /** Reads one terminator-delimited string and returns it with the next offset. */
+    private fun readSyltText(
+        data: ByteArray,
+        start: Int,
+        encoding: Byte,
+    ): Pair<String, Int>? {
+        return when (encoding.toInt()) {
+            EncodedText.TEXT_ENCODING_UTF_16.toInt() -> {
+                var end = start
+                while (end + 1 < data.size &&
+                    !(data[end].toInt() == 0 && data[end + 1].toInt() == 0)
+                ) {
+                    end += 2
+                }
+                if (end + 1 >= data.size) return null
+                decodeUtf16(data.copyOfRange(start, end)) to end + 2
+            }
+            EncodedText.TEXT_ENCODING_UTF_16BE.toInt() -> {
+                var end = start
+                while (end + 1 < data.size &&
+                    !(data[end].toInt() == 0 && data[end + 1].toInt() == 0)
+                ) {
+                    end += 2
+                }
+                if (end + 1 >= data.size) return null
+                String(data, start, end - start, Charsets.UTF_16BE) to end + 2
+            }
+            EncodedText.TEXT_ENCODING_UTF_8.toInt() -> {
+                val end = data.indexOf(0, start)
+                if (end < 0) return null
+                String(data, start, end - start, Charsets.UTF_8) to end + 1
+            }
+            else -> {
+                val end = data.indexOf(0, start)
+                if (end < 0) return null
+                String(data, start, end - start, Charsets.ISO_8859_1) to end + 1
+            }
+        }
+    }
+
+    private fun decodeUtf16(bytes: ByteArray): String {
+        val body = if (bytes.size % 2 == 0) bytes else bytes.copyOf(bytes.size - 1)
+        return when {
+            body.size >= 2 &&
+                (body[0].toInt() and 0xFF) == 0xFF &&
+                (body[1].toInt() and 0xFF) == 0xFE ->
+                String(body, 2, body.size - 2, Charsets.UTF_16LE)
+            body.size >= 2 &&
+                (body[0].toInt() and 0xFF) == 0xFE &&
+                (body[1].toInt() and 0xFF) == 0xFF ->
+                String(body, 2, body.size - 2, Charsets.UTF_16BE)
+            else -> String(body, Charsets.UTF_16BE)
+        }
+    }
+
+    private fun ByteArray.indexOf(value: Int, from: Int): Int {
+        for (index in from until size) {
+            if ((this[index].toInt() and 0xFF) == value) return index
+        }
+        return -1
     }
 
     private fun writeBpm(tag: ID3v2, bpm: Int?) {
@@ -732,6 +872,13 @@ class Mp3TagStore internal constructor(
         const val TYER_IN_V24 = "TDRC"
         const val ID_ISRC = "TSRC"
         const val ID_TXXX = "TXXX"
+        const val ID_SYLT = "SYLT"
+        const val LANGUAGE_UNDETERMINED = "und"
+        const val TIMESTAMP_FORMAT_MILLISECONDS = 2
+        const val CONTENT_TYPE_LYRICS = 1
+        const val SYLT_HEADER_SIZE = 6
+        val UTF16_BOM = byteArrayOf(0xFF.toByte(), 0xFE.toByte())
+        val TERMINATOR_UTF16 = byteArrayOf(0, 0)
         const val MB_RECORDING_ID = "MusicBrainz Recording Id"
         const val MB_ALBUM_ID = "MusicBrainz Album Id"
         const val MB_ARTIST_ID = "MusicBrainz Artist Id"

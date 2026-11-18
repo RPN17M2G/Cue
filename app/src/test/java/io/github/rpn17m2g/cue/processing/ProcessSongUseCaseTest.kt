@@ -118,6 +118,55 @@ class ProcessSongUseCaseTest {
     }
 
     @Test
+    fun `a trim in place converts, tags every field and replaces the document`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        val runner = WritingRunner(exitCode = 0, lines = emptyList())
+        val editor = FakeDocumentEditor()
+        val tempDir = File(folder.root, "work")
+        val useCase = useCase(runner, tempDir, editor)
+        val trimJob = inPlaceJob(input, emptySet()).copy(
+            mode = ProcessingMode.TRIM_IN_PLACE,
+            trim = TrimRange(2_000, 8_000),
+        )
+
+        val saved = useCase.execute(trimJob) { _, _ -> }
+
+        assertTrue(runner.args.containsAll(listOf("-ss", "2.000", "-t", "6.000")))
+        assertEquals(TagField.TEXT_FIELDS, tagStore.fields)
+        assertEquals(1, editor.writes.size)
+        assertTrue(saved.inPlaceEdit)
+        assertTrue(saved.trimmedInPlace)
+        assertEquals(6_000L, saved.durationMs)
+        assertEquals("content://doc/song.mp3", saved.uri)
+        assertEquals(0, tempDir.listFiles()?.size)
+    }
+
+    @Test
+    fun `a failed trim in place restores the original document`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        val editor = FakeDocumentEditor().apply { failNextWrite = true }
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), folder.root, editor)
+        val trimJob = inPlaceJob(input, emptySet()).copy(
+            mode = ProcessingMode.TRIM_IN_PLACE,
+            trim = TrimRange(2_000, 8_000),
+        )
+
+        val error = runCatching {
+            useCase.execute(trimJob) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is ProcessingException)
+        // The fake records only writes the provider accepted, so the single
+        // entry here is the restore of the untouched document.
+        assertEquals(1, editor.writes.size)
+        assertArrayEquals(input.readBytes(), editor.writes.single())
+    }
+
+    @Test
     fun `a missing input fails before conversion`() = runTest {
         val missing = ResolvedInput(
             id = "missing",

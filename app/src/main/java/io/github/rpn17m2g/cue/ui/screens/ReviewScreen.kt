@@ -54,6 +54,8 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -71,10 +73,12 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextSnippet
 import androidx.compose.material.icons.filled.Title
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -146,6 +150,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -197,6 +203,8 @@ fun ReviewScreen(
     var editError by rememberSaveable { mutableStateOf(false) }
     var capturedValue by rememberSaveable { mutableStateOf("") }
     var capturedSource by rememberSaveable { mutableStateOf<IdentificationSource?>(null) }
+    var videoPreviewOpen by rememberSaveable { mutableStateOf(false) }
+    var replaceConfirm by rememberSaveable { mutableStateOf(false) }
 
     /** Returns false when validation rejects the value, leaving the editor open. */
     fun commitField(): Boolean {
@@ -252,6 +260,22 @@ fun ReviewScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background,
                 ),
+                actions = {
+                    // Watching the source is the fastest way to confirm the
+                    // recording before saving, so it stays reachable from the
+                    // header even after the page has been scrolled.
+                    if (state.input?.kind == InputKind.VIDEO) {
+                        TextButton(onClick = { videoPreviewOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Default.PlayCircle,
+                                contentDescription = stringResource(R.string.review_preview_video),
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.review_preview))
+                        }
+                    }
+                },
             )
         },
         bottomBar = {
@@ -264,8 +288,15 @@ fun ReviewScreen(
                     onSave = {
                         // A field that is still open counts: settle it before
                         // the job reads the draft, and keep the editor open on
-                        // invalid input.
-                        if (commitField()) viewModel.save { onProcessing() }
+                        // invalid input. Replacing the source is destructive,
+                        // so it asks once more before the job starts.
+                        if (commitField()) {
+                            if (state.trimInPlace) {
+                                replaceConfirm = true
+                            } else {
+                                viewModel.save { onProcessing() }
+                            }
+                        }
                     },
                 )
             }
@@ -301,6 +332,7 @@ fun ReviewScreen(
                 onTrim = viewModel::setTrim,
                 onQuality = viewModel::setQuality,
                 onDeleteSource = viewModel::setDeleteSource,
+                onReplaceOriginal = viewModel::setReplaceOriginal,
                 editingField = editingField,
                 editText = editText,
                 editError = editError,
@@ -334,6 +366,44 @@ fun ReviewScreen(
             )
         }
     }
+
+    val previewInput = state.input
+    if (videoPreviewOpen && previewInput != null && previewInput.kind == InputKind.VIDEO) {
+        VideoPreviewDialog(
+            input = previewInput,
+            trimStartMs = state.trimStartMs,
+            onDismiss = { videoPreviewOpen = false },
+        )
+    }
+    if (replaceConfirm && previewInput != null) {
+        AlertDialog(
+            onDismissRequest = { replaceConfirm = false },
+            title = { Text(stringResource(R.string.review_replace_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.review_replace_confirm_text,
+                        previewInput.displayName,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        replaceConfirm = false
+                        viewModel.save { onProcessing() }
+                    },
+                ) {
+                    Text(stringResource(R.string.review_replace_confirm_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { replaceConfirm = false }) {
+                    Text(stringResource(R.string.review_field_cancel))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -343,6 +413,7 @@ private fun ReviewContent(
     onTrim: (Long, Long) -> Unit,
     onQuality: (QualityPreset) -> Unit,
     onDeleteSource: (Boolean) -> Unit,
+    onReplaceOriginal: (Boolean) -> Unit,
     editingField: TagField?,
     editText: String,
     editError: Boolean,
@@ -448,6 +519,13 @@ private fun ReviewContent(
             DeleteSourceCard(
                 checked = state.deleteSource,
                 onCheckedChange = onDeleteSource,
+            )
+        }
+
+        if (input.kind == InputKind.MP3 && input.canEditInPlace && state.trimRange != null) {
+            ReplaceOriginalCard(
+                checked = state.replaceOriginal,
+                onCheckedChange = onReplaceOriginal,
             )
         }
 
@@ -915,6 +993,13 @@ private fun EnrichmentCard(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
+                if (!draft.syncedLyrics.isNullOrBlank()) {
+                    Text(
+                        text = stringResource(R.string.review_lyrics_synced),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 when {
                     state.lyricsFetching -> CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
@@ -2091,6 +2176,71 @@ private fun DeleteSourceCard(
     }
 }
 
+/**
+ * Opt-in for replacing the source MP3 with the trimmed audio. The switch is on
+ * by default so trimming does not leave a second copy behind, but the card is
+ * tinted like the delete-source one because the write cannot be undone.
+ */
+@Composable
+private fun ReplaceOriginalCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val error = MaterialTheme.colorScheme.error
+    ReviewCard(
+        color = if (checked) {
+            error.copy(alpha = 0.06f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        borderColor = if (checked) {
+            error.copy(alpha = 0.35f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(error.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCut,
+                    contentDescription = null,
+                    tint = error,
+                    modifier = Modifier.size(21.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.review_replace_original),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.review_replace_original_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onError,
+                    checkedTrackColor = error,
+                ),
+            )
+        }
+    }
+}
+
 // ---------------------------------------------------------------- OCR details
 
 @Composable
@@ -2393,10 +2543,10 @@ private fun CreateBar(
                         Spacer(Modifier.width(10.dp))
                     } else {
                         Icon(
-                            imageVector = if (state.tagOnlyEdit) {
-                                Icons.Default.Edit
-                            } else {
-                                Icons.Default.GraphicEq
+                            imageVector = when {
+                                state.tagOnlyEdit -> Icons.Default.Edit
+                                state.trimInPlace -> Icons.Default.ContentCut
+                                else -> Icons.Default.GraphicEq
                             },
                             contentDescription = null,
                             modifier = Modifier.size(19.dp),
@@ -2407,6 +2557,7 @@ private fun CreateBar(
                         text = stringResource(
                             when {
                                 state.tagOnlyEdit -> R.string.review_save_tags
+                                state.trimInPlace -> R.string.review_trim_replace
                                 else -> R.string.review_create
                             },
                         ),
@@ -2926,6 +3077,63 @@ private fun MediaPreview(
             trimStartMs = trimStartMs,
             modifier = modifier,
         )
+    }
+}
+
+/**
+ * A larger player for the source recording, opened from the header so the user
+ * can confirm what the clip actually shows before saving. The dialog owns the
+ * player: [MediaPreview] releases it on dispose, so closing the dialog stops
+ * playback instead of leaving audio running behind the review screen.
+ */
+@Composable
+private fun VideoPreviewDialog(
+    input: ResolvedInput,
+    trimStartMs: Long,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        ) {
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.review_preview_video_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(
+                                R.string.review_preview_video_close,
+                            ),
+                        )
+                    }
+                }
+                MediaPreview(
+                    input = input,
+                    trimStartMs = trimStartMs,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f),
+                )
+            }
+        }
     }
 }
 

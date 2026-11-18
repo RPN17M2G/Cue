@@ -12,7 +12,8 @@ class ProcessingViewModel(private val container: AppContainer) : ViewModel() {
     val state: StateFlow<ProcessingState> = container.processingSession.state
 
     val inPlace: Boolean
-        get() = container.sessionRepository.lastJob?.mode == ProcessingMode.EDIT_IN_PLACE
+        get() = container.sessionRepository.lastJob?.mode
+            ?.let { it != ProcessingMode.CONVERT_AND_SAVE } == true
 
     fun cancel() {
         SongProcessingService.cancel(container.appContext)

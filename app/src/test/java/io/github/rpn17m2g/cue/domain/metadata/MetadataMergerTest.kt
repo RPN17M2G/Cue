@@ -56,6 +56,26 @@ class MetadataMergerTest {
     }
 
     @Test
+    fun `a partial ocr title is replaced by the match that completes it`() {
+        val base = TagDraft(title = "I Do if you dont", artist = "Jonas Blue")
+        val match = MetadataMatch(
+            title = "What Do I Do If You Don't",
+            artist = "Jonas Blue",
+            source = IdentificationSource.ITUNES,
+            score = 0.8,
+        )
+
+        val result = MetadataMerger.merge(
+            base,
+            listOf(match),
+            baseSource = IdentificationSource.OCR_LATIN,
+        )
+
+        assertEquals("What Do I Do If You Don't", result.tag.title)
+        assertEquals(IdentificationSource.ITUNES, result.sources[TagField.TITLE])
+    }
+
+    @Test
     fun `near exact title overrides a mismatched ocr artist`() {
         val base = TagDraft(title = "Get Lucky", artist = "Wrong Artist")
         val match = MetadataMatch(

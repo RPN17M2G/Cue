@@ -14,10 +14,15 @@ sealed interface ProcessingStage {
     data object Saving : ProcessingStage
 }
 
-/** Tag-only edits rewrite the source document; everything else publishes a new file. */
+/**
+ * Whole-file jobs publish a new file; [EDIT_IN_PLACE] rewrites only the tags of
+ * the source document; [TRIM_IN_PLACE] re-encodes the trimmed audio and
+ * replaces the source document with it.
+ */
 enum class ProcessingMode {
     CONVERT_AND_SAVE,
     EDIT_IN_PLACE,
+    TRIM_IN_PLACE,
 }
 
 data class ProcessingJob(
@@ -37,7 +42,7 @@ data class ProcessingJob(
 ) {
     val inputId: String get() = input.id
 
-    val needsConversion: Boolean get() = mode == ProcessingMode.CONVERT_AND_SAVE
+    val needsConversion: Boolean get() = mode != ProcessingMode.EDIT_IN_PLACE
 }
 
 sealed interface ProcessingState {

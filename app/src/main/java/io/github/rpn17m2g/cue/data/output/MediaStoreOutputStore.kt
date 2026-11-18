@@ -29,6 +29,8 @@ data class SavedSong(
     val displayName: String,
     val relativePath: String,
     val inPlaceEdit: Boolean = false,
+    /** True when an in-place edit also replaced the audio, not just the tags. */
+    val trimmedInPlace: Boolean = false,
     val title: String = "",
     val artist: String = "",
     val durationMs: Long? = null,
@@ -46,6 +48,13 @@ interface OutputStore {
 
     /** Removes a published song, used when read-back verification fails. */
     suspend fun delete(uri: String)
+
+    /**
+     * Refreshes the gallery row after the audio of an existing song changed in
+     * place, so its duration does not stay at the old value. Best effort: the
+     * bytes are already written when this runs, so a failure is cosmetic.
+     */
+    suspend fun refresh(uri: String, durationMs: Long?) = Unit
 }
 
 /**
@@ -108,6 +117,22 @@ class MediaStoreOutputStore(
         withContext(ioDispatcher) {
             val removed = context.contentResolver.delete(Uri.parse(uri), null, null)
             if (removed == 0) throw IOException("MediaStore did not delete $uri")
+        }
+    }
+
+    override suspend fun refresh(uri: String, durationMs: Long?) {
+        withContext(ioDispatcher) {
+            val target = Uri.parse(uri)
+            // A SAF document picked from Downloads may not be a MediaStore row;
+            // there is then nothing to update and no error worth reporting.
+            if (target.authority != MediaStore.AUTHORITY) return@withContext
+            val values = ContentValues().apply {
+                durationMs?.takeIf { it > 0 }?.let {
+                    put(MediaStore.Audio.Media.DURATION, it)
+                }
+                put(MediaStore.Audio.Media.DATE_MODIFIED, System.currentTimeMillis() / 1_000)
+            }
+            runCatching { context.contentResolver.update(target, values, null, null) }
         }
     }
 

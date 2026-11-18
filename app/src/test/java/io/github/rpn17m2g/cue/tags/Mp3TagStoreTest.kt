@@ -127,6 +127,105 @@ class Mp3TagStoreTest {
     }
 
     @Test
+    fun `round trip keeps timed lyrics in a sylt frame`() {
+        val file = taggedFile("synced.mp3")
+        val draft = TagDraft(
+            title = "By Your Side",
+            lyrics = "First line\nSecond line",
+            syncedLyrics = "[00:12.34]First line\n[00:15.00]Second line",
+        )
+
+        store.writeInPlace(file, draft, TagField.ALL_FIELDS)
+
+        val read = checkNotNull(store.read(file))
+        assertEquals("First line\nSecond line", read.lyrics)
+        assertEquals("[00:12.34]First line\n[00:15.00]Second line", read.syncedLyrics)
+
+        val payload = checkNotNull(Mp3File(file).id3v2Tag.frameSets["SYLT"])
+            .frames
+            .single()
+            .data
+        assertEquals(EncodedText.TEXT_ENCODING_UTF_16.toInt(), payload[0].toInt())
+        assertEquals("und", String(payload, 1, 3, Charsets.ISO_8859_1))
+        assertEquals(2, payload[4].toInt())
+        assertEquals(1, payload[5].toInt())
+    }
+
+    @Test
+    fun `timed lyrics alone still show up as lyrics`() {
+        val file = taggedFile("sylt-only.mp3")
+        store.writeInPlace(
+            file,
+            TagDraft(
+                title = "Song",
+                lyrics = "One\nTwo",
+                syncedLyrics = "[00:01.00]One\n[00:02.00]Two",
+            ),
+            TagField.ALL_FIELDS,
+        )
+        val mp3 = Mp3File(file)
+        mp3.id3v2Tag.clearFrameSet(AbstractID3v2Tag.ID_TEXT_LYRICS)
+        saveReplacing(mp3, file)
+
+        val read = checkNotNull(store.read(file))
+        assertEquals("One\nTwo", read.lyrics)
+        assertEquals("[00:01.00]One\n[00:02.00]Two", read.syncedLyrics)
+    }
+
+    @Test
+    fun `clearing lyrics removes both the uslt and sylt frames`() {
+        val file = taggedFile("synced-clear.mp3")
+        store.writeInPlace(
+            file,
+            TagDraft(
+                title = "Song",
+                lyrics = "One",
+                syncedLyrics = "[00:01.00]One",
+            ),
+            TagField.ALL_FIELDS,
+        )
+
+        store.writeInPlace(file, TagDraft(title = "Song"), setOf(TagField.LYRICS))
+
+        val tag = checkNotNull(Mp3File(file).id3v2Tag)
+        assertNull(tag.frameSets[AbstractID3v2Tag.ID_TEXT_LYRICS])
+        assertNull(tag.frameSets["SYLT"])
+        assertNull(store.read(file)!!.syncedLyrics)
+    }
+
+    @Test
+    fun `a malformed sylt frame does not break the plain lyrics`() {
+        val file = taggedFile("bad-sylt.mp3")
+        store.writeInPlace(
+            file,
+            TagDraft(title = "Song", lyrics = "Words"),
+            TagField.ALL_FIELDS,
+        )
+        writeRawFrame(file, "SYLT", byteArrayOf(1, 2, 3))
+
+        val read = checkNotNull(store.read(file))
+        assertEquals("Words", read.lyrics)
+        assertNull(read.syncedLyrics)
+    }
+
+    @Test
+    fun `a frame time format other than milliseconds is ignored`() {
+        val file = taggedFile("frames-sylt.mp3")
+        store.writeInPlace(
+            file,
+            TagDraft(title = "Song", lyrics = "Words"),
+            TagField.ALL_FIELDS,
+        )
+        writeRawFrame(
+            file,
+            "SYLT",
+            byteArrayOf(1, 'u'.code.toByte(), 'n'.code.toByte(), 'd'.code.toByte(), 1, 1),
+        )
+
+        assertNull(store.read(file)!!.syncedLyrics)
+    }
+
+    @Test
     fun `clearing enrichment fields removes the frames`() {
         val file = taggedFile("enrichment-clear.mp3")
         store.writeInPlace(

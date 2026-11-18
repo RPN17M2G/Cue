@@ -132,6 +132,51 @@ class TagDiffTest {
     }
 
     @Test
+    fun `a time change in the synced lyrics is a lyrics change`() {
+        val timed = base.copy(
+            lyrics = "la la",
+            syncedLyrics = "[00:01.00]la la\n[00:04.00]la la",
+        )
+        val retimed = timed.copy(syncedLyrics = "[00:02.00]la la\n[00:04.00]la la")
+
+        assertEquals(setOf(TagField.LYRICS), retimed.changedFieldsFrom(timed))
+        assertTrue(
+            timed.copy(syncedLyrics = "[00:01.0]la la\n[00:04]la la")
+                .changedFieldsFrom(timed)
+                .isEmpty(),
+        )
+    }
+
+    @Test
+    fun `a written tag compares the parsed timings`() {
+        val expected = base.copy(
+            lyrics = "la la",
+            syncedLyrics = "[00:01.00]la la\n[00:04.00]la la",
+        )
+        val written = expected.copy(syncedLyrics = "[00:01.00]la la\n[00:04.50]la la")
+
+        assertTrue(
+            expected.copy(syncedLyrics = "[00:01.00]la la\n[00:04.00]la la")
+                .matchesWritten(expected, setOf(TagField.LYRICS)),
+        )
+        assertFalse(written.matchesWritten(expected, setOf(TagField.LYRICS)))
+    }
+
+    @Test
+    fun `millisecond timings match the centisecond lrc read back from sylt`() {
+        // SYLT stores milliseconds, but reading it back goes through the
+        // canonical centisecond LRC form, so 1.234 s arrives as 1.23 s.
+        val expected = base.copy(
+            lyrics = "la la",
+            syncedLyrics = "[00:01.23]la la\n[00:04.00]la la",
+        )
+        val written = expected.copy(syncedLyrics = "[00:01.234]la la\n[00:04.004]la la")
+
+        assertTrue(written.matchesWritten(expected, setOf(TagField.LYRICS)))
+        assertTrue(written.changedFieldsFrom(expected).isEmpty())
+    }
+
+    @Test
     fun `the three musicbrainz ids count as one changed field`() {
         val base = base.copy(recordingMbid = "rec")
 

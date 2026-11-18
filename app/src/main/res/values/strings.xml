@@ -76,6 +76,7 @@
     <string name="review_section_enrichment">Lyrics and details</string>
     <string name="review_lyrics_fetch">Fetch lyrics</string>
     <string name="review_lyrics_refresh">Refresh</string>
+    <string name="review_lyrics_synced">Synced</string>
     <string name="review_lyrics_empty">No lyrics yet.</string>
     <string name="review_lyrics_failed">Could not fetch lyrics. Check the connection and try again.</string>
     <string name="review_lyrics_offline">Turn on online lookups to fetch lyrics.</string>
@@ -103,6 +104,12 @@
     <string name="review_ocr_empty">No readable text was found.</string>
     <string name="review_section_identification">Identification</string>
     <string name="review_section_after">After saving</string>
+    <string name="review_replace_original">Replace the original file</string>
+    <string name="review_replace_original_note">The trim is saved over this MP3 instead of a new copy.</string>
+    <string name="review_trim_replace">Trim and replace</string>
+    <string name="review_replace_confirm_title">Replace the original MP3?</string>
+    <string name="review_replace_confirm_text">%1$s will be overwritten with the trimmed audio. This cannot be undone.</string>
+    <string name="review_replace_confirm_action">Replace</string>
     <string name="review_section_ocr">Recognised text</string>
     <string name="review_add_cover">Add cover</string>
     <string name="review_rerun_ocr">Re-run text scan</string>
@@ -163,6 +170,9 @@
     <string name="review_search_sheet_title">Search manually</string>
     <string name="review_search_sheet_hint">Title or artist</string>
     <string name="review_preview">Preview</string>
+    <string name="review_preview_video">Watch the recording</string>
+    <string name="review_preview_video_title">Source recording</string>
+    <string name="review_preview_video_close">Close the recording</string>
     <string name="review_quality_best">Best</string>
     <string name="review_quality_standard">Standard</string>
     <string name="review_quality_256">256 kbps</string>
@@ -188,6 +198,7 @@
 
     <string name="result_title">Saved</string>
     <string name="result_title_updated">Tags updated</string>
+    <string name="result_title_trimmed">MP3 updated</string>
     <string name="result_play">Play</string>
     <string name="result_share">Share</string>
     <string name="result_open_with">Open with</string>

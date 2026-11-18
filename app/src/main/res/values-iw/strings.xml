@@ -76,6 +76,7 @@
     <string name="review_section_enrichment">מילים ופרטים</string>
     <string name="review_lyrics_fetch">שליפת מילים</string>
     <string name="review_lyrics_refresh">רענון</string>
+    <string name="review_lyrics_synced">מסונכרן</string>
     <string name="review_lyrics_empty">אין מילים עדיין.</string>
     <string name="review_lyrics_failed">לא ניתן היה לשלוף מילים. בדקו את החיבור ונסו שוב.</string>
     <string name="review_lyrics_offline">הפעילו חיפושים מקוונים כדי לשלוף מילים.</string>
@@ -103,6 +104,12 @@
     <string name="review_ocr_empty">לא נמצא טקסט קריא.</string>
     <string name="review_section_identification">זיהוי</string>
     <string name="review_section_after">אחרי השמירה</string>
+    <string name="review_replace_original">החלפת הקובץ המקורי</string>
+    <string name="review_replace_original_note">החיתוך נשמר על גבי ה־MP3 הזה במקום עותק חדש.</string>
+    <string name="review_trim_replace">חיתוך והחלפה</string>
+    <string name="review_replace_confirm_title">להחליף את קובץ ה־MP3 המקורי?</string>
+    <string name="review_replace_confirm_text">%1$s יידרס באודיו החתוך. אין דרך לבטל את הפעולה.</string>
+    <string name="review_replace_confirm_action">החלפה</string>
     <string name="review_section_ocr">טקסט שזוהה</string>
     <string name="review_add_cover">הוספת עטיפה</string>
     <string name="review_rerun_ocr">סריקת טקסט מחדש</string>
@@ -163,6 +170,9 @@
     <string name="review_search_sheet_title">חיפוש ידני</string>
     <string name="review_search_sheet_hint">שם השיר או האמן</string>
     <string name="review_preview">תצוגה מקדימה</string>
+    <string name="review_preview_video">צפייה בהקלטה</string>
+    <string name="review_preview_video_title">הקלטת המקור</string>
+    <string name="review_preview_video_close">סגירת ההקלטה</string>
     <string name="review_quality_best">הטוב ביותר</string>
     <string name="review_quality_standard">רגיל</string>
     <string name="review_quality_256">256 kbps</string>
@@ -188,6 +198,7 @@
 
     <string name="result_title">נשמר</string>
     <string name="result_title_updated">התגיות עודכנו</string>
+    <string name="result_title_trimmed">ה־MP3 עודכן</string>
     <string name="result_play">נגינה</string>
     <string name="result_share">שיתוף</string>
     <string name="result_open_with">פתיחה באמצעות</string>

@@ -22,6 +22,12 @@ data class TagDraft(
      * or an earlier stage supplied, only fill blanks.
      */
     val lyrics: String? = null,
+    /**
+     * Raw LRC for [lyrics] when the provider has timings. It is written as an
+     * ID3v2 `SYLT` frame next to the plain `USLT` text, so players that support
+     * synchronized lyrics can highlight the current line.
+     */
+    val syncedLyrics: String? = null,
     val bpm: Int? = null,
     val isrc: String? = null,
     val label: String? = null,

@@ -17,7 +17,11 @@ fun TagDraft.changedFieldsFrom(base: TagDraft): Set<TagField> = buildSet {
         add(TagField.TRACK_NUMBER)
     }
     if (artwork != base.artwork) add(TagField.ARTWORK)
-    if (lyrics.orEmpty() != base.lyrics.orEmpty()) add(TagField.LYRICS)
+    if (lyrics.orEmpty() != base.lyrics.orEmpty() ||
+        !syncedLyrics.sameTimedLyrics(base.syncedLyrics)
+    ) {
+        add(TagField.LYRICS)
+    }
     if (bpm != base.bpm) add(TagField.BPM)
     if (isrc.orEmpty() != base.isrc.orEmpty()) add(TagField.ISRC)
     if (label.orEmpty() != base.label.orEmpty()) add(TagField.LABEL)
@@ -45,6 +49,8 @@ fun TagDraft.matchesWritten(expected: TagDraft, fields: Set<TagField>): Boolean 
     TagField.ARTWORK in fields && artwork != expected.artwork -> false
     TagField.LYRICS in fields &&
         !lyrics.sameTagText(expected.lyrics) -> false
+    TagField.LYRICS in fields &&
+        !syncedLyrics.sameTimedLyrics(expected.syncedLyrics) -> false
     TagField.BPM in fields && bpm != expected.bpm -> false
     TagField.ISRC in fields && !isrc.sameTagText(expected.isrc) -> false
     TagField.LABEL in fields && !label.sameTagText(expected.label) -> false
@@ -57,6 +63,17 @@ fun TagDraft.matchesWritten(expected: TagDraft, fields: Set<TagField>): Boolean 
 /** The writer drops a blank frame, so `" "` and `""` both read back as absent. */
 private fun String?.sameTagText(other: String?): Boolean =
     orEmpty().trim() == other.orEmpty().trim()
+
+/**
+ * SYLT is read back as canonical LRC, so the same timings may differ in
+ * spacing or fraction width. Compare at the precision the tag actually
+ * round-trips through, which is the centisecond LRC form.
+ */
+private fun String?.sameTimedLyrics(other: String?): Boolean {
+    val left = this?.takeIf { it.isNotBlank() }?.let(::parseLrc).orEmpty()
+    val right = other?.takeIf { it.isNotBlank() }?.let(::parseLrc).orEmpty()
+    return left.toLrc() == right.toLrc()
+}
 
 /**
  * ReplayGain is written with one decimal; a provider may hand over more
