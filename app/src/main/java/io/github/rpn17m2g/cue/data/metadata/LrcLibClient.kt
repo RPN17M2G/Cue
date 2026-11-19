@@ -16,8 +16,8 @@ data class Lyrics(
     val text: String,
     val lrc: String? = null,
 ) {
-    /** True when [lrc] carries at least one usable timestamp. */
-    val synced: Boolean get() = !lrc.isNullOrBlank()
+    /** True when [lrc] carries at least one usable timestamp, not just text. */
+    val synced: Boolean get() = lrc?.let { parseLrc(it).isNotEmpty() } == true
 }
 
 internal interface LrcLibApi {

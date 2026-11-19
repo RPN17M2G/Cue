@@ -14,6 +14,7 @@ import io.github.rpn17m2g.cue.tags.TagField
 import io.github.rpn17m2g.cue.tags.TagStore
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -140,6 +141,11 @@ class ProcessSongUseCaseTest {
         assertTrue(saved.trimmedInPlace)
         assertEquals(6_000L, saved.durationMs)
         assertEquals("content://doc/song.mp3", saved.uri)
+        // The gallery row has to learn the new length after the audio changed.
+        assertEquals(
+            listOf("content://doc/song.mp3" to 6_000L),
+            outputStore.refreshed,
+        )
         assertEquals(0, tempDir.listFiles()?.size)
     }
 
@@ -164,6 +170,24 @@ class ProcessSongUseCaseTest {
         // entry here is the restore of the untouched document.
         assertEquals(1, editor.writes.size)
         assertArrayEquals(input.readBytes(), editor.writes.single())
+    }
+
+    @Test
+    fun `cancelling during the read-back restores the original document`() = runTest {
+        val input = folder.newFile("song.mp3").apply {
+            writeBytes(byteArrayOf(4, 5, 6, 7))
+        }
+        val editor = FakeDocumentEditor().apply { cancelNextRead = true }
+        val useCase = useCase(WritingRunner(exitCode = 0, lines = emptyList()), folder.root, editor)
+
+        val error = runCatching {
+            useCase.execute(inPlaceJob(input, setOf(TagField.TITLE))) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is CancellationException)
+        // The edited bytes were already accepted; the original has to go back
+        // before the cancellation unwinds, or the document stays half-updated.
+        assertEquals(2, editor.writes.size)
     }
 
     @Test
@@ -400,6 +424,7 @@ class ProcessSongUseCaseTest {
 
         val writes = mutableListOf<ByteArray>()
         var failNextWrite = false
+        var cancelNextRead = false
 
         override suspend fun replace(uri: String, source: File) {
             if (failNextWrite) {
@@ -412,6 +437,10 @@ class ProcessSongUseCaseTest {
         }
 
         override suspend fun copyTo(uri: String, target: File) {
+            if (cancelNextRead) {
+                cancelNextRead = false
+                throw CancellationException("cancelled during verification")
+            }
             target.writeBytes(document)
         }
     }
@@ -419,6 +448,7 @@ class ProcessSongUseCaseTest {
     private class RecordingOutputStore : OutputStore {
         var saved = false
         val deleted = mutableListOf<String>()
+        val refreshed = mutableListOf<Pair<String, Long?>>()
         private var savedBytes: ByteArray = byteArrayOf()
 
         /** Set to simulate a copy that lost bytes on the way to MediaStore. */
@@ -440,6 +470,10 @@ class ProcessSongUseCaseTest {
 
         override suspend fun delete(uri: String) {
             deleted += uri
+        }
+
+        override suspend fun refresh(uri: String, durationMs: Long?) {
+            refreshed += uri to durationMs
         }
     }
 }

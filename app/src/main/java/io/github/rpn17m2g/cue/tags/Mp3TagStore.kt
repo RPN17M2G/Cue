@@ -392,38 +392,37 @@ class Mp3TagStore internal constructor(
         start: Int,
         encoding: Byte,
     ): Pair<String, Int>? {
-        return when (encoding.toInt()) {
-            EncodedText.TEXT_ENCODING_UTF_16.toInt() -> {
-                var end = start
-                while (end + 1 < data.size &&
-                    !(data[end].toInt() == 0 && data[end + 1].toInt() == 0)
-                ) {
-                    end += 2
-                }
-                if (end + 1 >= data.size) return null
-                decodeUtf16(data.copyOfRange(start, end)) to end + 2
-            }
-            EncodedText.TEXT_ENCODING_UTF_16BE.toInt() -> {
-                var end = start
-                while (end + 1 < data.size &&
-                    !(data[end].toInt() == 0 && data[end + 1].toInt() == 0)
-                ) {
-                    end += 2
-                }
-                if (end + 1 >= data.size) return null
-                String(data, start, end - start, Charsets.UTF_16BE) to end + 2
-            }
-            EncodedText.TEXT_ENCODING_UTF_8.toInt() -> {
-                val end = data.indexOf(0, start)
-                if (end < 0) return null
-                String(data, start, end - start, Charsets.UTF_8) to end + 1
-            }
-            else -> {
-                val end = data.indexOf(0, start)
-                if (end < 0) return null
-                String(data, start, end - start, Charsets.ISO_8859_1) to end + 1
-            }
+        val utf16 = when (encoding.toInt()) {
+            EncodedText.TEXT_ENCODING_UTF_16.toInt() -> true
+            EncodedText.TEXT_ENCODING_UTF_16BE.toInt() -> false
+            else -> null
         }
+        if (utf16 != null) {
+            val end = utf16Terminator(data, start) ?: return null
+            val text = if (utf16) {
+                decodeUtf16(data.copyOfRange(start, end))
+            } else {
+                String(data, start, end - start, Charsets.UTF_16BE)
+            }
+            return text to end + 2
+        }
+        val end = data.indexOf(0, start)
+        if (end < 0) return null
+        val charset = if (encoding.toInt() == EncodedText.TEXT_ENCODING_UTF_8.toInt()) {
+            Charsets.UTF_8
+        } else {
+            Charsets.ISO_8859_1
+        }
+        return String(data, start, end - start, charset) to end + 1
+    }
+
+    /** Offset of the zero pair that ends a UTF-16 string, or null if it never does. */
+    private fun utf16Terminator(data: ByteArray, start: Int): Int? {
+        var end = start
+        while (end + 1 < data.size && !(data[end].toInt() == 0 && data[end + 1].toInt() == 0)) {
+            end += 2
+        }
+        return end.takeIf { end + 1 < data.size }
     }
 
     private fun decodeUtf16(bytes: ByteArray): String {

@@ -239,6 +239,11 @@ class ProcessSongUseCase(
             documentEditor.replace(uri, edited)
             verify(uri, job, fields)
         } catch (cancelled: CancellationException) {
+            // The provider may already hold a partial document. Put the original
+            // back before unwinding, even though the calling scope is cancelled.
+            withContext(NonCancellable) {
+                runCatching { documentEditor.replace(uri, original) }
+            }
             throw cancelled
         } catch (e: Exception) {
             val restored = runCatching { documentEditor.replace(uri, original) }.isSuccess

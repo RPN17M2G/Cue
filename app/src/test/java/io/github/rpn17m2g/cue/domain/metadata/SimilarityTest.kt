@@ -10,6 +10,28 @@ import org.junit.Test
 class SimilarityTest {
 
     @Test
+    fun `a partial reading matches a longer title that contains its words in order`() {
+        assertTrue(
+            Similarity.readsAsPartOf(
+                "I Do if you dont",
+                "What Do I Do If You Don't",
+            ),
+        )
+        // Apostrophes and case disappear in normalization.
+        assertTrue(Similarity.readsAsPartOf("dont start now", "Don't Start Now (Live)"))
+    }
+
+    @Test
+    fun `words out of order or a single word are not a partial title`() {
+        assertEquals(
+            false,
+            Similarity.readsAsPartOf("you do what", "What Do I Do If You Don't"),
+        )
+        // One word would match half the catalogue, so it never counts.
+        assertEquals(false, Similarity.readsAsPartOf("crime", "favorite crime"))
+    }
+
+    @Test
     fun `normalize removes case punctuation and diacritics`() {
         assertEquals("beyonce knowles", Similarity.normalize("  Beyoncé,  KNOWLES! "))
     }

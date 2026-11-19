@@ -148,7 +148,16 @@ class PipelineInstrumentedTest {
         val cacheCopy = File(folder, "input-copy.mp3")
         library.copyTo(cacheCopy, overwrite = true)
 
-        val edited = sampleDraft().copy(title = "Edited title", artist = "Another artist")
+        // Album and lyrics are deliberately changed too, but left out of
+        // changedFields: a writer that ignored the field set would overwrite
+        // them, and the assertions below would catch it.
+        val edited = sampleDraft().copy(
+            title = "Edited title",
+            artist = "Another artist",
+            album = "A different album",
+            lyrics = "Different words",
+            syncedLyrics = "[00:00.00]Different words",
+        )
         val job = job(
             input = cacheCopy,
             kind = InputKind.MP3,
@@ -177,7 +186,9 @@ class PipelineInstrumentedTest {
 
     private fun useCase(
         store: OutputStore,
-        editor: DocumentEditor = FileDocumentEditor(folder),
+        // Only in-place jobs touch this; the conversion tests pass a store that
+        // writes somewhere else. It names a file, never the folder itself.
+        editor: DocumentEditor = FileDocumentEditor(File(folder, "document.mp3")),
     ) = ProcessSongUseCase(
         runner = container.ffmpegRunner,
         tagStore = container.tagStore,

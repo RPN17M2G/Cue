@@ -122,10 +122,10 @@ class MediaStoreOutputStore(
 
     override suspend fun refresh(uri: String, durationMs: Long?) {
         withContext(ioDispatcher) {
-            val target = Uri.parse(uri)
-            // A SAF document picked from Downloads may not be a MediaStore row;
-            // there is then nothing to update and no error worth reporting.
-            if (target.authority != MediaStore.AUTHORITY) return@withContext
+            // A picker hands out a documents-provider URI
+            // (com.android.providers.media.documents), while the row that holds
+            // DURATION is the media one; without the mapping this is a no-op.
+            val target = mediaRow(Uri.parse(uri)) ?: return@withContext
             val values = ContentValues().apply {
                 durationMs?.takeIf { it > 0 }?.let {
                     put(MediaStore.Audio.Media.DURATION, it)
@@ -134,6 +134,12 @@ class MediaStoreOutputStore(
             }
             runCatching { context.contentResolver.update(target, values, null, null) }
         }
+    }
+
+    /** A SAF document picked from Downloads may not be a MediaStore row at all. */
+    private fun mediaRow(document: Uri): Uri? = when (document.authority) {
+        MediaStore.AUTHORITY -> document
+        else -> runCatching { MediaStore.getMediaUri(context, document) }.getOrNull()
     }
 
     private fun existingNames(folder: String): Set<String> {

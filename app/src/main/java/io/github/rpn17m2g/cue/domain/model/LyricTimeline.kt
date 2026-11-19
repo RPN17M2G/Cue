@@ -56,8 +56,9 @@ fun List<LyricLine>.toLrc(): String = joinToString("\n") { line ->
 /**
  * Re-times the list for a clip that starts at [clipStartMs] in the original.
  * Lines before the clip are dropped, except the last one, which clamps to zero
- * so the first thing heard still has its words on screen. [clipEndMs] drops
- * lines that fall after the clip.
+ * so the first thing heard still has its words on screen. That clamped line is
+ * dropped when a line starts exactly at the cut: both would claim zero and a
+ * player can only show one. [clipEndMs] drops lines that fall after the clip.
  */
 fun List<LyricLine>.shiftedTo(
     clipStartMs: Long,
@@ -65,7 +66,10 @@ fun List<LyricLine>.shiftedTo(
 ): List<LyricLine> {
     if (clipStartMs <= 0L && clipEndMs == null) return this
     val inside = filter { clipEndMs == null || it.startMs < clipEndMs }
-    val leading = inside.lastOrNull { it.startMs < clipStartMs }
+    val firstInside = inside.firstOrNull { it.startMs >= clipStartMs }
+    val leading = inside
+        .lastOrNull { it.startMs < clipStartMs }
+        ?.takeIf { firstInside == null || firstInside.startMs > clipStartMs }
     val rest = inside
         .filter { it.startMs >= clipStartMs }
         .map { it.copy(startMs = it.startMs - clipStartMs) }

@@ -73,6 +73,23 @@ ID3v2.4 frame lengths are synchsafe, so v2.4 text and APIC frames are built with
 `ID3v24Frame`; v2.3 frames use the base `ID3v2Frame`. Re-wrapped preserved APIC
 frames follow the same version rule.
 
+## Synced lyrics (SYLT)
+
+mp3agic models `USLT` but not `SYLT`, so a timestamped lyric cannot go through
+its tag API. `Mp3TagStore` builds that one frame itself and hands the bytes to
+the same `ID3v2Frame`/`ID3v24Frame` classes everything else uses, so version
+handling, synchsafe lengths and the cached-length recount stay mp3agic's job.
+The frame is UTF-16 with a BOM per string, language `und`, timestamp format 2
+(milliseconds) and content type 1 (lyrics), with strings and big-endian 32-bit
+timestamps interleaved as the spec orders them.
+
+Reading goes back through the same frame set: each string is decoded with its
+BOM, and the lines become canonical centisecond LRC. Milliseconds are the
+storage format but not the comparison format, so a rewrite is verified against
+what the tag can round-trip rather than the provider's exact fraction width.
+`USLT` is still written alongside it as the plain-text fallback most players
+read.
+
 Windows does not allow a directory to be opened as a file for `FileChannel`
 fsync; that platform limitation is ignored while file fsyncs still apply.
 

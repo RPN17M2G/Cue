@@ -309,7 +309,10 @@ No storage permissions (SAF + MediaStore).
   estimator, tag field mapping, metadata merge, template rendering.
 - **Instrumentation tests** on an x86_64 emulator for the end-to-end pipeline
   (convert + tag write + in-place tag rewrite) using tiny **synthetic fixtures**
-  generated for tests, so runs stay fast.
+  generated for tests, so runs stay fast. The fixture is a silent MPEG-1 Layer
+  III stream written frame by frame: the packaged FFmpeg is minimal and has no
+  WAV demuxer or PCM decoder, while MP3 is the one format it both reads and
+  writes.
 - **Real samples:** you record 2–3 short YouTube Music clips (one English UI, one
   Hebrew UI) into a **gitignored** `samples/` folder for local OCR tuning.
 - **Devices:** a physical Android 12+ phone (real codec/OCR performance, Hebrew

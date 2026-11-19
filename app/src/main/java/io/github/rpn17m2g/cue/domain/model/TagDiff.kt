@@ -48,9 +48,8 @@ fun TagDraft.matchesWritten(expected: TagDraft, fields: Set<TagField>): Boolean 
         trackTotal != expected.trackTotal -> false
     TagField.ARTWORK in fields && artwork != expected.artwork -> false
     TagField.LYRICS in fields &&
-        !lyrics.sameTagText(expected.lyrics) -> false
-    TagField.LYRICS in fields &&
-        !syncedLyrics.sameTimedLyrics(expected.syncedLyrics) -> false
+        (!lyrics.sameTagText(expected.lyrics) ||
+            !syncedLyrics.sameTimedLyrics(expected.syncedLyrics)) -> false
     TagField.BPM in fields && bpm != expected.bpm -> false
     TagField.ISRC in fields && !isrc.sameTagText(expected.isrc) -> false
     TagField.LABEL in fields && !label.sameTagText(expected.label) -> false

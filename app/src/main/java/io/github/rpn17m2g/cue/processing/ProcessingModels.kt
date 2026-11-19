@@ -23,6 +23,10 @@ enum class ProcessingMode {
     CONVERT_AND_SAVE,
     EDIT_IN_PLACE,
     TRIM_IN_PLACE,
+    ;
+
+    /** True when the job replaces the source document instead of publishing a copy. */
+    val isInPlace: Boolean get() = this != CONVERT_AND_SAVE
 }
 
 data class ProcessingJob(

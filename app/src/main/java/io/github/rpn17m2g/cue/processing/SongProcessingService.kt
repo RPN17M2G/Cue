@@ -67,7 +67,7 @@ class SongProcessingService : Service() {
         lastStage = null
         lastPercent = -1
         runningInputId = job.input.id
-        runningInPlace = job.mode != ProcessingMode.CONVERT_AND_SAVE
+        runningInPlace = job.mode.isInPlace
         container.processingSession.running(ProcessingStage.Preparing, 0f)
         ServiceCompat.startForeground(
             this,

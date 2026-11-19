@@ -104,6 +104,35 @@ class LyricTimelineTest {
     }
 
     @Test
+    fun `a line starting exactly at the cut replaces the clamped one`() {
+        val lines = listOf(
+            LyricLine(1_000, "One"),
+            LyricLine(10_000, "Two"),
+            LyricLine(20_000, "Three"),
+        )
+
+        // "One" would clamp to 0:00 as well, and only one line can own that
+        // moment; the line that actually starts at the cut is the honest one.
+        assertEquals(
+            listOf(LyricLine(0, "Two"), LyricLine(10_000, "Three")),
+            lines.shiftedTo(clipStartMs = 10_000),
+        )
+    }
+
+    @Test
+    fun `a clip starting inside a line keeps that line at zero`() {
+        val lines = listOf(
+            LyricLine(1_000, "One"),
+            LyricLine(10_000, "Two"),
+        )
+
+        assertEquals(
+            listOf(LyricLine(0, "One"), LyricLine(4_000, "Two")),
+            lines.shiftedTo(clipStartMs = 6_000),
+        )
+    }
+
+    @Test
     fun `re-timing clips lines after the end and leaves an untrimmed list alone`() {
         val lines = listOf(
             LyricLine(1_000, "One"),

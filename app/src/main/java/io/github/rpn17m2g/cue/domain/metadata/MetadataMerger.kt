@@ -134,8 +134,10 @@ object MetadataMerger {
     private fun isHighConfidence(base: TagDraft, match: MetadataMatch): Boolean {
         val titleSimilarity = Similarity.textSimilarity(base.title, match.title)
         // A partial OCR reading can fall under the gate even when the provider
-        // title plainly completes it. That still has to clear the artist check
-        // below, so a wrong artist keeps the reading as a suggestion.
+        // title plainly completes it. When both sides name an artist, that
+        // check below still has to pass, so a wrong artist keeps the reading as
+        // a suggestion; with no artist on either side there is nothing to
+        // compare and the ordered-title match is the evidence.
         val titleAccepted = titleSimilarity >= HIGH_CONFIDENCE_SIMILARITY ||
             Similarity.readsAsPartOf(base.title, match.title)
         if (!titleAccepted) return false
