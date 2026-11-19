@@ -83,8 +83,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ./gradlew testDebugUnitTest lintDebug
 ```
 
-Unit tests run on the JVM with Robolectric for the Android-dependent pieces;
-there are no instrumentation tests.
+Unit tests run on the JVM with Robolectric for the Android-dependent pieces.
+
+The end-to-end pipeline additionally has instrumentation tests that run the real
+FFmpeg binary and the real tag store on a device or emulator:
+
+```bash
+./gradlew connectedDebugAndroidTest
+```
+
+They generate their own short, silent MP3 fixtures in the test cache, so they
+need no media on the device and no files in `samples/`.
 
 ## AcoustID key
 
