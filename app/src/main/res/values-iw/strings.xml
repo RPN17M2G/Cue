@@ -227,6 +227,8 @@
     <string name="error_processing_failed">לא ניתן היה לעבד את השיר.</string>
     <string name="error_ffmpeg_unavailable">ממיר האודיו אינו זמין במכשיר הזה.</string>
     <string name="error_input_failed">לא ניתן היה לפתוח את הקובץ שנבחר.</string>
+<string name="error_no_space">אין מספיק מקום פנוי לקובץ הזה. הוא דורש כ-%1$s ופנויים %2$s בלבד.</string>
+<string name="error_no_audio">לקובץ הזה אין רצועת שמע ש-Cue יכול לקרוא.</string>
     <string name="error_busy">קובץ אחר עדיין בעיבוד.</string>
 
     <string name="settings_title">הגדרות</string>

@@ -309,7 +309,7 @@ class ProcessSongUseCase(
             throw ProcessingException("FFmpeg exited with code $exitCode", diagnostics)
         }
         if (!temp.isFile || temp.length() == 0L) {
-            throw ProcessingException("FFmpeg produced no audio", parser.state.lastErrorLines)
+            throw NoAudioException(parser.state.lastErrorLines)
         }
     }
 

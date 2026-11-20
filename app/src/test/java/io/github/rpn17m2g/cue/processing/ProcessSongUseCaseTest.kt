@@ -119,6 +119,23 @@ class ProcessSongUseCaseTest {
     }
 
     @Test
+    fun `a conversion that produces no audio is a typed failure`() = runTest {
+        val input = inputFile()
+        val tempDir = File(folder.root, "work")
+        val useCase = useCase(SilentRunner(lines = listOf("Could not open output file")), tempDir)
+
+        val error = runCatching {
+            useCase.execute(job(input)) { _, _ -> }
+        }.exceptionOrNull()
+
+        assertTrue(error is NoAudioException)
+        // The diagnostics still travel with it, so the details panel is not empty.
+        assertEquals(listOf("Could not open output file"), (error as NoAudioException).details)
+        assertFalse(outputStore.saved)
+        assertEquals(0, tempDir.listFiles()?.size)
+    }
+
+    @Test
     fun `a trim in place converts, tags every field and replaces the document`() = runTest {
         val input = folder.newFile("song.mp3").apply {
             writeBytes(byteArrayOf(4, 5, 6, 7))
@@ -403,6 +420,15 @@ class ProcessSongUseCaseTest {
             lines.forEach(onLine)
             File(args.last()).writeBytes(byteArrayOf(9, 9, 9))
             return exitCode
+        }
+    }
+
+    /** Exits cleanly but leaves no output, like a video whose audio cannot be decoded. */
+    private class SilentRunner(private val lines: List<String> = emptyList()) : FfmpegRunner {
+
+        override suspend fun run(args: List<String>, onLine: (String) -> Unit): Int {
+            lines.forEach(onLine)
+            return 0
         }
     }
 

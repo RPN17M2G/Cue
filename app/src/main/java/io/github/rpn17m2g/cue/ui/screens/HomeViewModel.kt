@@ -9,6 +9,7 @@ import io.github.rpn17m2g.cue.data.library.LibraryEntry
 import io.github.rpn17m2g.cue.data.library.LibraryTab
 import io.github.rpn17m2g.cue.data.library.MediaPermissions
 import io.github.rpn17m2g.cue.di.AppContainer
+import io.github.rpn17m2g.cue.ui.inputError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,10 +79,8 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
-                container.errorReporter.report(
-                    container.appContext.getString(R.string.error_input_failed),
-                    e.message,
-                )
+                val (reason, details) = inputError(container.appContext, e)
+                container.errorReporter.report(reason, details)
                 onError()
             } finally {
                 _resolving.value = false

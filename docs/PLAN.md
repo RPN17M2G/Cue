@@ -115,10 +115,18 @@ foreground service and the UI layer; settings live in DataStore.
 - **Video containers:** MP4/MOV, Matroska/WebM, and OGG (Opus/Vorbis). The
   minimal native build enables exactly these demuxers/decoders; other containers
   require a build change. Screen recordings are normally MP4. A video with no
-  audio track is an error state.
+  audio track is an error state; it is reported as "no audio track Cue can read"
+  rather than as a generic processing failure, because the useful part of the
+  message is that the recording is silent, not that the conversion broke.
 - **Audio:** MP3 only for tag editing.
 - **Sources are never modified** by the conversion flow.
 - **One job at a time.** Picking a new file while processing is not allowed.
+- **Cache space is checked before the copy.** FFmpeg cannot open a content URI,
+  so the picked document is copied into the cache first. A long screen recording
+  can be larger than the free space left on the device, so the copy only starts
+  when the cache can hold the document plus 64 MB for the MP3 written beside it;
+  otherwise the error screen names both sizes. A provider that reports no size is
+  attempted as before.
 
 ---
 

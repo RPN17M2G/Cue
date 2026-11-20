@@ -56,8 +56,18 @@ sealed interface ProcessingState {
     data class Failed(val reason: String, val details: String?) : ProcessingState
 }
 
-class ProcessingException(
+open class ProcessingException(
     message: String,
     val details: List<String> = emptyList(),
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * FFmpeg finished without producing audio: the input had no audio stream, or
+ * nothing in it was a codec this build can decode. The service shows this as its
+ * own reason, because "the song could not be processed" tells the user nothing
+ * about a video-only recording.
+ */
+class NoAudioException(
+    details: List<String> = emptyList(),
+) : ProcessingException("FFmpeg produced no audio", details)

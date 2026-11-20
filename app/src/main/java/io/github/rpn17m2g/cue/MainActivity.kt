@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.rpn17m2g.cue.data.input.InputIntentParser
+import io.github.rpn17m2g.cue.ui.inputError
 import io.github.rpn17m2g.cue.di.AppContainer
 import io.github.rpn17m2g.cue.settings.AppLanguage
 import io.github.rpn17m2g.cue.settings.AppSettings
@@ -101,7 +102,8 @@ class MainActivity : AppCompatActivity() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
-                container.errorReporter.report(getString(R.string.error_input_failed), e.message)
+                val (reason, details) = inputError(this@MainActivity, e)
+                container.errorReporter.report(reason, details)
                 container.navigationRequests.navigate(Routes.ERROR)
             }
         }

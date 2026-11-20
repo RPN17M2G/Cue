@@ -14,10 +14,38 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class InputResolutionException(
+open class InputResolutionException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * The picked document cannot be copied into the cache. Byte counts are carried
+ * so the screen can say how much is missing instead of blaming the file.
+ */
+class InsufficientStorageException(
+    val neededBytes: Long,
+    val availableBytes: Long,
+) : InputResolutionException(
+    "Not enough free space: $neededBytes bytes needed, $availableBytes available",
+)
+
+/**
+ * A document is copied into the cache before FFmpeg can open it, and the
+ * conversion writes its output next to that copy. A provider that does not
+ * report a size cannot be checked, so the copy is attempted and its failure is
+ * reported as before.
+ */
+internal fun copyFitsCache(documentBytes: Long?, usableBytes: Long): Boolean {
+    if (documentBytes == null || documentBytes < 0) return true
+    if (usableBytes < CACHE_HEADROOM_BYTES) return false
+    return documentBytes <= usableBytes - CACHE_HEADROOM_BYTES
+}
+
+/** Room kept free beside the input copy for the MP3 that comes out of it. */
+internal const val CACHE_HEADROOM_BYTES = 64L * 1_024 * 1_024
+
+private data class DocumentInfo(val name: String, val sizeBytes: Long?)
 
 /**
  * Copies a picked document into `cacheDir/input` so FFmpeg and Media3 can read a
@@ -33,22 +61,34 @@ class InputResolver(
         get() = File(context.cacheDir, CACHE_DIRECTORY)
 
     suspend fun resolve(uri: Uri): ResolvedInput = withContext(ioDispatcher) {
-        val displayName = queryDisplayName(uri)
+        val document = queryDocument(uri)
         val mimeType = context.contentResolver.getType(uri)
         val id = UUID.randomUUID().toString()
-        val target = File(cacheRoot.apply { mkdirs() }, "$id-${safeFileName(displayName)}")
+        cacheRoot.mkdirs()
+        // A long screen recording is often larger than what is left on the
+        // device; failing before the copy turns into a clear sentence instead of
+        // an out-of-space write error blamed on the file.
+        val sizeBytes = document.sizeBytes
+        val usableBytes = cacheRoot.usableSpace
+        if (!copyFitsCache(sizeBytes, usableBytes)) {
+            throw InsufficientStorageException(
+                neededBytes = (sizeBytes ?: 0L) + CACHE_HEADROOM_BYTES,
+                availableBytes = usableBytes,
+            )
+        }
+        val target = File(cacheRoot, "$id-${safeFileName(document.name)}")
         val sniff = try {
             copyTo(uri, target)
         } catch (e: Exception) {
             target.delete()
             throw InputResolutionException("Could not read ${uri.lastPathSegment ?: "input"}", e)
         }
-        val kind = InputKindDetector.detect(mimeType, displayName, sniff)
+        val kind = InputKindDetector.detect(mimeType, document.name, sniff)
         ResolvedInput(
             id = id,
             uri = uri.toString(),
             path = target.absolutePath,
-            displayName = displayName,
+            displayName = document.name,
             mimeType = mimeType,
             kind = kind,
             durationMs = readDuration(File(target.absolutePath)),
@@ -134,16 +174,30 @@ class InputResolver(
         }
     }
 
-    private fun queryDisplayName(uri: Uri): String {
-        val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
+    private fun queryDocument(uri: Uri): DocumentInfo {
+        val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
         val fromProvider = runCatching {
             context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
+                if (!cursor.moveToFirst()) return@use null
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                val name = if (nameIndex < 0 || cursor.isNull(nameIndex)) {
+                    null
+                } else {
+                    cursor.getString(nameIndex)
+                }
+                val size = if (sizeIndex < 0 || cursor.isNull(sizeIndex)) {
+                    null
+                } else {
+                    cursor.getLong(sizeIndex).takeIf { it > 0 }
+                }
+                name to size
             }
         }.getOrNull()
-        return fromProvider?.takeIf { it.isNotBlank() }
+        val name = fromProvider?.first?.takeIf { it.isNotBlank() }
             ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
             ?: FALLBACK_NAME
+        return DocumentInfo(name, fromProvider?.second)
     }
 
     private fun readDuration(file: File): Long? = runCatching {

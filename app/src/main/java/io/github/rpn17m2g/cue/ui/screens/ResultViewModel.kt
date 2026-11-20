@@ -4,11 +4,11 @@ import android.content.IntentSender
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.rpn17m2g.cue.R
 import io.github.rpn17m2g.cue.data.output.SavedSong
 import io.github.rpn17m2g.cue.data.output.SourceOutcome
 import io.github.rpn17m2g.cue.di.AppContainer
 import io.github.rpn17m2g.cue.processing.ProcessingState
+import io.github.rpn17m2g.cue.ui.inputError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,10 +94,8 @@ class ResultViewModel(private val container: AppContainer) : ViewModel() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
-                container.errorReporter.report(
-                    container.appContext.getString(R.string.error_input_failed),
-                    e.message,
-                )
+                val (reason, details) = inputError(container.appContext, e)
+                container.errorReporter.report(reason, details)
                 onError()
             } finally {
                 _editing.value = false

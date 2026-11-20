@@ -254,6 +254,7 @@ class SongProcessingService : Service() {
         .foregroundServiceType
 
     private fun failureReason(e: Exception): String = when (e) {
+        is NoAudioException -> getString(R.string.error_no_audio)
         is FfmpegUnavailableException -> getString(R.string.error_ffmpeg_unavailable)
         else -> getString(R.string.error_processing_failed)
     }
