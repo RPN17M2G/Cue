@@ -14,6 +14,15 @@ val localProperties = Properties().apply {
     if (file.isFile) file.inputStream().use { load(it) }
 }
 
+// Release signing is configured per machine in the untracked local.properties.
+// Without it `assembleRelease` still produces an APK, but an unsigned one that
+// Android will not install.
+val releaseKeystore = localProperties.getProperty("cue.keystore")?.let(::File)
+val releaseSigningReady = releaseKeystore?.isFile == true &&
+    localProperties.getProperty("cue.keystore.password") != null &&
+    localProperties.getProperty("cue.key.alias") != null &&
+    localProperties.getProperty("cue.key.password") != null
+
 android {
     namespace = "io.github.rpn17m2g.cue"
     compileSdk = 35
@@ -23,7 +32,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
 
         val acoustIdKey = localProperties.getProperty("acoustid.apiKey", "")
             .replace("\\", "\\\\")
@@ -40,9 +49,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = localProperties.getProperty("cue.keystore.password")
+                keyAlias = localProperties.getProperty("cue.key.alias")
+                keyPassword = localProperties.getProperty("cue.key.password")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

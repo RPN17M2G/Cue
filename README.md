@@ -88,6 +88,23 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Signed release build
+
+`.\gradlew.bat assembleRelease` writes
+`app/build/outputs/apk/release/app-release.apk` only when the signing details
+are in the untracked `local.properties`:
+
+```properties
+cue.keystore=C:/path/to/cue-release.jks
+cue.keystore.password=...
+cue.key.alias=cue
+cue.key.password=...
+```
+
+Without them the release APK is built unsigned, and Android refuses to install
+it. The keystore and its passwords are never committed; keep a copy, because
+updates must be signed with the same key to replace an installed copy.
+
 ## Tests
 
 ```bash
