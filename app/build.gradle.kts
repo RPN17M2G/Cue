@@ -31,6 +31,13 @@ android {
         buildConfigField("String", "ACOUSTID_API_KEY", "\"$acoustIdKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The native FFmpeg stack is staged for two ABIs only (scripts/native).
+        // Dependency libraries also ship 32-bit copies, and packaging them
+        // would install an app on a 32-bit device that cannot convert anything.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {

@@ -64,7 +64,8 @@ in an ADR.
 - Parse progress from FFmpeg stderr only in the progress reporter; never assume a
   fixed number of lines.
 - The build script is committed; compiled `.so` files are **gitignored**. ABI set
-  is `arm64-v8a` + `x86_64`. The LGPL components (FFmpeg libraries, LAME,
+  is `arm64-v8a` + `x86_64`, and Gradle's `abiFilters` keeps the packaged APK to
+  the same two. The LGPL components (FFmpeg libraries, LAME,
   Chromaprint) are separate shared libraries, not statically linked into the
   executable; keep them replaceable and keep the notices in
   `app/src/main/assets/licenses/` in sync.
