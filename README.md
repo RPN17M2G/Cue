@@ -60,8 +60,19 @@ Captured on a 1080 × 2400 API 31 emulator, Mint palette, light and dark.
 - JDK 17+ (the project builds with 21).
 - Android SDK with platform 35. `local.properties` must point at it
   (`sdk.dir=...`).
-- The native FFmpeg libraries are already in `app/src/main/jniLibs` for
-  `arm64-v8a` and `x86_64`; `scripts/native/build.cmd` rebuilds them.
+- The native FFmpeg libraries. They are **not committed** (`*.so` is
+  gitignored), so a fresh clone does not have them and the app would build but
+  fail at runtime with "the audio converter is not available". Build and stage
+  them once with the script in `scripts/native/`:
+
+  ```powershell
+  wsl -d Ubuntu -e bash -lc \
+    'cd /mnt/c/path/to/Cue && bash scripts/native/build-ffmpeg.sh'
+  ```
+
+  It stages `libffmpeg.so` and its seven dependencies in
+  `app/src/main/jniLibs/<abi>/` for `arm64-v8a` and `x86_64`. See
+  `scripts/native/README.md` for prerequisites, options, and verification.
 
 ## Build and install
 
