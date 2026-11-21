@@ -5,14 +5,15 @@
 #
 # Usage:
 #   .\scripts\device-night-mode.ps1                 # default device, Cue app
-#   .\scripts\device-night-mode.ps1 -Serial RFCW50TTSZP
+#   .\scripts\device-night-mode.ps1 -Serial ABC123XYZ
 param(
     [string]$Serial = "",
     [string]$Package = "io.github.rpn17m2g.cue"
 )
 
 $ErrorActionPreference = "Stop"
-$adb = "C:\Users\omerg\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+. (Join-Path $PSScriptRoot "lib\toolchain.ps1")
+$adb = Resolve-CueAdb
 $adbArgs = @()
 if ($Serial) { $adbArgs += @("-s", $Serial) }
 

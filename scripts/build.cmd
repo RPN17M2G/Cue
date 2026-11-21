@@ -1,11 +1,15 @@
 @echo off
 setlocal
-set "JAVA_HOME=C:\Users\omerg\.cue-toolchain\jdk21\jdk-21.0.12.1+1"
+
+if not defined JAVA_HOME (
+  echo JAVA_HOME must point at a JDK 17 or newer ^(the project builds with 21^). 1>&2
+  exit /b 1
+)
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 cd /d "%~dp0.."
 
 if not exist local.properties (
-  echo sdk.dir=C\:\\Users\\omerg\\AppData\\Local\\Android\\Sdk> local.properties
+  echo sdk.dir=%LOCALAPPDATA:\=/%/Android/Sdk> local.properties
 )
 
 set "ARGS_FILE=%TEMP%\cue-build-args.txt"

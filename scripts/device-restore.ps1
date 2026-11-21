@@ -4,7 +4,7 @@
 #
 # Usage:
 #   .\scripts\device-restore.ps1
-#   .\scripts\device-restore.ps1 -ScreenTimeoutMs 30000 -Serial RFCW50TTSZP
+#   .\scripts\device-restore.ps1 -ScreenTimeoutMs 30000 -Serial ABC123XYZ
 param(
     [string]$Serial = "",
     [string]$Package = "io.github.rpn17m2g.cue",
@@ -12,7 +12,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$adb = "C:\Users\omerg\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+. (Join-Path $PSScriptRoot "lib\toolchain.ps1")
+$adb = Resolve-CueAdb
 $adbArgs = @()
 if ($Serial) { $adbArgs += @("-s", $Serial) }
 

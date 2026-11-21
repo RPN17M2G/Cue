@@ -8,8 +8,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\toolchain.ps1")
 
-$jdk = "C:\Users\omerg\.cue-toolchain\jdk21\jdk-21.0.12.1+1"
+$jdk = Resolve-CueJdk
+$sdkDir = Resolve-CueAndroidSdk
 $log = Join-Path $env:TEMP "cue-$Name.log"
 $exitFile = Join-Path $env:TEMP "cue-$Name.exit"
 $argsText = $GradleArgs -join " "
@@ -24,7 +26,7 @@ $lines = @(
     "set `"PATH=%JAVA_HOME%\bin;%PATH%`"",
     "cd /d `"$Worktree`"",
     "if not exist local.properties (",
-    "  echo sdk.dir=C\:\\Users\\omerg\\AppData\\Local\\Android\\Sdk> local.properties",
+    "  echo sdk.dir=$($sdkDir.Replace('\', '/'))> local.properties",
     ")",
     "del /q `"$exitFile`" 2>nul",
     "call gradlew.bat $argsText --console=plain > `"$log`" 2>&1",

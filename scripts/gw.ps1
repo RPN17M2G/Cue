@@ -1,24 +1,26 @@
-# Gradle wrapper for Cue.
-# Requires JDK 21 (installed locally at the path below) and the Android SDK.
+# Gradle wrapper for Cue, run with the JDK the build needs.
 # Usage: .\scripts\gw.ps1 assembleDebug
+#
+# The JDK comes from JAVA_HOME, or from a locally unpacked toolchain under
+# $HOME\.cue-toolchain when JAVA_HOME is unset; the Android SDK is found through
+# ANDROID_HOME/ANDROID_SDK_ROOT, the per-user SDK location, or an existing
+# local.properties.
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$GradleArgs
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\toolchain.ps1")
 
-$jdk = "C:\Users\omerg\.cue-toolchain\jdk21\jdk-21.0.12.1+1"
-if (-not (Test-Path -LiteralPath $jdk)) {
-    throw "JDK 21 not found at $jdk. Run scripts/setup-toolchain.ps1 first."
-}
+$jdk = Resolve-CueJdk
 $env:JAVA_HOME = $jdk
 $env:Path = "$jdk\bin;$env:Path"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $localProps = Join-Path $repoRoot "local.properties"
 if (-not (Test-Path -LiteralPath $localProps)) {
-    $sdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
+    $sdk = Resolve-CueAndroidSdk
     Set-Content -LiteralPath $localProps -Value ("sdk.dir=" + $sdk.Replace('\', '\\'))
 }
 

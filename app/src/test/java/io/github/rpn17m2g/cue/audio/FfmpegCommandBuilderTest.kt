@@ -11,8 +11,8 @@ import org.junit.Test
 
 class FfmpegCommandBuilderTest {
 
-    private val input = "C:\\Users\\Omer\\Videos\\recording.mp4"
-    private val output = "C:\\Users\\Omer\\Music\\Cue\\song.mp3"
+    private val input = "C:\\Users\\demo\\Videos\\recording.mp4"
+    private val output = "C:\\Users\\demo\\Music\\Cue\\song.mp3"
 
     @Test
     fun `convertToMp3 without trim omits seek and duration`() {
@@ -84,8 +84,8 @@ class FfmpegCommandBuilderTest {
 
     @Test
     fun `convertToMp3 keeps paths with spaces and quotes as single arguments`() {
-        val trickyInput = "C:\\Users\\Omer\\My Videos\\שיר \"טוב\" 100%.mp4"
-        val trickyOutput = "C:\\Users\\Omer\\My Music\\Cue\\שיר 'טוב' 100%.mp3"
+        val trickyInput = "C:\\Users\\demo\\My Videos\\שיר \"טוב\" 100%.mp4"
+        val trickyOutput = "C:\\Users\\demo\\My Music\\Cue\\שיר 'טוב' 100%.mp3"
 
         val args = FfmpegCommandBuilder.convertToMp3(trickyInput, trickyOutput, trim = null, QualityPreset.V0)
 

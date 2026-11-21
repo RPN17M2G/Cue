@@ -65,10 +65,9 @@ Required host tools (already present in the project's WSL environment):
 No `sudo` is required. The Linux NDK is downloaded into the user's cache if it
 is not already present.
 
-> The Windows NDK at
-> `C:\Users\omerg\AppData\Local\Android\Sdk\ndk\25.1.8937393` is **not** usable
-> from WSL: its `clang` wrappers invoke `clang.exe`, which cannot consume WSL
-> (`/mnt/c/...`) paths. The script therefore provisions the Linux NDK `r25c`
+> A Windows NDK (for example the one installed by Android Studio) is **not**
+> usable from WSL: its `clang` wrappers invoke `clang.exe`, which cannot consume
+> WSL (`/mnt/c/...`) paths. The script therefore provisions a Linux NDK `r25c`
 > (`25.2.9519653`) automatically. If `ANDROID_NDK_HOME` points at the Windows
 > NDK, unset it or pass a Linux NDK with `--ndk`.
 
